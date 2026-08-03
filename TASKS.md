@@ -45,11 +45,15 @@
     (`.venv/`, `__pycache__/`, `*.pyc`, `.env`, `*.db`, `.pytest_cache/`, `.ruff_cache/`,
     `.coverage`, `*.egg-info/`, `.claude/settings.local.json`, `*.bkp`).
 
-- [ ] **C1. Run the full forensic command set and record real numbers**
-  - The four commands in `CLAUDE.md` §7 "Forensics".
-  - Write results to `docs/AUDIT.md` as a table: file, line count, has-bytecode, stub or real.
-  - **This replaces `HANDOFF.md` as the source of truth about the legacy code.**
-  - Proof:
+- [x] **C1. Run the full forensic command set and record real numbers** — 2026-08-03
+  - The four commands in `CLAUDE.md` §7 "Forensics", plus commit log.
+  - Proof: `docs/AUDIT.md`. Headline findings beyond what `SESSION.md` already had: 17
+    zero-length files including `run_pipeline.py` (the implied entrypoint) and all of
+    `ingestion/apis/` and `services/llm_summarizer.py` / `whatsapp_gateway.py` — there is no
+    partial implementation to salvage in those, just empty files. `NewsArticle` is defined
+    in 4 places, one of them inside `tests/conftest.py` itself, meaning the one test that
+    was ever run may not have tested either real candidate schema. 3,428 total lines across
+    tracked `.py` files. Confirms `SESSION.md` §3.3 bytecode findings exactly, no discrepancy.
 
 - [x] **C2. Freeze the legacy repository** — 2026-08-03
   - No prior repo existed, so this was `git init` (not `checkout -b`) at the repository root,
