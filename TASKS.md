@@ -92,7 +92,22 @@
     undocumented public JSON endpoints — same ToS caution as ESPN scraping (§4 Scraping).
   - Record findings as `[VERIFIED]` HTTP status + payload shape for each candidate actually
     tried, not documentation claims. This becomes ADR-003's replacement decision.
-  - Proof:
+  - Proof — live-tested 2026-08-03:
+    - `cdn.nba.com/.../odds_todaysGames.json` (different path, same host) → `[VERIFIED]` 403,
+      same Akamai block. Not path-specific; the whole host is blocked from here.
+    - `stats.nba.com/stats/scoreboardv2` → `[VERIFIED]` connection hangs / times out (curl
+      exit 56) from the agent's sandbox. Consistent with the existing (still-standing)
+      datacenter-IP-block claim. **Not retested from the operator's residential machine.**
+    - `api.balldontlie.io/v1/teams` → `[VERIFIED]` HTTP 401 `Unauthorized`. Now requires a
+      free API key (signup) — no longer fully anonymous, but it is a documented, intended-
+      for-third-party-use public API, which is exactly what C3's scraping guidance asks to
+      prefer over an undocumented endpoint.
+    - `site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard` → `[VERIFIED]` HTTP
+      200, real structured JSON (season, teams, live status). Zero auth, zero setup. **Not an
+      officially documented public API** — same category of legal/stability grayness as the
+      ESPN scraping caution already in `CLAUDE.md` §4, just JSON instead of HTML.
+  - Decision pending — see conversation with operator. Not closing this task until a source
+    is chosen and an ADR is written.
 
 - [ ] **C5. Create the Telegram bot and prove delivery by hand**
   - Via @BotFather; obtain token and chat ID; send one message with a single `requests.post`
