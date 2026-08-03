@@ -63,13 +63,15 @@
     created pointing at the same commit. **Not pushed** — no GitHub remote configured yet;
     that is a separate decision (visible/shared action) not taken here.
 
-- [ ] **C3. Initialise the clean repository**
-  - New directory, `git init`, `.gitignore` **first** (`.venv/`, `__pycache__/`, `*.pyc`,
-    `.env`, `*.db`, `.pytest_cache/`, `.ruff_cache/`), then `README.md`, `LICENSE` (MIT),
-    `pyproject.toml`, `.env.example`, `docs/decisions/`.
-  - Copy `CLAUDE.md`, `SESSION.md`, `TASKS.md`, `ARCHITECTURE.md` in.
-  - Commit before any Python file exists.
-  - Proof:
+- [x] **C3. Initialise the clean repository** — 2026-08-03
+  - Resolved structure ambiguity (branch vs. new directory) with the operator: one repo,
+    two branches. `legacy` keeps the full 97-file snapshot; `main` was wiped to just the
+    governance docs and rebuilt.
+  - Proof: commit `ba10e94`. `main` now contains only `.gitignore`, `ARCHITECTURE.md`,
+    `CLAUDE.md`, `SESSION.md`, `TASKS.md`, `docs/AUDIT.md`, plus newly added `README.md`,
+    `LICENSE` (MIT), `pyproject.toml` (no dependencies yet — added per-slice), a
+    Telegram-aligned `.env.example`, and `docs/decisions/TEMPLATE.md`. Zero Python files
+    on `main`. `git ls-files` confirms 11 tracked files total.
 
 - [ ] **C4. Prove NBA connectivity by hand, in a REPL, before writing an adapter**
   - Fetch the `cdn.nba.com` live scoreboard and print the raw payload.
