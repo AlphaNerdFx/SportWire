@@ -95,6 +95,10 @@ These are researched and confirmed. Do not re-litigate them without new evidence
   today. **But building on it makes the project undeployable and unusable by anyone who
   clones the repo, which violates C3.**
 
+**Current decision: `balldontlie.io` for NBA game data.** Free, documented, meant for
+third-party use. Requires a free API key (operator signup; see `.env.example`). Full
+rationale in `docs/decisions/ADR-003-nba-data-source.md`.
+
 ### WhatsApp
 
 - `[VERIFIED]` WhatsApp Business API moved to per-message pricing on 2025-07-01. Marketing,

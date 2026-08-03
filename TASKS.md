@@ -106,8 +106,17 @@
       200, real structured JSON (season, teams, live status). Zero auth, zero setup. **Not an
       officially documented public API** — same category of legal/stability grayness as the
       ESPN scraping caution already in `CLAUDE.md` §4, just JSON instead of HTML.
-  - Decision pending — see conversation with operator. Not closing this task until a source
-    is chosen and an ADR is written.
+  - **Decision: `balldontlie.io`.** Full rationale in
+    `docs/decisions/ADR-003-nba-data-source.md`. `CLAUDE.md` §4 and `.env.example` updated.
+  - Proof: ADR-003 written and committed.
+
+- [ ] **C4c. Operator obtains a free `balldontlie.io` API key and proves an authenticated call**
+  - Sign up at balldontlie.io, get the free-tier key, put it in `.env` (never `.env.example`).
+  - From a REPL: `curl -H "Authorization: <key>" "https://api.balldontlie.io/v1/games?dates[]=2026-08-03"`
+    and confirm a 200 with real game data (or a clean empty list if no games that date).
+  - Save one real response to `tests/fixtures/nba_games.json`. This is the fixture H5 tests
+    against — never the live network in tests.
+  - Proof:
 
 - [ ] **C5. Create the Telegram bot and prove delivery by hand**
   - Via @BotFather; obtain token and chat ID; send one message with a single `requests.post`
