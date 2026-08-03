@@ -29,12 +29,21 @@
 
 ## CRITICAL — do these before writing any application code
 
-- [ ] **C0. Resolve blocker B2: check git history for secrets and bytecode**
-  - `git log --all --name-only | grep -i "\.env\|\.pyc" | head -20`
-  - `cat .gitignore` (or confirm it does not exist)
-  - If `.env` is in history, the legacy repo **cannot be published as-is**. Record the finding
-    in `SESSION.md` §9 Q5 either way.
-  - Proof:
+- [x] **C0. Resolve blocker B2: check git history for secrets and bytecode** — 2026-08-03
+  - `[VERIFIED]` No `.git` existed yet, so there was no history to check — B2 as originally
+    framed did not apply. `[VERIFIED]` No `.gitignore` existed (`cat .gitignore` → No such
+    file). Ran instead: a working-tree scan for `.env` files (`find . -iname "*.env*"` →
+    only `.env.example`, no real `.env`) and a grep across every source directory for
+    `api[_-]?key|secret|password|token|Bearer|AKIA...|sk-...` (case-insensitive).
+  - Findings: only field names (`APIFY_API_TOKEN`, `OPENAI_API_KEY` as `Optional[str] = None`
+    in `config/settings.py`) and placeholder values in `.env.example`
+    (`your_apify_token_here`, etc.). Two files hardcode **dummy local dev DB credentials**
+    as connection-string defaults: `database/connection.py` and `storage/database.py`
+    (`openclaw_user:openclaw_password`, `sports_user:sports_password`) — not real secrets,
+    but bad practice; flag for cleanup in the rebuild, do not carry the pattern forward.
+  - Proof: no real secret found; safe to commit. `.gitignore` written before first commit
+    (`.venv/`, `__pycache__/`, `*.pyc`, `.env`, `*.db`, `.pytest_cache/`, `.ruff_cache/`,
+    `.coverage`, `*.egg-info/`, `.claude/settings.local.json`, `*.bkp`).
 
 - [ ] **C1. Run the full forensic command set and record real numbers**
   - The four commands in `CLAUDE.md` §7 "Forensics".
@@ -42,10 +51,13 @@
   - **This replaces `HANDOFF.md` as the source of truth about the legacy code.**
   - Proof:
 
-- [ ] **C2. Freeze the legacy repository**
-  - `git checkout -b legacy && git add -A && git commit -m "chore: freeze prototype state" && git push -u origin legacy`
-  - Do not delete it. It is a reference and a portfolio artifact.
-  - Proof:
+- [x] **C2. Freeze the legacy repository** — 2026-08-03
+  - No prior repo existed, so this was `git init` (not `checkout -b`) at the repository root,
+    then the freeze commit, then a `legacy` branch marking it.
+  - Proof: root commit `e8953e0` on `main`, message "chore: freeze legacy prototype as
+    pre-release snapshot", 97 files. Tagged `pre-release-legacy-frozen`. Branch `legacy`
+    created pointing at the same commit. **Not pushed** — no GitHub remote configured yet;
+    that is a separate decision (visible/shared action) not taken here.
 
 - [ ] **C3. Initialise the clean repository**
   - New directory, `git init`, `.gitignore` **first** (`.venv/`, `__pycache__/`, `*.pyc`,
