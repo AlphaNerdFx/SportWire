@@ -1,0 +1,170 @@
+# TASKS.md
+
+**Rules for this file:**
+- A task is checked off **only** when the command output or test result proving it is pasted
+  into the "Proof" line beneath it. `[INFERRED]` The legacy repo's milestone list was checked
+  off on assertion alone, and every one of those assertions turned out to be unverifiable.
+- Slices are built one at a time. Do not start a lower-priority slice before the one above it
+  runs end to end.
+- Add new tasks at the bottom of the correct priority band. Do not delete completed tasks.
+
+---
+
+## COMPLETED
+
+- [x] **Audit the legacy repository at directory level** — 2026-08-03
+  - Proof: `tree` output, 136 files / 28 directories. Nine duplicated concerns identified.
+    Bytecode analysis showed `scrapers/`, `apis/`, `delivery/`, `services/` and `config/`
+    have never been imported.
+- [x] **Verify NBA API network constraints** — 2026-08-03
+  - Proof: `stats.nba.com` blocks datacenter IPs and uses Akamai TLS fingerprinting;
+    `cdn.nba.com` live endpoints are unprotected.
+- [x] **Verify WhatsApp Business API cost and access model** — 2026-08-03
+  - Proof: per-message pricing since 2025-07-01, no free tier for business-initiated
+    messages, BSP required with markup.
+- [x] **Decide architecture direction** — 2026-08-03
+  - Proof: ADR-001 through ADR-008 recorded in `SESSION.md` §5.
+
+---
+
+## CRITICAL — do these before writing any application code
+
+- [ ] **C0. Resolve blocker B2: check git history for secrets and bytecode**
+  - `git log --all --name-only | grep -i "\.env\|\.pyc" | head -20`
+  - `cat .gitignore` (or confirm it does not exist)
+  - If `.env` is in history, the legacy repo **cannot be published as-is**. Record the finding
+    in `SESSION.md` §9 Q5 either way.
+  - Proof:
+
+- [ ] **C1. Run the full forensic command set and record real numbers**
+  - The four commands in `CLAUDE.md` §7 "Forensics".
+  - Write results to `docs/AUDIT.md` as a table: file, line count, has-bytecode, stub or real.
+  - **This replaces `HANDOFF.md` as the source of truth about the legacy code.**
+  - Proof:
+
+- [ ] **C2. Freeze the legacy repository**
+  - `git checkout -b legacy && git add -A && git commit -m "chore: freeze prototype state" && git push -u origin legacy`
+  - Do not delete it. It is a reference and a portfolio artifact.
+  - Proof:
+
+- [ ] **C3. Initialise the clean repository**
+  - New directory, `git init`, `.gitignore` **first** (`.venv/`, `__pycache__/`, `*.pyc`,
+    `.env`, `*.db`, `.pytest_cache/`, `.ruff_cache/`), then `README.md`, `LICENSE` (MIT),
+    `pyproject.toml`, `.env.example`, `docs/decisions/`.
+  - Copy `CLAUDE.md`, `SESSION.md`, `TASKS.md`, `ARCHITECTURE.md` in.
+  - Commit before any Python file exists.
+  - Proof:
+
+- [ ] **C4. Prove NBA connectivity by hand, in a REPL, before writing an adapter**
+  - Fetch the `cdn.nba.com` live scoreboard and print the raw payload.
+  - Save one real response to `tests/fixtures/nba_scoreboard.json`. Every adapter test uses
+    this fixture, never the live network.
+  - Proof:
+
+- [ ] **C5. Create the Telegram bot and prove delivery by hand**
+  - Via @BotFather; obtain token and chat ID; send one message with a single `requests.post`
+    from the REPL before any module exists.
+  - Put the values in `.env`, placeholders in `.env.example`.
+  - Proof:
+
+---
+
+## HIGH — Slice 1: one story, end to end
+
+> Target: `cdn.nba.com` → `NewsArticle` → hash dedup → formatted string → Telegram message
+> on the operator's phone. **No database. No embeddings. No async. No scrapers. No Apify.**
+> If it exceeds ~150 lines, it is over-built.
+
+- [ ] **H1. Human writes `models/schemas.py`** — the canonical `NewsArticle` Pydantic model.
+  Fields, types, docstring. **Human writes this alone; it is the central design decision of
+  the project.**
+  - Proof:
+- [ ] **H2. Human writes `tests/test_schemas.py`** — assertions about valid and invalid articles.
+  - Proof:
+- [ ] **H3. Agent implements validators to make H2 pass.** One turn, one file.
+  - Proof:
+- [ ] **H4. Human writes the signature of `ingestion/nba_live.py::fetch_games() -> list[GameData]`.**
+  - Proof:
+- [ ] **H5. Agent implements `fetch_games()` against the saved fixture, then against live.**
+  - Proof:
+- [ ] **H6. Human writes `tests/test_dedup.py`** with three cases: identical titles, near-identical
+  titles, genuinely different titles.
+  - Proof:
+- [ ] **H7. Agent implements `dedup.py`** — hash pass plus `difflib.SequenceMatcher` pass.
+  In-memory `set`, no DB.
+  - Proof:
+- [ ] **H8. Human writes `delivery/base.py`** — the abstract `DeliveryChannel` interface.
+  **Agent teaches the adapter pattern and dependency inversion inline here (blocker B5) before
+  the human writes it.**
+  - Proof:
+- [ ] **H9. Agent implements `delivery/telegram.py` against that interface.**
+  - Proof:
+- [ ] **H10. Human writes `main.py`** wiring fetch → dedup → format → send. Single entrypoint.
+  - Proof:
+- [ ] **H11. Run it. A real message arrives on the phone.** This is the first genuine milestone
+  the project has ever had.
+  - Proof:
+- [ ] **H12. Write ADR-009 recording what was actually learned building slice 1.**
+  - Proof:
+- [ ] **H13. Operator explains every file in slice 1 aloud, unaided.** Any file he cannot explain
+  is deleted and regenerated (ADR-006).
+  - Proof:
+
+---
+
+## MEDIUM — after slice 1 runs
+
+- [ ] **M1. Add persistence: SQLite, one `articles` table, seen-hash lookup.** Dedup survives
+  restarts. `sqlite3` stdlib, no ORM.
+  - Proof:
+- [ ] **M2. Add `config/settings.py`** — one module, `python-dotenv`, typed settings. Every other
+  module reads settings only from here.
+  - Proof:
+- [ ] **M3. Resolve open question 1** — decide the dedup window and the delivery cadence as two
+  distinct named settings. Record in an ADR.
+  - Proof:
+- [ ] **M4. Add structured logging** — `logging`, INFO to stdout, level from settings. Every
+  source logs what it fetched and what dedup discarded.
+  - Proof:
+- [ ] **M5. Add source 2: an NBA news source.** Research an official feed or RSS **before**
+  writing a scraper (constraint C3). Record what was found.
+  - Proof:
+- [ ] **M6. Confirm the orchestrator required zero changes to add source 2.** If it needed
+  changes, the adapter boundary is wrong — fix it. **This is the test of whether the adapter
+  pattern was understood.**
+  - Proof:
+- [ ] **M7. Add summarization** — resolve open question 4 (local vs hosted) in an ADR first.
+  - Proof:
+- [ ] **M8. Add scheduling** — cron or Windows Task Scheduler invoking `main.py`. Not an
+  in-process loop; the OS is a better scheduler than a `while True`.
+  - Proof:
+- [ ] **M9. Add error resilience** — every source wrapped so one failure degrades rather than
+  crashes. Test with a deliberately broken source.
+  - Proof:
+- [ ] **M10. Add CI** — GitHub Actions running `ruff check` and `pytest -m "not network"` on push.
+  First real DevOps artifact; explain what CI is and why network tests are excluded.
+  - Proof:
+
+---
+
+## LOW — deferred; each requires a trigger condition
+
+- [ ] **L1. NFL sources (`nflreadpy`).** Trigger: NBA path stable across several real runs.
+- [ ] **L2. Semantic dedup.** Trigger: a captured real near-duplicate pair that
+  `SequenceMatcher` missed, saved as a fixture (ADR-005).
+- [ ] **L3. Postgres + `pgvector`.** Trigger: SQLite measurably too slow. `[INFERRED]` Unlikely.
+- [ ] **L4. Alembic migrations.** Trigger: L3, or a schema change against a table with real rows.
+  Teach migrations properly at that point (blocker B5).
+- [ ] **L5. Async ingestion.** Trigger: a synchronous run measurably too slow, with the number recorded.
+- [ ] **L6. WhatsApp delivery adapter.** Trigger: operator accepts recurring per-message cost.
+  Official BSP path only — never an unofficial bridge (C3).
+- [ ] **L7. Apify actors.** Trigger: cost estimate produced and approved (C2).
+- [ ] **L8. Multi-user routing.** Trigger: open question 9 resolved in favour of multi-user.
+- [ ] **L9. RAG chatbot query interface.** Trigger: the one-way brief works and is genuinely used.
+- [ ] **L10. Phone port.** Trigger: open question 8 defined concretely.
+- [ ] **L11. Docker.** Trigger: someone other than the operator needs to run it. `[INFERRED]`
+  Premature under constraint C1; a `Dockerfile` and `docker-compose.yml` already exist in the
+  legacy repo and have never been used.
+- [ ] **L12. Write the public README and a "what went wrong with v1" post-mortem.** The
+  post-mortem, backed by the ADR folder, is `[INFERRED]` the most valuable thing in the repo
+  for a portfolio.

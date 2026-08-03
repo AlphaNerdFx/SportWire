@@ -1,0 +1,9 @@
+- nba_api
+- nfl-data
+- ESPN NBA NEWS API on Apify
+- ESPN Trade Tracker + Free Agency NEWS API on Apify
+- HoopsHype web parsing
+- Sportstracker web parsing
+- NFL data scraper on apify
+- sportskills
+- nflreadpy
