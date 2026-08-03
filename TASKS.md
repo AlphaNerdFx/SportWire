@@ -73,10 +73,25 @@
     Telegram-aligned `.env.example`, and `docs/decisions/TEMPLATE.md`. Zero Python files
     on `main`. `git ls-files` confirms 11 tracked files total.
 
-- [ ] **C4. Prove NBA connectivity by hand, in a REPL, before writing an adapter**
-  - Fetch the `cdn.nba.com` live scoreboard and print the raw payload.
-  - Save one real response to `tests/fixtures/nba_scoreboard.json`. Every adapter test uses
-    this fixture, never the live network.
+- [x] **C4a. Prove NBA connectivity by hand — FAILED, ADR-003 reopened** — 2026-08-03
+  - `curl https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json`
+  - Proof: HTTP 403, Akamai `errors.edgesuite.net` block page. `[VERIFIED]` from the agent's
+    sandboxed shell (twice, with and without browser `User-Agent`/`Referer`) **and**
+    `[VERIFIED]` from the operator's own machine, real residential IP, no sandbox. Same
+    result both times — this rules out "sandbox/proxy egress IP" as the explanation.
+    `CLAUDE.md` §4 and `ADR-003` corrected in place; do not treat the old claim as live.
+  - Proof: no `tests/fixtures/nba_scoreboard.json` written — nothing to save from a 403.
+
+- [ ] **C4b. Find a working NBA data source before writing any adapter**
+  - Candidates to research, cheapest/least-risky first: (1) other `cdn.nba.com` /
+    `stats.nba.com` endpoint paths — maybe only this specific path is blocked; (2) the
+    `nba_api` PyPI package, which has historically handled the header/cookie dance
+    `stats.nba.com` requires — test it live before trusting its README; (3) third-party
+    free APIs (e.g. balldontlie.io) — check current auth requirements, rate limits, and
+    whether they mirror live/in-progress game state or only final box scores; (4) ESPN's
+    undocumented public JSON endpoints — same ToS caution as ESPN scraping (§4 Scraping).
+  - Record findings as `[VERIFIED]` HTTP status + payload shape for each candidate actually
+    tried, not documentation claims. This becomes ADR-003's replacement decision.
   - Proof:
 
 - [ ] **C5. Create the Telegram bot and prove delivery by hand**

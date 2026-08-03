@@ -81,12 +81,19 @@ These are researched and confirmed. Do not re-litigate them without new evidence
 - `[VERIFIED]` `stats.nba.com` blocks datacenter IP ranges (AWS, GCP, Azure, Heroku).
   Requests hang rather than erroring cleanly. It also sits behind Akamai bot protection
   that rejects requests by TLS fingerprint.
-- `[VERIFIED]` `cdn.nba.com` live endpoints (scoreboard, boxscore, play-by-play, odds)
-  have **no such protection** and work from anywhere.
+- ~~`[VERIFIED]` `cdn.nba.com` live endpoints (scoreboard, boxscore, play-by-play, odds)
+  have **no such protection** and work from anywhere.~~ **CONTRADICTED 2026-08-03.**
+  `[VERIFIED]` `curl https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json`
+  returns HTTP 403 with an Akamai `errors.edgesuite.net` block page, tested twice (with and
+  without browser headers) from the agent's tool sandbox, **and independently from the
+  operator's own residential machine outside any sandbox.** Same result both times. The
+  original claim was never actually re-verified live in this session before being restated —
+  it was carried forward from the prior session's research as fact. `ADR-003` is reopened;
+  do not build on `cdn.nba.com` as the critical path until a working endpoint or alternative
+  source is found. See `TASKS.md` C4 and `SESSION.md` §9 for status.
 - `[INFERRED]` Because of C1 (residential IP), `stats.nba.com` will work for this operator
   today. **But building on it makes the project undeployable and unusable by anyone who
-  clones the repo, which violates C3.** Prefer `cdn.nba.com` for anything on the critical
-  path. Treat `stats.nba.com` as an optional enrichment layer that must degrade gracefully.
+  clones the repo, which violates C3.**
 
 ### WhatsApp
 
