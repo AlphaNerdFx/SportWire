@@ -306,6 +306,12 @@ What exist instead are **structural defects**, which are certain:
 8. **Phone port.** What does this mean concretely — Termux? A scheduled remote trigger? Undefined.
 9. **Multi-user.** `delivery/router.py` implies a user directory. Is v1 single-user (the
    operator) or multi-user? `[INFERRED]` v1 should be single-user; confirm.
+10. **Non-technical end users — explicitly deferred, not v1.** Operator stated 2026-08-03:
+    signing up for API keys and editing `.env` is acceptable setup friction for now, but the
+    longer-term generalization goal wants something usable by people without that technical
+    background. Not a trigger for any decision today (ADR-003's `balldontlie.io` API key
+    requirement stands) — recorded so v1's config/setup approach isn't assumed to be the
+    final shape. See `TASKS.md` L13 for the deferred task this becomes.
 
 ---
 

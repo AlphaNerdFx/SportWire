@@ -225,3 +225,8 @@
 - [ ] **L12. Write the public README and a "what went wrong with v1" post-mortem.** The
   post-mortem, backed by the ADR folder, is `[INFERRED]` the most valuable thing in the repo
   for a portfolio.
+- [ ] **L13. Lower setup friction for non-technical users** (hosted config UI, a managed
+  key-proxy, one-click deploy — undecided, do not design yet). Trigger: v1 works for the
+  operator and someone without his technical background wants to run it. Operator flagged
+  2026-08-03 that `.env`/API-key setup (e.g. ADR-003's `balldontlie.io` key) is acceptable
+  for now but not the intended final shape — see `SESSION.md` §9 Q10.
