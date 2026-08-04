@@ -45,7 +45,7 @@ openclaw/
 │
 ├── ingestion/
 │   ├── base.py                 # SourceAdapter ABC: fetch() -> list[NewsArticle]
-│   ├── nba_live.py             # cdn.nba.com live scoreboard adapter
+│   ├── nba_live.py             # balldontlie.io games adapter (see ADR-003)
 │   └── <one file per source>   # added one at a time, each a slice
 │
 ├── processing/
@@ -77,7 +77,7 @@ in the legacy repo. Smaller surface area is the primary defense against agent-dr
 
 ```
   ┌──────────────┐
-  │ cdn.nba.com  │  (later: NBA news feed, nflreadpy, others)
+  │ balldontlie.io│  (later: NBA news feed, nflreadpy, others)
   └──────┬───────┘
          │  raw JSON / HTML — shape is the source's business
          ▼
@@ -142,7 +142,8 @@ and each serves a scale problem this project does not have.
 
 | Service | Role | Status | Cost | Risk |
 |---|---|---|---|---|
-| `cdn.nba.com` live endpoints | NBA scores, boxscores, play-by-play | v1 critical path | Free | `[VERIFIED]` No bot protection; works anywhere |
+| `balldontlie.io` | NBA scores, schedule | v1 critical path | Free tier (key required) | `[VERIFIED]` 2026-08-03: documented public API, intended for third-party use — see ADR-003 |
+| `cdn.nba.com` live endpoints | NBA scores, boxscores, play-by-play | **Rejected** — superseded by ADR-003 | Free | `[VERIFIED]` 2026-08-03: returns HTTP 403 from Akamai; the earlier "no bot protection" claim did not hold on retest |
 | Telegram Bot API | Delivery | v1 critical path | Free | Low |
 | `stats.nba.com` (`nba_api`) | Deep stats | Optional enrichment | Free | `[VERIFIED]` Datacenter IPs blocked, Akamai TLS fingerprinting. Portability hazard — see ADR-003 |
 | `nflreadpy` / nflverse | NFL data | Deferred (L1) | Free | Low; community-maintained |
