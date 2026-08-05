@@ -25,6 +25,20 @@
 - [x] **Decide architecture direction** — 2026-08-03
   - Proof: ADR-001 through ADR-008 recorded in `SESSION.md` §5.
 
+- [x] **Rebuild the virtual environment clean** — 2026-08-04
+  - `[VERIFIED]` The legacy `.venv` was **5.6 GB / 151 packages**, including `torch`,
+    `sentence-transformers`, `alembic`, `asyncpg`, `pgvector`, `SQLAlchemy` — the entire
+    *deferred* column of `CLAUDE.md` §11, installed before anything in the *required* column
+    had been proven. Confirmed `requirements.txt` recoverable from the `legacy` branch first,
+    then deleted and rebuilt with only the v1 required column.
+  - Proof: `.venv` now **68 MB / 21 packages**: `requests==2.34.2`, `pydantic==2.13.4`,
+    `python-dotenv==1.2.2`, `pytest==9.1.1`, `ruff==0.16.1`, on Python 3.10.12 (WSL2 Ubuntu).
+  - Proof: enforcement verified, not assumed — `import requests, pydantic, dotenv, pytest`
+    succeeds; `torch`, `sentence_transformers`, `sqlalchemy`, `alembic`, `asyncpg`, `pgvector`
+    all raise `ImportError`. `[INFERRED]` An accidental use of a deferred dependency now fails
+    at import time instead of silently succeeding, so the environment enforces §11 rather than
+    relying on the agent re-reading it.
+
 ---
 
 ## CRITICAL — do these before writing any application code
