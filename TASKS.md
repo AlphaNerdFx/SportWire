@@ -224,6 +224,25 @@
     risk.
 - [ ] **H13. Operator explains every file in slice 1 aloud, unaided.** Any file he cannot explain
   is deleted and regenerated (ADR-006).
+  - **ATTEMPT 1 — 2026-08-05: NOT PASSED. 2 of 8 correct.**
+  - Eight questions covering the ten slice-1 files. Passed: why `author` is optional (Q4),
+    which files change when a source is added (Q6, missed the `main.py` line). Failed: why
+    `state_hash` excludes a timestamp (Q1 — the exact error the operator had proposed
+    mid-build), the `_fetch`/`fetch` split (Q2), record-after-send ordering (Q3, answered
+    "concurrency"), why there are two ABCs (Q5, asserted a shared superclass that does not
+    exist), why dedup takes an injected set (Q7, answered performance rather than
+    testability), and why the brief is plain text (Q8, asserted Telegram lacks Markdown
+    support — it has it; the issue is MarkdownV2's ~18 reserved characters).
+  - **ADR-006's remedy is deliberately NOT applied.** `[INFERRED]` That remedy — delete and
+    regenerate — assumes the human wrote the interfaces and the agent wrote bodies, so a
+    failure to explain implies the implementation was too clever. That is not this situation:
+    all ten files were agent-written after the operator instructed *"you'll write the code
+    not me"* (see ADR-011 §7). Regenerating produces ten files he also has not read.
+    Deleting working software would not address the cause.
+  - **Substitute remedy agreed instead: the operator rewrites `processing/dedup.py` himself.**
+    ~40 lines, no network, no database, and it is the module whose behaviour already confused
+    him in real use (two messages instead of three). Passing Q3 and Q7 unaided afterwards
+    closes this task.
   - Proof:
 
 ---
