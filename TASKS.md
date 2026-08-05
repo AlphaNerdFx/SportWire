@@ -188,7 +188,8 @@
 - [ ] **H11. Run it. A real message arrives on the phone.** This is the first genuine milestone
   the project has ever had.
   - Proof:
-- [ ] **H12. Write ADR-009 recording what was actually learned building slice 1.**
+- [ ] **H12. Write ADR-010 recording what was actually learned building slice 1.**
+  (Renumbered from ADR-009, which was taken by the news-source decision on 2026-08-04.)
   - Proof:
 - [ ] **H13. Operator explains every file in slice 1 aloud, unaided.** Any file he cannot explain
   is deleted and regenerated (ADR-006).

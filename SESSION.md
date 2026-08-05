@@ -300,8 +300,12 @@ What exist instead are **structural defects**, which are certain:
 4. **Summarization: local model or hosted API?** Local (Ollama) satisfies C2 fully but is slow
    on a laptop. Hosted costs money. Undecided.
 5. **Is the legacy repo's git history publishable?** Blocked on B2.
-6. **Scraping legality.** Do ESPN or HoopsHype offer RSS or an official feed that avoids the
-   ToS problem entirely? Unresearched.
+6. ~~**Scraping legality.** Do ESPN or HoopsHype offer RSS or an official feed that avoids the
+   ToS problem entirely? Unresearched.~~ **RESOLVED 2026-08-04.** `[VERIFIED]` ESPN publishes
+   a public NBA RSS feed at `espn.com/espn/rss/nba/news` (HTTP 200, 15 items, `<ttl>30</ttl>`).
+   CBS Sports and Reddit r/nba also verified working. **No scraper is needed for ESPN.**
+   See `docs/decisions/ADR-009-nba-news-source.md`. HoopsHype remains unresearched, but is no
+   longer on the critical path.
 7. **`storage/` salvage.** Is any of it worth copying? Requires reading the files.
 8. **Phone port.** What does this mean concretely — Termux? A scheduled remote trigger? Undefined.
 9. **Multi-user.** `delivery/router.py` implies a user directory. Is v1 single-user (the
