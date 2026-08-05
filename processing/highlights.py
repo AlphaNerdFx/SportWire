@@ -30,11 +30,18 @@ from models.schemas import GameData, GameHighlight
 BLOWOUT_MARGIN = 20
 CLOSE_GAME_MARGIN = 5
 HIGH_SCORING_TOTAL = 250
+COMEBACK_DEFICIT = 15
 
 # Order in which categories are reported, and the order used to resolve a game that
 # qualifies for more than one. A game is reported once, under its first matching category,
 # so one game never occupies several slots in the brief.
-_CATEGORY_ORDER = ("overtime", "closest_finish", "largest_margin", "highest_scoring")
+_CATEGORY_ORDER = (
+    "comeback",
+    "overtime",
+    "closest_finish",
+    "largest_margin",
+    "highest_scoring",
+)
 
 
 def find_notable_games(games: list[GameData]) -> list[GameHighlight]:
@@ -52,7 +59,12 @@ def find_notable_games(games: list[GameData]) -> list[GameHighlight]:
     claimed: set[int] = set()
     by_category: dict[str, list[GameData]] = {}
 
-    # Every overtime game, not just one — OT is rare and each instance is notable.
+    # Every comeback and every overtime game, not just one of each. Both are rare enough
+    # that each instance is independently worth knowing about, unlike the superlatives
+    # below where "the biggest" is the whole point.
+    by_category["comeback"] = [
+        game for game in games if game.largest_deficit_overcome >= COMEBACK_DEFICIT
+    ]
     by_category["overtime"] = [game for game in games if game.went_to_overtime]
 
     # Superlatives: the single most extreme game, and only if it clears its threshold.

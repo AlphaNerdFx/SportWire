@@ -108,4 +108,25 @@ class BallDontLieGamesAdapter(GameSourceAdapter):
             # 4 in regulation; >4 means overtime. `[VERIFIED]` every completed game in the
             # captured fixture reports 4.
             period=raw.get("period") or 0,
+            home_periods=_period_scores(raw, "home"),
+            away_periods=_period_scores(raw, "visitor"),
         )
+
+
+def _period_scores(raw: dict[str, Any], side: str) -> list[int]:
+    """Collect a side's per-period scores in order: Q1–Q4, then any overtimes.
+
+    `[VERIFIED]` The payload uses `home_q1`…`home_q4` and `home_ot1`…`ot3` (and `visitor_`
+    for the away side), with unplayed overtimes present but null. Collection stops at the
+    first missing period so a game in progress yields only the periods actually played.
+    """
+    scores: list[int] = []
+    for key in ("q1", "q2", "q3", "q4", "ot1", "ot2", "ot3"):
+        value = raw.get(f"{side}_{key}")
+        if value is None:
+            # Quarters are contiguous, so the first gap marks the end of what was played.
+            if key.startswith("ot"):
+                break
+            continue
+        scores.append(int(value))
+    return scores

@@ -45,6 +45,42 @@ class GameData(BaseModel):
     # data. Defaults to 0 so a scheduled game that has not tipped off is representable.
     period: int = 0
 
+    # Points scored in each period, in order: Q1–Q4 then any overtimes. Stored as lists
+    # rather than fourteen named fields because the number of overtimes is open-ended, and
+    # because every use of them is a scan rather than a lookup of one specific quarter.
+    # Empty for a game that has not started.
+    home_periods: list[int] = []
+    away_periods: list[int] = []
+
+    @property
+    def largest_deficit_overcome(self) -> int:
+        """Biggest deficit the eventual winner faced at any period boundary.
+
+        Returns 0 if the winner never trailed at the end of a period, or if per-period data
+        is unavailable. This measures comebacks at period granularity only — a team down 20
+        mid-third-quarter that levels by the buzzer never appears to have trailed, because
+        balldontlie reports period totals rather than a running play-by-play.
+        """
+        if not self.home_periods or len(self.home_periods) != len(self.away_periods):
+            return 0
+
+        home_leads = self.home_score > self.away_score
+        home_running = 0
+        away_running = 0
+        largest_deficit = 0
+
+        for home_points, away_points in zip(self.home_periods, self.away_periods):
+            home_running += home_points
+            away_running += away_points
+            deficit = (
+                away_running - home_running
+                if home_leads
+                else home_running - away_running
+            )
+            largest_deficit = max(largest_deficit, deficit)
+
+        return largest_deficit
+
     @property
     def margin(self) -> int:
         """Absolute points difference. Used to classify blowouts and close finishes."""
