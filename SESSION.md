@@ -199,6 +199,23 @@ Each should become an ADR file in `docs/decisions/` in the clean repo.
 - **Tradeoff:** A later migration if scale grows. `[INFERRED]` Likely never needed; if it is,
   performing that migration under real conditions is a better lesson than pre-building for it
   (also addresses B5's migrations gap).
+- **Reaffirmed 2026-08-04** after the operator proposed "our stack will rely on Postgres for
+  multi extension use." Clarified against three possible meanings; operator's answers:
+  (1) RAG/vector search → **post-v1.0.0**, deferred behind ADR-005's trigger;
+  (2) multiple sports/sources → not required, except possibly to route around a single
+  source's rate limits, which is not a storage concern;
+  (3) multi-user → possibly later, but v1 is for open-source distribution.
+- **New argument for SQLite, not present in the original ADR:** `[INFERRED]` open-sourcing the
+  repo *strengthens* the SQLite case rather than weakening it. Publishing means many people each
+  run their **own instance with their own database** — single-writer per instance. Requiring
+  Postgres would force every person who clones the repo to install, configure and migrate a
+  database **server** before seeing a single score, which is a severe adoption barrier and
+  directly contradicts the deferred goal in §9 Q10 / `TASKS.md` L13 (lower setup friction for
+  non-technical users). SQLite is a file created on first run. `[VERIFIED]` `sqlite3` is in the
+  standard library — zero install.
+- **Distinction worth keeping straight:** *open-source* ≠ *multi-user*. Many instances with one
+  writer each is not the workload that breaks SQLite; one instance with many concurrent writers
+  is. Only the latter triggers this ADR's reversal condition.
 
 ### ADR-005 — Defer embeddings until lexical dedup provably fails
 - **Decision:** Semantic dedup is added only after capturing a specific real pair of near-
@@ -308,8 +325,11 @@ What exist instead are **structural defects**, which are certain:
    longer on the critical path.
 7. **`storage/` salvage.** Is any of it worth copying? Requires reading the files.
 8. **Phone port.** What does this mean concretely — Termux? A scheduled remote trigger? Undefined.
-9. **Multi-user.** `delivery/router.py` implies a user directory. Is v1 single-user (the
-   operator) or multi-user? `[INFERRED]` v1 should be single-user; confirm.
+9. ~~**Multi-user.** `delivery/router.py` implies a user directory. Is v1 single-user (the
+   operator) or multi-user?~~ **RESOLVED 2026-08-04.** v1 is **single-user per instance**.
+   Multi-user is "possibly later"; the near-term distribution model is open-source, i.e. many
+   people each running their own instance. See the 2026-08-04 amendment to ADR-004 in §5 for
+   why that distinction is what keeps SQLite viable.
 10. **Non-technical end users — explicitly deferred, not v1.** Operator stated 2026-08-03:
     signing up for API keys and editing `.env` is acceptable setup friction for now, but the
     longer-term generalization goal wants something usable by people without that technical
