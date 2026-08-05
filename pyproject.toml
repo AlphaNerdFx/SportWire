@@ -8,3 +8,12 @@ dependencies = []
 
 [tool.ruff]
 line-length = 88
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Tests that hit a live source are excluded from the default run and from CI. A suite that
+# fails because ESPN is slow teaches you nothing about your own code.
+addopts = "-m 'not network'"
+markers = [
+    "network: hits a live external service; excluded by default, run with -m network",
+]
