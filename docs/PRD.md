@@ -89,38 +89,59 @@ phone via Telegram.
    scored 2 of 8. `CLAUDE.md` §1 ranks this **above** shipping, so v1.0.0 is arguably not
    reachable until it passes.
 
-## 7. Open decisions blocking v1.0.0 scope
+## 7. Scope decisions — **RESOLVED 2026-08-06**
 
-**These are for the operator. Each one causes rework if built around wrongly.**
+### D1 — Delivery cadence and summary window → **the run defines the window**
+Poll every 8 hours. The summarizer covers **whatever survived deduplication**, which is by
+definition everything new since the last run.
 
-### D1 — Delivery cadence
-How often does a brief arrive? `.env.example` says `POLL_INTERVAL_HOURS=8`; the operator has
-also described "the last six hours." These must become one number.
-*Affects:* R1 scheduling, M7's prompt ("summarise the last N hours"), and how empty a brief
-is on a quiet cycle.
+`[VERIFIED]` The operator initially proposed a fixed 6-hour summary window against an 8-hour
+poll. Measured against the live feed, 6 of 17 items were older than 6 hours — so that pairing
+creates a **2-hour blind spot** where an article is new, survives dedup, and is then silently
+excluded from the summary. Letting the run define the window removes the failure mode instead
+of tuning it, and stays correct if the cadence is ever changed.
 
-### D2 — Deduplication window
-`.env.example` says `DEDUP_WINDOW_HOURS=48`, but `storage/db.py` currently remembers items
-**forever**, deliberately: `[VERIFIED]` ESPN's feed reaches back roughly three days, so a
-48-hour window would re-send items that are still listed.
-*Decision needed:* keep "remember forever", or introduce a window and accept the duplicates?
-*Note:* D1 and D2 are **separate knobs** that the original documents conflated.
+### D2 — Deduplication window → **168 hours (7 days)**
+`[VERIFIED]` 2026-08-06, live measurement of ESPN's feed (17 items, oldest **99.1 hours** old):
 
-### D3 — Is NFL in v1.0.0?
-The project is named for both sports. `TASKS.md` L1 defers NFL behind "NBA path stable across
-several real runs."
-*Affects:* whether v1.0.0 is weeks or days away. `[INFERRED]` The adapter boundary means NFL
-is additive rather than invasive — but it is still a new source, new fixtures, new tests.
+| Window | Items older than the window but still listed → **re-sent every run** |
+|---|---|
+| 8h | **3 of 17** |
+| 48h | 2 of 17 |
+| **168h** | **0 of 17** |
 
-### D4 — What "phone port" means
-`SESSION.md` §9 Q8 records this as undefined. Candidates: cron on the operator's PC (already
-possible), Termux on Android, or a hosted trigger. Each is a different amount of work and N1
-forbids the third.
+The window controls how long *we remember*, not how long ESPN publishes. A short window makes
+duplicates **worse**: forget an item still sitting in the feed and it looks new again on every
+cycle. An 8-hour window at three runs a day would re-deliver a stale article roughly a dozen
+times. 168h measures zero duplicates while still bounding database growth.
 
-### D5 — Summarizer input richness
-`[VERIFIED]` RSS gives a title and a one-to-two sentence description. Full article text would
-require fetching article pages, which is the C3 scraping exposure ADR-009 exists to avoid.
-*Decision:* accept description-only input for M7, or reopen the sourcing question?
+`[UNKNOWN]` Purging is **not yet implemented** — `storage/db.py` currently keeps every row.
+At present scale (tens of rows) a purge is unnecessary; see `TASKS.md`. The setting records
+the decision ahead of the need.
+
+### D3 — Sport scope → **NBA only for v1.0.0**
+Expand to the four major US leagues (NFL, MLB, NHL) *after* 1.0. `[INFERRED]` The adapter
+boundary makes each additional sport additive rather than invasive, but each still needs a
+source, fixtures and tests. Ships v1.0.0 in days rather than weeks.
+
+### D4 — Scheduling and phone delivery → **cron first, Termux wrapper after**
+A cron entry invoking `main.py` on the operator's machine is v1.0.0. A Termux-based Android
+wrapper follows, motivated by accessibility for non-technical users (L13).
+
+`[Likely]` Constraint on the messaging ambition, recorded before it becomes a plan: **Android
+does not permit automated WhatsApp sending from a local app.** WhatsApp exposes no local send
+API; a `wa.me` intent opens the app with text prefilled but still requires a manual tap. Full
+automation needs either the paid Business API (recurring cost, ADR-002) or an unofficial
+bridge (ToS violation, ban risk). The genuinely local equivalents that work are **Termux
+notifications** (free, no ToS issue) and `termux-sms-send` (works, but carrier-billed per
+message). Any of these would sit behind the existing `DeliveryChannel` interface.
+
+A *hosted* service was also raised; it contradicts N1/C1 and would need a superseding ADR.
+
+### D5 — Summarizer input → **news descriptions only**
+Title plus the RSS description. No article body: fetching article pages is the C3 scraping
+exposure ADR-009 exists to avoid. Game scores are excluded from the summary because, in the
+operator's words, they are self-explanatory — they already have their own message.
 
 ## 8. Release plan
 
