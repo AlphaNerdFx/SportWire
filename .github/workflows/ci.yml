@@ -1,0 +1,37 @@
+# Continuous integration.
+#
+# This workflow deliberately runs `make check` and nothing else. Duplicating the commands
+# here would let CI and local development drift apart -- the moment they differ, a green
+# badge stops meaning "this works on your machine too".
+#
+# Network tests are excluded (pyproject sets `-m 'not network'`). A suite that fails because
+# ESPN was slow teaches nothing about the code, and a flaky red badge gets ignored, which
+# makes the whole thing worthless.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          # Matches constraint C1: the operator runs WSL2 Ubuntu with Python 3.10. Testing
+          # on a version nobody develops against would let real incompatibilities through.
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: make install
+
+      - name: Run checks
+        run: make check

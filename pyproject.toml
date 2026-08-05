@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "sportwire"
 version = "0.0.0"
@@ -18,6 +22,14 @@ dev = [
     "pytest==9.1.1",
     "ruff==0.16.1",
 ]
+
+# The project uses a flat layout with several top-level packages, which setuptools refuses
+# to auto-discover -- it will not guess which directories are packages and which are not.
+# Listing them explicitly is the fix. `[VERIFIED]` Without this, `pip install -e .` fails
+# with "Multiple top-level packages discovered in a flat-layout", which a CI simulation
+# caught before the first push.
+[tool.setuptools]
+packages = ["delivery", "ingestion", "models", "processing", "storage"]
 
 [tool.ruff]
 line-length = 88
