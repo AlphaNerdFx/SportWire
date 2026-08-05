@@ -324,8 +324,24 @@ What exist instead are **structural defects**, which are certain:
 2. **Delivery cadence.** Is every 8 hours actually wanted, or is once daily sufficient? Affects
    volume, cost, and dedup window.
 3. **NBA scope.** News only, game data only, or both? The diagram shows both; v1 may not need both.
-4. **Summarization: local model or hosted API?** Local (Ollama) satisfies C2 fully but is slow
-   on a laptop. Hosted costs money. Undecided.
+4. ~~**Summarization: local model or hosted API?**~~ **RESOLVED 2026-08-05: local first.**
+   Operator: *"local always, open-source first."* Satisfies C2 fully and means anyone cloning
+   the repo can run it without buying anything.
+   - `[INFERRED]` Tension to keep in view: Ollama is not `pip install`-able — it needs a
+     separate installer and a multi-GB model pull, which is *harder* setup than pasting an
+     API key. That works against L13 (non-technical users), so **local-first, not
+     local-only**: build a `Summarizer` interface with an Ollama implementation as the
+     default and a hosted one as an optional alternative behind the same call site. Same
+     pattern as `DeliveryChannel` and `SourceAdapter` — the third use of it, which is itself
+     evidence the boundary is the right shape.
+   - `[INFERRED]` The task is easy enough for a small local model: roughly 2.4 KB of input
+     (16 short descriptions) producing ~1 KB of prose. This is not a reasoning-heavy job.
+   - **No training is involved.** Steering the summary ("prioritise on-court news, mention
+     off-court items briefly") is a sentence in the prompt, not a fine-tune. Recorded here
+     because the assumption came up twice and would waste real time.
+   - Still `[UNKNOWN]`: which model, and whether article *descriptions* alone are rich enough
+     versus full article text — full text would require fetching article pages, which is the
+     C3 scraping exposure ADR-009 exists to avoid.
 5. **Is the legacy repo's git history publishable?** Blocked on B2.
 6. ~~**Scraping legality.** Do ESPN or HoopsHype offer RSS or an official feed that avoids the
    ToS problem entirely? Unresearched.~~ **RESOLVED 2026-08-04.** `[VERIFIED]` ESPN publishes
