@@ -5,10 +5,20 @@ interface, concrete implementations, and callers that depend only on the abstrac
 inference is the default (`SESSION.md` §9 Q4 — "local always, open-source first"), and a
 hosted implementation can be added later without touching anything that calls this.
 
-`[UNKNOWN]` No live inference has been run. Ollama is not installed on this machine, so
-`OllamaSummarizer._summarise` is **unverified against a real model**. Everything that does
-not require a model — prompt construction, article rendering, truncation, failure handling —
-is tested. Do not claim this works end to end until it has.
+`[VERIFIED]` 2026-08-06 against `llama3.2:3b` on the 15-article fixture: 687 characters in
+9.1 seconds, covering every story including the two the single-call version dropped.
+
+`[VERIFIED]` Quality is not yet good, and the specific defects are recorded rather than
+smoothed over:
+  - **Prioritisation is wrong.** LeBron James signing with Philadelphia — the biggest item
+    in the feed — closes the paragraph instead of opening it, despite the prompt.
+  - **Minor factual drift.** The source says Wembanyama *"will host"* teammates; the model
+    wrote *"hosted"*. The model is small enough to alter tense, which changes meaning.
+  - **Preamble appears anyway** ("The NBA offseason is underway with several notable
+    developments") despite an explicit instruction against it.
+`[INFERRED]` These are model-capability limits rather than prompt bugs: two prompt revisions
+did not fix ordering, while chunking fixed coverage completely. A larger model is the next
+lever, at the cost of a bigger download and slower runs.
 
 Input is title plus RSS description only (PRD D5). Article bodies would require fetching
 article pages, which is the C3 scraping exposure ADR-009 exists to avoid. Scores are
@@ -46,6 +56,26 @@ SYSTEM_PROMPT = (
     "- No preamble. Start with the news itself."
 )
 
+# Articles per model call before chunking kicks in. `[VERIFIED]` llama3.2:3b covered 5 of 5
+# articles reliably but dropped items past roughly position 8 of 15.
+CHUNK_SIZE = 5
+
+# The map step deliberately produces **notes, not prose**. Summarising prose into prose is
+# what makes naive map-reduce read like stitched fragments: each chunk gets its own opening,
+# its own rhythm, and the reduce step welds them together. Extracting bare facts instead
+# means only the final call ever writes a sentence, so the paragraph is composed once, in
+# one pass, exactly as it is for a short batch.
+NOTES_PROMPT = (
+    "Extract the key facts from these NBA news items as terse notes.\n"
+    "\n"
+    "Rules:\n"
+    "- One line per item. No prose, no sentences, no introduction.\n"
+    "- Format: who — what happened — any figure that matters.\n"
+    "- Keep names, teams, contract values and injury details exactly as given.\n"
+    "- Do not add anything the items do not state.\n"
+    "- Do not omit an item, however minor it seems."
+)
+
 
 class Summarizer(ABC):
     """Turns articles into one paragraph of prose."""
@@ -56,8 +86,13 @@ class Summarizer(ABC):
         """Human-readable label, e.g. "Ollama (llama3.2)". Used in logs."""
 
     @abstractmethod
-    def _summarise(self, prompt: str) -> str:
-        """Send the prompt to a model and return its text. Allowed to raise."""
+    def _summarise(self, articles: list[NewsArticle], max_chars: int) -> str:
+        """Produce the summary text. Allowed to raise.
+
+        Takes articles rather than a finished prompt because how many model calls this
+        requires is the implementation's business, not the interface's. `OllamaSummarizer`
+        makes several; a hosted implementation with a larger context window may make one.
+        """
 
     def summarise(
         self, articles: list[NewsArticle], max_chars: int = DEFAULT_SUMMARY_CHARS
@@ -72,7 +107,7 @@ class Summarizer(ABC):
             return None
 
         try:
-            text = self._summarise(build_prompt(articles, max_chars))
+            text = self._summarise(articles, max_chars)
         except Exception:
             logger.exception(
                 "%s failed; falling back to headline list", self.summarizer_name
@@ -103,22 +138,58 @@ class OllamaSummarizer(Summarizer):
         model: str = "llama3.2:3b",
         host: str = "http://localhost:11434",
         timeout_seconds: int = 120,
+        chunk_size: int = CHUNK_SIZE,
     ) -> None:
         self._model = model
         self._host = host.rstrip("/")
         self._timeout_seconds = timeout_seconds
+        self._chunk_size = chunk_size
 
     @property
     def summarizer_name(self) -> str:
         return f"Ollama ({self._model})"
 
-    def _summarise(self, prompt: str) -> str:
-        """POST to Ollama's generate endpoint. Exceptions handled by `summarise`."""
+    def _summarise(self, articles: list[NewsArticle], max_chars: int) -> str:
+        """Summarise, chunking first if the batch is long enough to lose its tail.
+
+        `[VERIFIED]` 2026-08-06: given all 15 fixture articles in one call, this model
+        omitted the two LeBron-to-Philadelphia items entirely — the biggest story in the
+        feed — while including a child-support filing. Re-running with those same two items
+        moved to the front of the list covered them, and led with them. The model was not
+        judging badly; it was barely reading the tail.
+
+        So short batches go straight through, and long ones are split so that every article
+        sits near the front of *some* call.
+        """
+        if len(articles) <= self._chunk_size:
+            return self._generate(SYSTEM_PROMPT, build_prompt(articles, max_chars))
+
+        chunks = [
+            articles[index : index + self._chunk_size]
+            for index in range(0, len(articles), self._chunk_size)
+        ]
+        logger.info(
+            "%s: %d articles exceeds chunk size %d; extracting notes from %d chunks",
+            self.summarizer_name,
+            len(articles),
+            self._chunk_size,
+            len(chunks),
+        )
+
+        notes = [
+            self._generate(NOTES_PROMPT, build_prompt(chunk, max_chars))
+            for chunk in chunks
+        ]
+
+        return self._generate(SYSTEM_PROMPT, build_reduce_prompt(notes, max_chars))
+
+    def _generate(self, system: str, prompt: str) -> str:
+        """One POST to Ollama's generate endpoint. Exceptions handled by `summarise`."""
         response = requests.post(
             f"{self._host}/api/generate",
             json={
                 "model": self._model,
-                "system": SYSTEM_PROMPT,
+                "system": system,
                 "prompt": prompt,
                 "stream": False,
                 # Low temperature: this is a factual summary, and invented trades would be
@@ -152,3 +223,21 @@ def build_prompt(
             lines.append(f"  {summary}")
 
     return "\n".join(lines)
+
+
+def build_reduce_prompt(
+    notes: list[str], max_chars: int = DEFAULT_SUMMARY_CHARS
+) -> str:
+    """Render extracted notes into the final prompt that writes the paragraph.
+
+    The notes are concatenated plainly. They are already compact, so the whole set sits well
+    inside the range the model actually attends to — which is the entire point of having
+    extracted them.
+    """
+    joined = "\n".join(note.strip() for note in notes if note.strip())
+    instruction = (
+        f"Write the brief from these notes, in at most {max_chars} characters. "
+        "The notes are facts already gathered for you; turn all of them into one "
+        "continuous piece of prose."
+    )
+    return f"{instruction}\n\n{joined}"
