@@ -40,6 +40,26 @@ class GameData(BaseModel):
     home_score: int
     away_score: int
 
+    # `[VERIFIED]` 4 for every completed regulation game in the captured fixture. Anything
+    # above 4 is overtime, which is the only way to detect an OT game without per-quarter
+    # data. Defaults to 0 so a scheduled game that has not tipped off is representable.
+    period: int = 0
+
+    @property
+    def margin(self) -> int:
+        """Absolute points difference. Used to classify blowouts and close finishes."""
+        return abs(self.home_score - self.away_score)
+
+    @property
+    def total_points(self) -> int:
+        """Combined score of both teams."""
+        return self.home_score + self.away_score
+
+    @property
+    def went_to_overtime(self) -> bool:
+        """True when the game needed more than four periods."""
+        return self.period > 4
+
     @property
     def state_hash(self) -> str:
         """Identity of this game *in its current state*, for cross-run deduplication.
@@ -51,6 +71,20 @@ class GameData(BaseModel):
         """
         payload = f"{self.game_id}|{self.status}|{self.home_score}|{self.away_score}"
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+class GameHighlight(BaseModel):
+    """A game flagged as worth mentioning, plus the reason it was flagged.
+
+    `category` is a stable machine-readable key ("overtime", "closest_finish", ...), not
+    display text. The formatter maps it to wording, so the brief can be reworded without
+    touching the logic that decides what counts as notable.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    category: str
+    game: GameData
 
 
 class NewsArticle(BaseModel):

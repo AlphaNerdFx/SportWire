@@ -105,4 +105,7 @@ class BallDontLieGamesAdapter(GameSourceAdapter):
             away_team=away.get("full_name") or "Unknown",
             home_score=raw.get("home_team_score") or 0,
             away_score=raw.get("visitor_team_score") or 0,
+            # 4 in regulation; >4 means overtime. `[VERIFIED]` every completed game in the
+            # captured fixture reports 4.
+            period=raw.get("period") or 0,
         )
