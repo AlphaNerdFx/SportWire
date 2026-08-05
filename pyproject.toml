@@ -4,10 +4,28 @@ version = "0.0.0"
 description = "NBA/NFL news and game-data aggregator with periodic Telegram brief"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
-dependencies = []
+
+# Kept in step with requirements.txt. Versions are pinned to what was installed and
+# verified, per CLAUDE.md §11 -- every entry has a stated reason for existing.
+dependencies = [
+    "requests==2.34.2",
+    "pydantic==2.13.4",
+    "python-dotenv==1.2.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.1.1",
+    "ruff==0.16.1",
+]
 
 [tool.ruff]
 line-length = 88
+
+# Ruff formats Python snippets inside Markdown by default. The project documents commands
+# and illustrative code in CLAUDE.md and the ADRs, and reformatting prose files to satisfy a
+# Python formatter is the tail wagging the dog. Restrict it to actual source.
+include = ["*.py", "*.pyi", "pyproject.toml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

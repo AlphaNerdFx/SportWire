@@ -1,0 +1,11 @@
+# Runtime dependencies. Versions are pinned to what was actually installed and verified,
+# not to a range that "should work" -- `CLAUDE.md` §11 lists why each one is here.
+#
+# Development tooling lives in the `dev` extra: pip install -e ".[dev]"
+
+requests==2.34.2        # HTTP for balldontlie and Telegram. Synchronous; nothing here is slow enough to need async.
+pydantic==2.13.4        # Validates source payloads at the boundary rather than three layers deep.
+python-dotenv==1.2.2    # Loads .env so credentials never enter source.
+
+# Standard library, no install needed: sqlite3, hashlib, difflib, logging, datetime,
+# xml.etree, email.utils, argparse.
