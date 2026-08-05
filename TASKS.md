@@ -155,13 +155,20 @@
   - `[VERIFIED]` Telegram delivery works with zero dependencies — a single HTTP POST. This
     confirms ADR-002's "~15 lines to send a message" claim.
 
-- [ ] **C5b. Recreate the Telegram bot under the SportWire name**
+- [x] **C5b. Recreate the Telegram bot under the SportWire name** — 2026-08-04
   - Via @BotFather: `/newbot`, e.g. display name "SportWire", username `@sportwire_bot`
     (or `@sportwire_sports_bot` if taken). Then `/deletebot` the old `@openclaw_sports_bot`.
   - Replace `TELEGRAM_BOT_TOKEN` in `.env` with the new token. `TELEGRAM_CHAT_ID` is the
     operator's own chat ID and **does not change** — it identifies the recipient, not the bot.
   - Re-run the C5 send to prove the new token works before any delivery code is written.
-  - Proof:
+  - Proof: `getMe` → **HTTP 200**, `{"ok":true,"result":{"id":8852348125,"is_bot":true,
+    "first_name":"SportWire","username":"sportwire_news_bot",...}}`. `[VERIFIED]` This is a
+    genuinely different bot — the old one was id `8857142388` / `@openclaw_sports_bot`.
+    `@sportwire_bot` was already taken on Telegram; `@sportwire_news_bot` was used instead.
+  - Proof: `sendMessage` → **HTTP 200**, `{"ok":true,"result":{"message_id":4,...}}`, and the
+    operator confirmed receipt on his phone.
+  - `[VERIFIED]` `TELEGRAM_CHAT_ID` was unchanged (`8787396257`) across the bot swap, confirming
+    it identifies the **recipient**, not the bot. Only `TELEGRAM_BOT_TOKEN` had to change.
 
 ---
 
