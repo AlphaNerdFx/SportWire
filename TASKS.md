@@ -214,10 +214,14 @@
     zero games is handled as "omit the section", not as an error.
   - `[VERIFIED]` ESPN returned **16** articles live versus 15 in the captured fixture, so
     the feed genuinely moved between capture and run.
-- [ ] **H12. Write an ADR (next free number) recording what was actually learned building
-  slice 1.** Numbers are assigned in creation order; ADR-009 and ADR-010 were taken during
-  the build itself, so do not hardcode one here.
-  - Proof:
+- [x] **H12. Write an ADR recording what was actually learned building slice 1.** — 2026-08-05
+  - Proof: `docs/decisions/ADR-011-slice-1-retrospective.md`. Seven findings, each with the
+    measurement behind it: verified evidence going stale (`cdn.nba.com`), six assumptions
+    that real data contradicted, three rules converted from prose into mechanisms, one
+    boundary that answered three unrelated questions, two features declined on evidence
+    rather than deferred on principle, the two defects that proved tests and real usage catch
+    different bug classes, and the ADR-006 reversal recorded as the project's largest open
+    risk.
 - [ ] **H13. Operator explains every file in slice 1 aloud, unaided.** Any file he cannot explain
   is deleted and regenerated (ADR-006).
   - Proof:
