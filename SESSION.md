@@ -14,7 +14,7 @@ in this session.**
 
 | Field | Value |
 |---|---|
-| **Name** | OpenClaw — NBA/NFL News & Games Retrieval Assistant |
+| **Name** | SportWire — NBA/NFL News & Games Retrieval Assistant. `[VERIFIED]` Renamed from "OpenClaw" 2026-08-04: that name collides with an established open-source project (a *Captain Claw* game reimplementation) — `pypi.org/pypi/openclaw` and `github.com/openclaw` both return HTTP 200 — which would bury this repo in search results. `sportwire` is free on both. |
 | **Purpose** | Aggregate NBA and NFL news and game data from multiple sources, deduplicate stories, summarize them, and deliver a periodic brief to the operator's phone. |
 | **End goal** | A publishable, generalizable open-source repo, plus — weighted higher — the operator learning system design, end-to-end development, DevOps fundamentals, and agentic coding practice. |
 | **Stage** | Pre-implementation. Architecture decided; clean repository not yet created. |

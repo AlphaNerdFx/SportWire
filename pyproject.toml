@@ -1,5 +1,5 @@
 [project]
-name = "openclaw"
+name = "sportwire"
 version = "0.0.0"
 description = "NBA/NFL news and game-data aggregator with periodic Telegram brief"
 requires-python = ">=3.10"

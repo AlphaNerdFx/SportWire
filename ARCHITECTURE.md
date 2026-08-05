@@ -27,7 +27,7 @@ Evidence tags per `CLAUDE.md` §0.
 ## 2. Target Directory Layout
 
 ```
-openclaw/
+sportwire/
 ├── main.py                     # THE single entrypoint. No others, ever.
 ├── pyproject.toml
 ├── requirements.txt

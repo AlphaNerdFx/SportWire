@@ -1,4 +1,4 @@
-# OpenClaw — NBA/NFL News & Games Retrieval Assistant
+# SportWire — NBA/NFL News & Games Retrieval Assistant
 
 Aggregates NBA and NFL news and game data from multiple sources, deduplicates stories, and
 delivers a periodic brief to a Telegram chat.

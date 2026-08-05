@@ -52,7 +52,7 @@ completed a single end-to-end run.
 has read them. You may not build on it, run its test suite as evidence of health, or trust
 `HANDOFF.md` inside it.**
 
-### `openclaw/` — the clean rebuild (all new work happens here)
+### `sportwire/` — the clean rebuild (all new work happens here)
 
 Starts empty. Grows one vertical slice at a time. See `ARCHITECTURE.md` for the target
 shape and `TASKS.md` for the order.
@@ -317,7 +317,7 @@ Placeholders anticipated:
 ```
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
-DATABASE_URL=sqlite:///openclaw.db
+DATABASE_URL=sqlite:///sportwire.db
 LOG_LEVEL=INFO
 POLL_INTERVAL_HOURS=8
 DEDUP_WINDOW_HOURS=48

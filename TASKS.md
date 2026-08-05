@@ -144,12 +144,24 @@
 - [x] **C5. Create the Telegram bot and prove delivery by hand** — 2026-08-04
   - Bot created via @BotFather: display name "OpenClaw Sports Brief", username
     `@openclaw_sports_bot`. Token and chat ID in `.env`.
+  - **Superseded 2026-08-04 by the project rename to SportWire.** The record above is left
+    unedited because it is the proof of what was actually verified at the time. `[Likely]`
+    BotFather cannot rename an existing bot's username, so a replacement bot must be created
+    and C5 re-verified with the new token. **Tracked as C5b below.**
   - Proof: `curl -X POST https://api.telegram.org/bot<token>/sendMessage -d chat_id=<id>
     -d "text=OpenClaw C5 delivery test..."` → **HTTP 200**,
     `{"ok":true,"result":{"message_id":5,...,"chat":{"id":<id>,"first_name":"Youssef",
     "type":"private"}}}`. **A real message was delivered to the operator's Telegram.**
   - `[VERIFIED]` Telegram delivery works with zero dependencies — a single HTTP POST. This
     confirms ADR-002's "~15 lines to send a message" claim.
+
+- [ ] **C5b. Recreate the Telegram bot under the SportWire name**
+  - Via @BotFather: `/newbot`, e.g. display name "SportWire", username `@sportwire_bot`
+    (or `@sportwire_sports_bot` if taken). Then `/deletebot` the old `@openclaw_sports_bot`.
+  - Replace `TELEGRAM_BOT_TOKEN` in `.env` with the new token. `TELEGRAM_CHAT_ID` is the
+    operator's own chat ID and **does not change** — it identifies the recipient, not the bot.
+  - Re-run the C5 send to prove the new token works before any delivery code is written.
+  - Proof:
 
 ---
 
