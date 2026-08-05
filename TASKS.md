@@ -204,9 +204,16 @@
   - Proof:
 - [ ] **H10. Human writes `main.py`** wiring fetch → dedup → format → send. Single entrypoint.
   - Proof:
-- [ ] **H11. Run it. A real message arrives on the phone.** This is the first genuine milestone
-  the project has ever had.
-  - Proof:
+- [x] **H11. Run it. A real message arrives on the phone.** — 2026-08-05
+  - Proof: `python main.py --date 2026-01-15` delivered three messages to the operator's
+    Telegram at 19:46, confirmed by screenshot: **SCORES** (9 games), **NOTABLE**
+    (`Comeback — Orlando Magic came back from 16 down`, `Closest finish — decided by 3`,
+    `Biggest win — Dallas Mavericks by 22`), and **NEWS** (16 ESPN articles).
+  - Proof: `python main.py --dry-run` on today's date → `fetched 0 games, 16 articles`,
+    one message, nothing sent, nothing recorded. `[VERIFIED]` The offseason path works:
+    zero games is handled as "omit the section", not as an error.
+  - `[VERIFIED]` ESPN returned **16** articles live versus 15 in the captured fixture, so
+    the feed genuinely moved between capture and run.
 - [ ] **H12. Write an ADR (next free number) recording what was actually learned building
   slice 1.** Numbers are assigned in creation order; ADR-009 and ADR-010 were taken during
   the build itself, so do not hardcode one here.
