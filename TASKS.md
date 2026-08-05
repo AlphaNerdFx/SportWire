@@ -74,8 +74,14 @@
     then the freeze commit, then a `legacy` branch marking it.
   - Proof: root commit `e8953e0` on `main`, message "chore: freeze legacy prototype as
     pre-release snapshot", 97 files. Tagged `pre-release-legacy-frozen`. Branch `legacy`
-    created pointing at the same commit. **Not pushed** — no GitHub remote configured yet;
-    that is a separate decision (visible/shared action) not taken here.
+    created pointing at the same commit.
+  - **Published 2026-08-06** to `https://github.com/AlphaNerdFx/SportWire` (public).
+    `[VERIFIED]` `git ls-remote` shows `main`, `legacy` and the `pre-release-legacy-frozen`
+    tag. `[VERIFIED]` Pre-push audit: the live bot token and balldontlie key appear **0
+    times** in full history (`git log --all -p | grep -cF`), `.env` was never committed, and
+    `git ls-tree -r origin/main` confirms no `.env`, `.venv`, `*.db` or `__pycache__` on the
+    remote. Personal Telegram identifiers were redacted from `TASKS.md` beforehand, though
+    they remain in earlier commits — not credentials, and judged acceptable.
 
 - [x] **C3. Initialise the clean repository** — 2026-08-03
   - Resolved structure ambiguity (branch vs. new directory) with the operator: one repo,

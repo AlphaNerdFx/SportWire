@@ -3,9 +3,27 @@
 Aggregates NBA and NFL news and game data from multiple sources, deduplicates stories, and
 delivers a periodic brief to a Telegram chat.
 
-**Status: pre-implementation.** No application code exists on `main` yet. A prior prototype
-exists, frozen for reference on the `legacy` branch — it never completed an end-to-end run;
-see `docs/AUDIT.md` for the forensic findings that led to the rebuild.
+**Status: slice 1 working.** `[VERIFIED]` 2026-08-05 — a real three-message brief (scores,
+notable events, news) was delivered to a phone via Telegram, and a repeat run correctly sent
+nothing because deduplication remembered it.
+
+A prior prototype is frozen for reference on the `legacy` branch. It never completed a single
+end-to-end run; `docs/AUDIT.md` records the forensic findings that led to this rebuild, and
+`docs/decisions/ADR-011-slice-1-retrospective.md` records what building the replacement
+actually taught.
+
+## Quick start
+
+```bash
+make install                # create .venv and install dependencies
+cp .env.example .env        # then fill in your own keys
+make dry-run                # fetch and print a brief, sending nothing
+make run                    # fetch and send
+make check                  # what CI runs: lint + tests
+```
+
+Requires a free [balldontlie.io](https://www.balldontlie.io/) API key and a Telegram bot
+token from [@BotFather](https://t.me/botfather). See `.env.example`.
 
 ## Project documents
 
