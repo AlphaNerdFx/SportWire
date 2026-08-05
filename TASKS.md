@@ -110,19 +110,32 @@
     `docs/decisions/ADR-003-nba-data-source.md`. `CLAUDE.md` §4 and `.env.example` updated.
   - Proof: ADR-003 written and committed.
 
-- [ ] **C4c. Operator obtains a free `balldontlie.io` API key and proves an authenticated call**
-  - Sign up at balldontlie.io, get the free-tier key, put it in `.env` (never `.env.example`).
-  - From a REPL: `curl -H "Authorization: <key>" "https://api.balldontlie.io/v1/games?dates[]=2026-08-03"`
-    and confirm a 200 with real game data (or a clean empty list if no games that date).
-  - Save one real response to `tests/fixtures/nba_games.json`. This is the fixture H5 tests
-    against — never the live network in tests.
-  - Proof:
+- [x] **C4c. Operator obtains a free `balldontlie.io` API key and proves an authenticated call** — 2026-08-04
+  - Key obtained by operator, stored in `.env` as `BALL_DONT_LIE_API_KEY` (36 chars).
+    `[VERIFIED]` `.env` is gitignored (`git check-ignore -v .env` → `.gitignore:4:.env`).
+  - Proof: `curl -H "Authorization: <key>" https://api.balldontlie.io/v1/teams` → **HTTP 200**,
+    real team data (`{"data":[{"id":1,...,"full_name":"Atlanta Hawks","abbreviation":"ATL"}...`).
+  - Proof: `.../v1/games?dates[]=2026-08-04` → **HTTP 200** `{"data":[],"meta":{"per_page":25}}`
+    — empty because August is NBA offseason. `[VERIFIED]` The 2026-27 season starts 2026-09-30.
+    **Consequence for slice 1: there is no live NBA data to fetch right now.** The adapter must
+    be built and tested against the fixture below, and an empty-list return is a normal,
+    expected case — not an error. This is a real edge case discovered by testing, not guessed.
+  - Proof: `.../v1/games?dates[]=2026-01-15` (mid-season) → **HTTP 200**, 9 real games. Saved
+    to `tests/fixtures/nba_games.json` (7,782 bytes). Payload shape includes: `id`, `date`,
+    `season`, `status`, `period`, `time`, `postseason`, `home_team_score`,
+    `visitor_team_score`, `datetime`, per-quarter scores, and nested `home_team`/`visitor_team`
+    objects. **Note: this endpoint returns game/score data only — no news articles.** Feeding
+    the `NewsArticle` schema needs a separate source (task M5).
 
-- [ ] **C5. Create the Telegram bot and prove delivery by hand**
-  - Via @BotFather; obtain token and chat ID; send one message with a single `requests.post`
-    from the REPL before any module exists.
-  - Put the values in `.env`, placeholders in `.env.example`.
-  - Proof:
+- [x] **C5. Create the Telegram bot and prove delivery by hand** — 2026-08-04
+  - Bot created via @BotFather: display name "OpenClaw Sports Brief", username
+    `@openclaw_sports_bot`. Token and chat ID in `.env`.
+  - Proof: `curl -X POST https://api.telegram.org/bot<token>/sendMessage -d chat_id=<id>
+    -d "text=OpenClaw C5 delivery test..."` → **HTTP 200**,
+    `{"ok":true,"result":{"message_id":5,...,"chat":{"id":<id>,"first_name":"Youssef",
+    "type":"private"}}}`. **A real message was delivered to the operator's Telegram.**
+  - `[VERIFIED]` Telegram delivery works with zero dependencies — a single HTTP POST. This
+    confirms ADR-002's "~15 lines to send a message" claim.
 
 ---
 
