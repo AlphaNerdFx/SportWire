@@ -306,6 +306,16 @@ What exist instead are **structural defects**, which are certain:
 
 ---
 
+## 8b. Known Limitations (real, observed, not bugs)
+
+| # | Limitation | Evidence | Consequence |
+|---|---|---|---|
+| L-1 | **`--date` affects games only; news is always current.** | `[VERIFIED]` 2026-08-05: `python main.py --date 2026-01-15` delivered January's scoreboard alongside today's offseason headlines. Reported by the operator from the delivered brief. | RSS is a feed of what is published *now*; the format has no date parameter, so historical headlines cannot be requested from ESPN at all. Harmless for the intended daily run. **Means SportWire cannot reconstruct a past day** — if that scope is ever wanted, it needs a news source with a date-queryable archive, which none of the free candidates in ADR-009/ADR-010 provide. Surfaced at runtime as a warning rather than hidden. |
+| L-2 | **Individual player performances are unavailable.** | ADR-010. | Message 2 is team-level only. `[INFERRED]` Recoverable later by having M7's LLM extract performances from article prose, since the articles are already fetched legally. |
+| L-3 | **Live/scheduled game shapes are unobserved.** | `[UNKNOWN]` — every captured game reads `status: "Final"`; it is the offseason, so no in-progress game has been seen. | Adapter handling of a live game is untested. Resolve after 2026-09-30 by capturing a second fixture. |
+
+---
+
 ## 9. Open Questions
 
 1. **Dedup window: 8 hours or 48 hours?** The two source documents disagree. The 8-hour figure

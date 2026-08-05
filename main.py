@@ -11,7 +11,13 @@ of the source list.
 Run it:
     python main.py --dry-run        print the brief, send nothing
     python main.py                  send it
-    python main.py --date 2026-01-15    fetch a specific day rather than today
+    python main.py --date 2026-01-15    fetch a specific day's GAMES rather than today's
+
+`[VERIFIED]` Known limitation: `--date` affects games only. RSS is a feed of what is
+published at this moment and the format has no date parameter, so historical headlines
+cannot be requested from ESPN at all. Running with `--date` therefore pairs that day's
+scores with today's news. Harmless for the intended daily use, but it means this is not a
+tool for reconstructing a past day — see `SESSION.md` known limitations.
 """
 
 from __future__ import annotations
@@ -58,6 +64,16 @@ def main(argv: list[str] | None = None) -> int:
         games = BallDontLieGamesAdapter(
             api_key=games_key, target_date=target_date
         ).fetch()
+
+    # `--date` reaches the games adapter only. An RSS feed is a document of what is
+    # published *now* — the format has no date query, so historical headlines cannot be
+    # requested from ESPN at all. Saying so out loud, because a brief that mixes January's
+    # scores with today's news is confusing unless you know why.
+    if target_date is not None:
+        logger.warning(
+            "--date %s applies to games only; ESPN RSS always returns current news",
+            target_date.isoformat(),
+        )
 
     articles = ESPNNewsAdapter().fetch()
     logger.info("fetched %d games, %d articles", len(games), len(articles))
@@ -157,7 +173,10 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--date",
         metavar="YYYY-MM-DD",
-        help="fetch games for a specific date instead of today",
+        help=(
+            "fetch GAMES for a specific date instead of today. Does not affect news: "
+            "RSS has no date query, so ESPN always returns current headlines"
+        ),
     )
     parser.add_argument(
         "--log-level",
