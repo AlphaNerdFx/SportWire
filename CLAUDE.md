@@ -375,6 +375,9 @@ column worked. Do not repeat this.
 
 ## 12. When You Are Handed This File
 
+0. Read `OPERATING_RULES.md` (agent workflow discipline) and `SYSTEM_INSTRUCTIONS.md`
+   (advisor stance). This file owns project facts; those two own how you work and how you
+   speak. Where they conflict with this file, **this file wins** — and say so out loud.
 1. Read `SESSION.md` for current state, then `TASKS.md` for the next action.
 2. Read `ARCHITECTURE.md` only when you need the target shape.
 3. **Do not read `legacy/HANDOFF.md` as fact.**
