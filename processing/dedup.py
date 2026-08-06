@@ -34,10 +34,21 @@ from models.schemas import GameData, NewsArticle
 
 logger = logging.getLogger(__name__)
 
-# Conservative on purpose: at 0.85 only near-identical headlines collapse. `[UNKNOWN]`
-# whether this is the right value — with a single source we have zero real examples of one
-# story carried by two outlets. Retune at task M5, when a second feed makes such pairs
-# observable, and not by guessing before then.
+# `[VERIFIED]` 2026-08-06, measured once CBS Sports was added as a second feed — this value
+# was previously `[UNKNOWN]` pending exactly that. Across **612 real cross-source pairs**
+# (17 ESPN × 36 CBS), the highest similarity was **0.439**. Zero pairs would collapse at any
+# threshold down to 0.50, and below that genuinely unrelated stories begin merging: "Sources:
+# Knicks executive Rosas leaving team" and "Why the 76ers have the Celtics and Knicks to
+# thank for landing LeBron" score 0.420.
+#
+# `[INFERRED]` The assumption behind pass 2 was wrong in a structural way: outlets write
+# their own headlines rather than syndicating one. Two outlets covering the same signing
+# produce completely different strings, so lexical matching cannot pair them and should not
+# try. The threshold stays at 0.85 not because it was tuned to be right, but because nothing
+# in real data reaches it — lowering it can only cause false merges.
+#
+# Pass 2 therefore earns its place only for genuine near-identical republication (the same
+# outlet reposting, or a wire item carried verbatim), which has not yet been observed.
 DEFAULT_TITLE_SIMILARITY = 0.85
 
 

@@ -17,8 +17,8 @@ from typing import Any
 
 import pytest
 
-from ingestion.espn_news import ESPNNewsAdapter
 from ingestion.nba_games import BallDontLieGamesAdapter
+from ingestion.rss_news import RssNewsAdapter
 from models.schemas import GameData, NewsArticle
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -55,7 +55,7 @@ def balldontlie_json() -> dict[str, Any]:
 @pytest.fixture
 def articles(espn_rss_xml: str) -> list[NewsArticle]:
     """The 15 articles as the pipeline sees them, parsed by the real adapter."""
-    return ESPNNewsAdapter().parse(espn_rss_xml)
+    return RssNewsAdapter("ESPN").parse(espn_rss_xml)
 
 
 @pytest.fixture

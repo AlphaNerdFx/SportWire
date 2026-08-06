@@ -32,8 +32,9 @@ from delivery.base import DeliveryChannel
 from delivery.brief import build_messages
 from delivery.stdout import StdoutChannel
 from delivery.telegram import TelegramChannel
-from ingestion.espn_news import ESPNNewsAdapter
 from ingestion.nba_games import BallDontLieGamesAdapter
+from ingestion.rss_news import FEEDS, RssNewsAdapter
+from models.schemas import NewsArticle
 from processing.dedup import deduplicate_articles, deduplicate_games
 from processing.highlights import find_notable_games
 from processing.priority import sort_by_priority
@@ -84,7 +85,14 @@ def main(argv: list[str] | None = None) -> int:
             target_date.isoformat(),
         )
 
-    articles = ESPNNewsAdapter().fetch()
+    # Every configured feed, in one list. Each adapter swallows its own failures, so one
+    # dead outlet shortens the brief rather than ending the run.
+    articles: list[NewsArticle] = []
+    for source_name in FEEDS:
+        fetched = RssNewsAdapter(source_name).fetch()
+        logger.info("  %s: %d articles", source_name, len(fetched))
+        articles.extend(fetched)
+
     logger.info("fetched %d games, %d articles", len(games), len(articles))
 
     # --- deduplicate -----------------------------------------------------------

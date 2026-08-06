@@ -29,7 +29,7 @@ dev = [
 # with "Multiple top-level packages discovered in a flat-layout", which a CI simulation
 # caught before the first push.
 [tool.setuptools]
-packages = ["delivery", "ingestion", "models", "processing", "storage"]
+packages = ["config", "delivery", "ingestion", "models", "processing", "storage"]
 
 [tool.ruff]
 line-length = 88

@@ -31,6 +31,16 @@ from models.schemas import GameData, GameHighlight, NewsArticle
 
 DEFAULT_SUMMARY_LIMIT = 256
 
+# Most articles a single brief will carry. `[VERIFIED]` 2026-08-06: two feeds produced 53
+# articles in one run — 11,155 characters, three Telegram messages of headlines alone. The
+# PRD's real success criterion is that the brief gets read, and nobody reads that.
+#
+# Articles arrive already ranked by `processing/priority.py`, so the cap keeps roster and
+# on-court news and drops the tail of analysis and off-court items. `[INFERRED]` 12 is a
+# judgement, not a measurement: roughly a phone screen of scrolling. Raise it if briefs feel
+# thin, lower it if they go unread.
+DEFAULT_MAX_ARTICLES = 12
+
 # Machine-readable category -> the wording used in the brief. Kept here, in presentation,
 # so `processing/highlights.py` never has to care how a category is phrased.
 _CATEGORY_LABELS = {
@@ -48,8 +58,15 @@ def build_messages(
     articles: list[NewsArticle],
     summary_limit: int = DEFAULT_SUMMARY_LIMIT,
     news_summary: str | None = None,
+    max_articles: int = DEFAULT_MAX_ARTICLES,
 ) -> list[str]:
     """Render the brief as an ordered list of message bodies, omitting empty sections.
+
+    **`articles` must already be ranked most-important-first** — pass them through
+    `processing.priority.sort_by_priority`. The `max_articles` cap keeps the front of the
+    list, so unsorted input silently drops whatever happens to be last. `[VERIFIED]`
+    2026-08-06: the snapshot test called this with raw feed order and the cap removed
+    "How LeBron landed in Philadelphia", the biggest story in the feed.
 
     `news_summary` is written prose from the summarizer. When it is None — the summarizer is
     offline, or was never configured — message 3 falls back to the headline list. The
@@ -71,7 +88,12 @@ def build_messages(
         if news_summary:
             messages.append(_render_news_summary(news_summary))
         else:
-            messages.append(_render_news(articles, summary_limit))
+            # Truncation happens here, in presentation, not in dedup: the dropped articles
+            # are still recorded as delivered, so they will not reappear next run. They were
+            # ranked lowest, not missed.
+            messages.append(
+                _render_news(articles[:max_articles], summary_limit, len(articles))
+            )
 
     return messages
 
@@ -127,8 +149,14 @@ def _render_news_summary(summary: str) -> str:
     return f"📰 NEWS\n\n{summary}"
 
 
-def _render_news(articles: list[NewsArticle], summary_limit: int) -> str:
-    """Message 3 — headline, author, and a truncated description. No links, no dates."""
+def _render_news(
+    articles: list[NewsArticle], summary_limit: int, total_available: int
+) -> str:
+    """Message 3 — headline, author, and a truncated description. No links, no dates.
+
+    `total_available` is the count before the cap, so the brief can say how many were left
+    out. Silently showing 12 of 53 would look like the other 41 never existed.
+    """
     lines = ["📰 NEWS", ""]
     for article in articles:
         lines.append(article.title)
@@ -141,6 +169,10 @@ def _render_news(articles: list[NewsArticle], summary_limit: int) -> str:
         # so the byline falls back to the source rather than printing "None".
         lines.append(f"— {article.author or article.source}")
         lines.append("")
+
+    omitted = total_available - len(articles)
+    if omitted > 0:
+        lines.append(f"+ {omitted} more, ranked lower")
 
     return "\n".join(lines).rstrip()
 
