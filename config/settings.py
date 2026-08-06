@@ -23,6 +23,13 @@ from dotenv import load_dotenv
 # call site. `[VERIFIED]` The dedup window must exceed how far back the news feed reaches,
 # not the poll interval — ESPN lists items up to ~4 days old, so a shorter window makes an
 # already-sent story look new again (PRD D2).
+# The project root, derived from this file's own location rather than the current working
+# directory. `[VERIFIED]` 2026-08-06: without this, running from any directory other than the
+# project root finds no `.env` at all — both the API key and the Telegram token come back
+# empty and no brief is ever sent. Cron and Task Scheduler both start in a different
+# directory, so the scheduled runs would have failed silently while manual runs worked.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
 DEFAULT_DATABASE_PATH = "sportwire.db"
 DEFAULT_LOG_LEVEL = "INFO"
 DEFAULT_POLL_INTERVAL_HOURS = 8
@@ -49,7 +56,7 @@ class Settings:
     balldontlie_api_key: str
     telegram_bot_token: str
     telegram_chat_id: str
-    database_path: Path = Path(DEFAULT_DATABASE_PATH)
+    database_path: Path = PROJECT_ROOT / DEFAULT_DATABASE_PATH
     log_level: str = DEFAULT_LOG_LEVEL
     poll_interval_hours: int = DEFAULT_POLL_INTERVAL_HOURS
     dedup_window_hours: int = DEFAULT_DEDUP_WINDOW_HOURS
@@ -62,14 +69,17 @@ class Settings:
         Missing credentials are **not** fatal here. A missing balldontlie key should drop the
         games section, not stop the run — that decision belongs to the caller, which is why
         `require_*` below is separate from loading.
+
+        `.env` is located relative to the project, never the working directory, so a
+        scheduled run starting in `$HOME` behaves identically to a manual one.
         """
-        load_dotenv(env_file)
+        load_dotenv(env_file or PROJECT_ROOT / ".env")
 
         return cls(
             balldontlie_api_key=_text("BALL_DONT_LIE_API_KEY"),
             telegram_bot_token=_text("TELEGRAM_BOT_TOKEN"),
             telegram_chat_id=_text("TELEGRAM_CHAT_ID"),
-            database_path=Path(_text("DATABASE_PATH") or DEFAULT_DATABASE_PATH),
+            database_path=_database_path(),
             log_level=(_text("LOG_LEVEL") or DEFAULT_LOG_LEVEL).upper(),
             poll_interval_hours=_positive_int(
                 "POLL_INTERVAL_HOURS", DEFAULT_POLL_INTERVAL_HOURS
@@ -107,6 +117,22 @@ class Settings:
 def _text(name: str) -> str:
     """Read an environment variable, trimmed. Empty and unset are the same thing here."""
     return (os.getenv(name) or "").strip()
+
+
+def _database_path() -> Path:
+    """Resolve the database location, anchoring a relative path to the project root.
+
+    `[VERIFIED]` A bare "sportwire.db" resolved against the working directory would give a
+    scheduled run its own database in `$HOME`, separate from the one manual runs use. Dedup
+    state would then split in two and already-delivered stories would be sent again.
+    An absolute path in `.env` is still honoured as given.
+    """
+    configured = _text("DATABASE_PATH")
+    if not configured:
+        return PROJECT_ROOT / DEFAULT_DATABASE_PATH
+
+    path = Path(configured)
+    return path if path.is_absolute() else PROJECT_ROOT / path
 
 
 def _positive_int(name: str, default: int) -> int:
