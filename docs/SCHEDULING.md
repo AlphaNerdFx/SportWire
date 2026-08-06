@@ -103,6 +103,33 @@ cd /tmp && /path/to/SportWire/.venv/bin/python /path/to/SportWire/main.py --dry-
 If that prints a brief, the scheduled run will work. If it reports missing configuration,
 the scheduler would have failed the same way, silently, three times a day.
 
+## Letting something else deliver the brief
+
+If an external tool should forward the brief somewhere SportWire does not support — another
+chat app, a webhook, a file — use the stdout channel rather than `--dry-run`:
+
+```bash
+./.venv/bin/python main.py --channel stdout | your-relay-command
+```
+
+`--channel stdout` prints the brief **and records it as delivered**, exactly as Telegram does.
+`--dry-run` prints and records nothing, so a relay built on it would re-send every story on
+every run, forever. Messages are separated by a line containing `---`.
+
+`[VERIFIED]` The difference, run twice each:
+
+| | first run | second run |
+|---|---|---|
+| `--channel stdout` | 17 articles printed and recorded | nothing — "0 articles (17 already sent)" |
+| `--dry-run` | 17 articles printed | the same 17 again |
+
+> **On assistants that reach WhatsApp.** Tools such as OpenClaw can invoke SportWire and relay
+> its output to WhatsApp. `[VERIFIED]` They generally do so through Baileys, an unofficial
+> WhatsApp Web bridge that violates WhatsApp's terms and risks a permanent account ban.
+> SportWire therefore ships **no** such integration and never will (ADR-013) — but nothing
+> stops you running one yourself against this stdout channel. That is your account and your
+> risk, and it stays outside this repository.
+
 ## Changing the interval
 
 The cron expression or the Task Scheduler trigger is the **only** thing that sets the

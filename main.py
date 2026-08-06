@@ -28,7 +28,9 @@ import sys
 from datetime import date, datetime, timezone
 
 from config.settings import Settings, SettingsError
+from delivery.base import DeliveryChannel
 from delivery.brief import build_messages
+from delivery.stdout import StdoutChannel
 from delivery.telegram import TelegramChannel
 from ingestion.espn_news import ESPNNewsAdapter
 from ingestion.nba_games import BallDontLieGamesAdapter
@@ -137,16 +139,22 @@ def main(argv: list[str] | None = None) -> int:
             logger.info("dry run: nothing sent, nothing recorded")
             return 0
 
-        try:
-            settings.require_delivery()
-        except SettingsError as error:
-            logger.error("%s", error)
-            return 1
+        channel: DeliveryChannel
+        if args.channel == "stdout":
+            # Unlike --dry-run, this records delivery: an external relay must not re-send
+            # the same stories on every run (ADR-013).
+            channel = StdoutChannel()
+        else:
+            try:
+                settings.require_delivery()
+            except SettingsError as error:
+                logger.error("%s", error)
+                return 1
 
-        channel = TelegramChannel(
-            bot_token=settings.telegram_bot_token,
-            chat_id=settings.telegram_chat_id,
-        )
+            channel = TelegramChannel(
+                bot_token=settings.telegram_bot_token,
+                chat_id=settings.telegram_chat_id,
+            )
 
         # Only the first message rings the phone; the rest arrive silently so a
         # three-part brief is one notification rather than three.
@@ -201,6 +209,16 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         help=(
             "fetch GAMES for a specific date instead of today. Does not affect news: "
             "RSS has no date query, so ESPN always returns current headlines"
+        ),
+    )
+    parser.add_argument(
+        "--channel",
+        choices=("telegram", "stdout"),
+        default="telegram",
+        help=(
+            "where to deliver. 'stdout' prints the brief AND records it as delivered, so an "
+            "external relay can forward it without re-sending stories; unlike --dry-run, "
+            "which records nothing"
         ),
     )
     parser.add_argument(
