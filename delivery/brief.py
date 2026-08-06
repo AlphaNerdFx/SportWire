@@ -47,8 +47,14 @@ def build_messages(
     highlights: list[GameHighlight],
     articles: list[NewsArticle],
     summary_limit: int = DEFAULT_SUMMARY_LIMIT,
+    news_summary: str | None = None,
 ) -> list[str]:
     """Render the brief as an ordered list of message bodies, omitting empty sections.
+
+    `news_summary` is written prose from the summarizer. When it is None — the summarizer is
+    offline, or was never configured — message 3 falls back to the headline list. The
+    fallback is the point: a headline list is never wrong, so losing the summary degrades
+    the brief rather than breaking it.
 
     Returns an empty list when there is nothing at all to report, which the caller should
     treat as "send nothing" rather than sending an empty brief.
@@ -62,7 +68,10 @@ def build_messages(
         messages.append(_render_highlights(highlights))
 
     if articles:
-        messages.append(_render_news(articles, summary_limit))
+        if news_summary:
+            messages.append(_render_news_summary(news_summary))
+        else:
+            messages.append(_render_news(articles, summary_limit))
 
     return messages
 
@@ -111,6 +120,11 @@ def _describe(highlight: GameHighlight) -> str:
     if highlight.category == "highest_scoring":
         return f"{game.total_points} combined points"
     return ""
+
+
+def _render_news_summary(summary: str) -> str:
+    """Message 3, written form — one paragraph instead of a headline list."""
+    return f"📰 NEWS\n\n{summary}"
 
 
 def _render_news(articles: list[NewsArticle], summary_limit: int) -> str:

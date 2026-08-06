@@ -36,6 +36,8 @@ from ingestion.espn_news import ESPNNewsAdapter
 from ingestion.nba_games import BallDontLieGamesAdapter
 from processing.dedup import deduplicate_articles, deduplicate_games
 from processing.highlights import find_notable_games
+from processing.priority import sort_by_priority
+from processing.summarize import DEFAULT_MODEL, OllamaSummarizer
 from storage.db import SeenStore
 
 logger = logging.getLogger("sportwire")
@@ -91,9 +93,36 @@ def main(argv: list[str] | None = None) -> int:
             len(articles) - len(fresh_articles),
         )
 
+        # --- summarise -----------------------------------------------------------
+        # Sorted first so the most important news reaches the model first; it will not
+        # reliably reorder on instruction (see processing/priority.py).
+        fresh_articles = sort_by_priority(fresh_articles)
+
+        # Off by default. `[VERIFIED]` 2026-08-06 every local model tested fabricated
+        # facts on live data — mistral:7b, the best of them, renamed Dillon Brooks to
+        # "Devin Booker", invented a "$3.3M" figure, and turned "Knicks executive Rosas"
+        # into "Steve Nash's right-hand man, Leon Rose". The headline list is never wrong,
+        # so it stays the default until a model earns the swap.
+        news_summary: str | None = None
+        if fresh_articles and args.summary:
+            summarizer = OllamaSummarizer(
+                model=os.getenv("OLLAMA_MODEL", DEFAULT_MODEL)
+            )
+            logger.info(
+                "summarising %d articles via %s",
+                len(fresh_articles),
+                summarizer.summarizer_name,
+            )
+            news_summary = summarizer.summarise(fresh_articles)
+            if news_summary is None:
+                logger.warning("no summary produced; falling back to the headline list")
+
         # --- format ------------------------------------------------------------
         messages = build_messages(
-            fresh_games, find_notable_games(fresh_games), fresh_articles
+            fresh_games,
+            find_notable_games(fresh_games),
+            fresh_articles,
+            news_summary=news_summary,
         )
 
         if not messages:
@@ -176,6 +205,15 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         help=(
             "fetch GAMES for a specific date instead of today. Does not affect news: "
             "RSS has no date query, so ESPN always returns current headlines"
+        ),
+    )
+    parser.add_argument(
+        "--summary",
+        action="store_true",
+        help=(
+            "EXPERIMENTAL: replace the headline list with an LLM-written paragraph. "
+            "Off by default because every local model tested fabricated player names and "
+            "figures on live data — see processing/summarize.py"
         ),
     )
     parser.add_argument(

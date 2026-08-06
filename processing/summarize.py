@@ -50,6 +50,48 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_SUMMARY_CHARS = 1024
 
+# `[VERIFIED]` 2026-08-06, all four models run against the same 15-article fixture with the
+# same prompts, scored on stories missed and names invented:
+#
+#   model          size    missed  invented  time
+#   llama3.2:3b    2.0 GB   1-5     0-2      10-42s
+#   qwen2.5:3b     1.9 GB   11/11   0        8s     (asserted nothing newsworthy happened)
+#   gemma3:4b      3.3 GB   11/11   5        234s   (ignored the input entirely, see below)
+#   mistral:7b     4.4 GB   0       0        337s   <- chosen
+#
+# Mistral was checked line by line against the source on that fixture: correct first name for
+# Naji Marshall, the exact $52.2M figure, "PLYRS UNTD Performance Center" verbatim, and
+# correct agency on both the Doncic petition and Jaylen Brown's remarks — all of which the 3B
+# models got wrong.
+#
+# **That result did not hold.** `[VERIFIED]` Run against 17 live articles rather than the
+# 15-article fixture, mistral:7b fabricated three people and a figure:
+#
+#   summary claim                                  source
+#   "Devin Booker ... $73M extension with Suns"    "Suns keeping Brooks on 3-year, $73M"
+#   "Malik Monk ... 1-year, $3.3M, Nuggets"        "Walker returning to NBA with 1-year
+#                                                   Nuggets deal" (no figure given)
+#   "Steve Nash's right-hand man, Leon Rose"       "Knicks executive Rosas leaving team"
+#   "9 different champions in the last 8 years"    "eight different champions in eight years"
+#
+# `[INFERRED]` The single clean run was a property of that input, not of the model. Scoring
+# one run is not evidence at this scale — which is the conclusion the 3B evaluation had
+# already reached and which was then ignored. **Summarisation is therefore off by default**
+# and gated behind `main.py --summary`. The headline list is never wrong.
+#
+# `[VERIFIED]` gemma3:4b is worth remembering as a cautionary case: it ignored the supplied
+# articles and produced fluent, entirely fabricated NBA news — a Gabe Vincent signing, an
+# Anthony Davis injury return, a Celtics-Pacers trade, a LeBron watch endorsement. None of it
+# appears in the feed. It reads perfectly. This is the same failure mode as the fabricated
+# handoff document that caused this repository to be rebuilt.
+#
+# 337 seconds is acceptable because nothing waits on it: the pipeline runs from cron every
+# eight hours.
+DEFAULT_MODEL = "mistral:7b"
+
+# Generous, because a cold model load was measured at 193s before any inference begins.
+DEFAULT_TIMEOUT_SECONDS = 600
+
 # The instruction is the whole "training". Steering the output — what to emphasise, what to
 # skim — is editing this string, not fine-tuning a model. Recorded because the assumption
 # that this needs training came up more than once.
@@ -147,9 +189,9 @@ class OllamaSummarizer(Summarizer):
 
     def __init__(
         self,
-        model: str = "llama3.2:3b",
+        model: str = DEFAULT_MODEL,
         host: str = "http://localhost:11434",
-        timeout_seconds: int = 120,
+        timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
         chunk_size: int = CHUNK_SIZE,
     ) -> None:
         self._model = model
