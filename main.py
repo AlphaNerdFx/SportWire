@@ -24,12 +24,10 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
 import sys
 from datetime import date, datetime, timezone
 
-from dotenv import load_dotenv
-
+from config.settings import Settings, SettingsError
 from delivery.brief import build_messages
 from delivery.telegram import TelegramChannel
 from ingestion.espn_news import ESPNNewsAdapter
@@ -37,7 +35,7 @@ from ingestion.nba_games import BallDontLieGamesAdapter
 from processing.dedup import deduplicate_articles, deduplicate_games
 from processing.highlights import find_notable_games
 from processing.priority import sort_by_priority
-from processing.summarize import DEFAULT_MODEL, OllamaSummarizer
+from processing.summarize import OllamaSummarizer
 from storage.db import SeenStore
 
 logger = logging.getLogger("sportwire")
@@ -46,25 +44,32 @@ logger = logging.getLogger("sportwire")
 def main(argv: list[str] | None = None) -> int:
     """Run one pipeline pass. Returns a process exit code."""
     args = _parse_args(argv)
+
+    try:
+        settings = Settings.from_env()
+    except SettingsError as error:
+        # Configuration problems are the user's to fix, not stack traces to decipher.
+        logging.basicConfig(level="INFO", format="%(message)s")
+        logger.error("configuration error: %s", error)
+        return 2
+
     logging.basicConfig(
-        level=args.log_level,
+        level=args.log_level or settings.log_level,
         format="%(asctime)s %(levelname)-7s %(name)s | %(message)s",
         datefmt="%H:%M:%S",
     )
-    load_dotenv()
 
     target_date = _parse_date(args.date)
 
     # --- fetch -----------------------------------------------------------------
     # Both adapters swallow their own failures and return [], so one dead source
     # shortens the brief rather than ending the run.
-    games_key = os.getenv("BALL_DONT_LIE_API_KEY", "")
-    if not games_key:
+    if not settings.can_fetch_games:
         logger.warning("BALL_DONT_LIE_API_KEY is not set; skipping games")
         games = []
     else:
         games = BallDontLieGamesAdapter(
-            api_key=games_key, target_date=target_date
+            api_key=settings.balldontlie_api_key, target_date=target_date
         ).fetch()
 
     # `--date` reaches the games adapter only. An RSS feed is a document of what is
@@ -81,8 +86,7 @@ def main(argv: list[str] | None = None) -> int:
     logger.info("fetched %d games, %d articles", len(games), len(articles))
 
     # --- deduplicate -----------------------------------------------------------
-    database_path = os.getenv("DATABASE_PATH", "sportwire.db")
-    with SeenStore(database_path) as store:
+    with SeenStore(settings.database_path) as store:
         fresh_games = deduplicate_games(games, store.seen_game_hashes())
         fresh_articles = deduplicate_articles(articles, store.seen_article_ids())
         logger.info(
@@ -105,9 +109,7 @@ def main(argv: list[str] | None = None) -> int:
         # so it stays the default until a model earns the swap.
         news_summary: str | None = None
         if fresh_articles and args.summary:
-            summarizer = OllamaSummarizer(
-                model=os.getenv("OLLAMA_MODEL", DEFAULT_MODEL)
-            )
+            summarizer = OllamaSummarizer(model=settings.ollama_model)
             logger.info(
                 "summarising %d articles via %s",
                 len(fresh_articles),
@@ -135,9 +137,16 @@ def main(argv: list[str] | None = None) -> int:
             logger.info("dry run: nothing sent, nothing recorded")
             return 0
 
-        channel = _build_channel()
-        if channel is None:
+        try:
+            settings.require_delivery()
+        except SettingsError as error:
+            logger.error("%s", error)
             return 1
+
+        channel = TelegramChannel(
+            bot_token=settings.telegram_bot_token,
+            chat_id=settings.telegram_chat_id,
+        )
 
         # Only the first message rings the phone; the rest arrive silently so a
         # three-part brief is one notification rather than three.
@@ -158,19 +167,6 @@ def main(argv: list[str] | None = None) -> int:
         logger.info("delivered %d/%d messages", delivered, len(messages))
 
     return 0
-
-
-def _build_channel() -> TelegramChannel | None:
-    """Construct the delivery channel from the environment, or None if unconfigured."""
-    token = os.getenv("TELEGRAM_BOT_TOKEN", "")
-    chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
-    if not token or not chat_id:
-        logger.error(
-            "TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must be set in .env to send. "
-            "Use --dry-run to preview without sending."
-        )
-        return None
-    return TelegramChannel(bot_token=token, chat_id=chat_id)
 
 
 def _print_messages(messages: list[str]) -> None:
@@ -218,8 +214,8 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--log-level",
-        default=os.getenv("LOG_LEVEL", "INFO"),
-        help="logging level (default: INFO)",
+        default=None,
+        help="override LOG_LEVEL from .env for this run",
     )
     return parser.parse_args(argv)
 
