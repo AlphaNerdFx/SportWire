@@ -59,7 +59,7 @@ phone via Telegram.
 | ID | Requirement | Status |
 |---|---|---|
 | R1 | Brief delivered automatically on a schedule, without manual invocation | **Not built** — `TASKS.md` M8 |
-| R2 | News section is a written summary rather than a list of headlines | **Not built** — M7 |
+| R2 | ~~News section is a written summary rather than a list of headlines~~ | **Built, then disabled — ADR-012.** Every local model tested fabricated players and figures on live data. Ships behind `--summary`; the headline list remains the default. **Dropped from v1.0.0 scope.** |
 | R3 | Configuration read from one module rather than `os.getenv` in `main.py` | **Not built** — M2 |
 | R4 | Structured logging of what was fetched, dropped and sent | Partial — `main.py` logs; not configurable |
 | R5 | A second news source, proving the adapter boundary holds | **Not built** — M5/M6 |
@@ -148,7 +148,7 @@ operator's words, they are self-explanatory — they already have their own mess
 | Release | Contents | Gate |
 |---|---|---|
 | **v0.1** ✅ | F1–F8. Manual invocation. | Delivered to a phone 2026-08-05 |
-| **v0.2** | R2 (summarizer), R3 (settings module) | D1, D5 answered |
+| **v0.2** | ~~R2 (summarizer)~~ disabled per ADR-012; R3 (settings module) | — |
 | **v0.3** | R1 (scheduling), R4 (logging) | D1 answered |
 | **v0.4** | R5 (second source, proves M6) | — |
 | **v1.0.0** | All of the above + §6 criteria met | D1–D4 answered; H13 passed |
