@@ -17,8 +17,20 @@ smoothed over:
   - **Preamble appears anyway** ("The NBA offseason is underway with several notable
     developments") despite an explicit instruction against it.
 `[INFERRED]` These are model-capability limits rather than prompt bugs: two prompt revisions
-did not fix ordering, while chunking fixed coverage completely. A larger model is the next
-lever, at the cost of a bigger download and slower runs.
+did not fix ordering, while chunking fixed coverage completely.
+
+**Model evaluation, 2026-08-06 — no 3B model tested is factually reliable here:**
+
+| Model / run | Outcome |
+|---|---|
+| `llama3.2:3b`, run 1 | `[VERIFIED]` Fabricated a person: *"Tom Cachikis will be leaving his role with the Knicks"*. No such name appears anywhere in the source; the executive is Gersson Rosas. Also wrote "Chris Marshall" for Naji Marshall. |
+| `llama3.2:3b`, run 2 | `[VERIFIED]` No invented names, 10 of 11 stories covered — but asserted DeRozan "won't be joining LeBron James in Philadelphia", which no item states, and merged Bosh's blood-clot warning with Wembanyama's France workouts into a single event that never happened. |
+| `qwen2.5:3b` | `[VERIFIED]` Produced 187 characters stating *"There were no significant roster or on-court developments reported today"* — on a day a superstar changed teams. Also took 255s to load into RAM cold, though only 7.5s once warm. |
+
+`[INFERRED]` The failures differ between runs of the *same* model at temperature 0.3, so
+single-run testing cannot establish confidence at this size. Demanding fuller coverage buys
+hallucination; demanding brevity buys silent omission. Both are worse than the plain headline
+list, which is never wrong.
 
 Input is title plus RSS description only (PRD D5). Article bodies would require fetching
 article pages, which is the C3 scraping exposure ADR-009 exists to avoid. Scores are
@@ -230,14 +242,35 @@ def build_reduce_prompt(
 ) -> str:
     """Render extracted notes into the final prompt that writes the paragraph.
 
-    The notes are concatenated plainly. They are already compact, so the whole set sits well
-    inside the range the model actually attends to — which is the entire point of having
-    extracted them.
+    `[VERIFIED]` 2026-08-06: naming the item count is load-bearing. Without it the model
+    stopped after roughly 700 characters having covered about ten of fifteen notes — not
+    because the input was too long (the reduce prompt is barely 1,100 characters) but
+    because the paragraph *felt* finished. Stating the number gives it a condition to
+    satisfy instead of a sense of completion to follow.
     """
-    joined = "\n".join(note.strip() for note in notes if note.strip())
+    lines = _note_lines(notes)
     instruction = (
-        f"Write the brief from these notes, in at most {max_chars} characters. "
-        "The notes are facts already gathered for you; turn all of them into one "
-        "continuous piece of prose."
+        f"Write the brief from these {len(lines)} notes, in at most {max_chars} "
+        f"characters. All {len(lines)} notes must appear in your answer — combine related "
+        "ones into a single sentence rather than leaving any out. The notes are already in "
+        "priority order; keep that order. Write one continuous piece of prose."
     )
-    return f"{instruction}\n\n{joined}"
+    return "{}\n\n{}".format(instruction, "\n".join(lines))
+
+
+def _note_lines(notes: list[str]) -> list[str]:
+    """Flatten note blocks into individual fact lines, discarding any preamble.
+
+    `[VERIFIED]` The model prefixes its notes with "Here are the summaries:" despite being
+    instructed not to. That line is not a fact, and counting it would inflate the number the
+    reduce step is asked to satisfy.
+    """
+    lines: list[str] = []
+    for block in notes:
+        for raw in block.splitlines():
+            line = raw.strip()
+            is_bullet = line[:1] in {"-", "*", "•"}
+            is_numbered = line[:1].isdigit() and "." in line[:3]
+            if is_bullet or is_numbered:
+                lines.append(line)
+    return lines
