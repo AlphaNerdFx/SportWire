@@ -5,9 +5,16 @@ identical structure to ESPN's — the same `./channel/item` path, the same `titl
 `description`, `pubDate` and `guid` elements, and the same Dublin Core `creator`. The ESPN
 parser ran on the CBS payload unchanged.
 
-That is what RSS being a specification buys: a per-source class would have been two copies of
+That is what a shared specification buys: a per-source class would have been two copies of
 one parser differing only in a URL and a label. Sources are therefore **configuration**, not
-subclasses — see `FEEDS` below. Adding a third feed is one entry in that dictionary.
+subclasses — see `FEEDS` below.
+
+`[VERIFIED]` 2026-08-07 that claim has a limit, found by adding r/nba. **Atom is a different
+specification, not a dialect of RSS.** Reddit publishes `<feed><entry>` with `<id>`,
+`<link href="">` and a nested `<author><name>`, where RSS 2.0 publishes `<channel><item>` with
+`<guid>`, `<link>text</link>` and `<dc:creator>`. This adapter now reads both, so adding a
+feed is still one entry — but "it is a feed" was not sufficient, and assuming so produced an
+adapter that silently returned nothing.
 
 Consuming a published feed is using the interface as intended, which is what keeps this repo
 publishable (C3) — unlike scraping the same outlets' HTML. See ADR-009.
@@ -29,11 +36,21 @@ logger = logging.getLogger(__name__)
 # addressed by its full namespaced name.
 DC_NAMESPACE = "{http://purl.org/dc/elements/1.1/}"
 
+# Atom is a different specification from RSS 2.0, not a dialect of it. Reddit publishes Atom.
+ATOM_NAMESPACE = "{http://www.w3.org/2005/Atom}"
+
 # Known feeds, keyed by the label stamped onto every article they produce.
 # `[VERIFIED]` 2026-08-06 both return HTTP 200 with parseable items: ESPN 17, CBS 36.
 FEEDS: dict[str, str] = {
     "ESPN": "https://www.espn.com/espn/rss/nba/news",
     "CBS Sports": "https://www.cbssports.com/rss/headlines/nba/",
+    # Community feed. Far noisier than an editorial outlet, and included on that basis:
+    # `processing/priority.py` promotes anything naming a team that played tonight, which
+    # turns the volume into coverage rather than noise. It is also where individual
+    # performances surface ("Jokic drops 50"), which no free structured source provides.
+    # `[VERIFIED]` Reddit rate-limits aggressively -- three requests in ~2s returned two
+    # HTTP 429s. One fetch per run is fine; never retry in a loop.
+    "r/nba": "https://www.reddit.com/r/nba/.rss",
 }
 
 
@@ -74,20 +91,78 @@ class RssNewsAdapter(NewsSourceAdapter):
         return self.parse(response.text)
 
     def parse(self, feed_xml: str) -> list[NewsArticle]:
-        """Convert raw RSS XML into articles.
+        """Convert a feed into articles, accepting both RSS 2.0 and Atom.
 
         Public and network-free on purpose: tests drive this with the captured fixtures in
         `tests/fixtures/` rather than hitting the live feeds (`CLAUDE.md` §8).
+
+        `[VERIFIED]` 2026-08-07 both formats are needed. ESPN and CBS publish RSS 2.0
+        (`<channel><item>`); Reddit publishes Atom (`<feed><entry>`), with `<id>` instead of
+        `<guid>`, `<link href="">` as an attribute rather than text, and the author nested in
+        `<author><name>`. An RSS-only parser found zero matches and returned an empty list —
+        **silently**, because an empty feed is indistinguishable from a quiet one.
         """
         root = ElementTree.fromstring(feed_xml)
-        articles: list[NewsArticle] = []
 
-        for item in root.iterfind("./channel/item"):
-            article = self._parse_item(item)
-            if article is not None:
-                articles.append(article)
+        items = list(root.iterfind("./channel/item"))
+        if items:
+            parsed = [self._parse_item(item) for item in items]
+        else:
+            entries = list(root.iterfind(f"./{ATOM_NAMESPACE}entry"))
+            parsed = [self._parse_atom_entry(entry) for entry in entries]
+
+        articles = [article for article in parsed if article is not None]
+
+        if not articles:
+            # A feed yielding nothing is far more often a parsing mismatch than a genuinely
+            # empty feed. Saying so turns a silent failure into a visible one.
+            logger.warning(
+                "%s produced no articles — check whether the feed format changed",
+                self._source_name,
+            )
 
         return articles
+
+    def _parse_atom_entry(self, entry: ElementTree.Element) -> NewsArticle | None:
+        """Convert one Atom <entry>. Same contract as `_parse_item`: None if unusable."""
+        article_id = self._text(entry, f"{ATOM_NAMESPACE}id")
+        title = self._text(entry, f"{ATOM_NAMESPACE}title")
+        published_at = self._text(entry, f"{ATOM_NAMESPACE}updated") or self._text(
+            entry, f"{ATOM_NAMESPACE}published"
+        )
+
+        # Atom carries the URL as an attribute, not element text.
+        link_element = entry.find(f"{ATOM_NAMESPACE}link")
+        url = link_element.get("href") if link_element is not None else None
+
+        if not (article_id and title and url and published_at):
+            logger.warning(
+                "skipping %s entry missing required fields: %r",
+                self._source_name,
+                title or url,
+            )
+            return None
+
+        author_element = entry.find(f"{ATOM_NAMESPACE}author")
+        author = (
+            self._text(author_element, f"{ATOM_NAMESPACE}name")
+            if author_element is not None
+            else None
+        )
+
+        return NewsArticle(
+            article_id=f"{self._source_name}:{article_id}",
+            title=title,
+            url=url,
+            # Atom's <content> is full HTML for Reddit — the whole rendered post. Excluded
+            # deliberately: the brief shows a short description, and stripping markup from
+            # user-submitted HTML is a parsing problem with no upside here. The title alone
+            # carries the substance for this source.
+            summary="",
+            published_at=published_at,
+            author=author,
+            source=self._source_name,
+        )
 
     def _parse_item(self, item: ElementTree.Element) -> NewsArticle | None:
         """Convert one <item>, or return None if it lacks the fields we require.

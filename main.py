@@ -110,7 +110,10 @@ def main(argv: list[str] | None = None) -> int:
         # --- summarise -----------------------------------------------------------
         # Sorted first so the most important news reaches the model first; it will not
         # reliably reorder on instruction (see processing/priority.py).
-        fresh_articles = sort_by_priority(fresh_articles)
+        # Games are passed in so articles naming a team that played rank first. That is what
+        # makes a high-volume community feed usable: tonight's fixtures are an exact filter
+        # the pipeline already has, at no extra cost.
+        fresh_articles = sort_by_priority(fresh_articles, fresh_games)
 
         # Off by default. `[VERIFIED]` 2026-08-06 every local model tested fabricated
         # facts on live data — mistral:7b, the best of them, renamed Dillon Brooks to

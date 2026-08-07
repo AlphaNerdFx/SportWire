@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import re
 
-from models.schemas import NewsArticle
+from models.schemas import GameData, NewsArticle
 
 # Roster and on-court operations — what the brief exists to report.
 HIGH_SIGNALS = frozenset(
@@ -103,22 +103,49 @@ _WORD_PATTERN = re.compile(r"[a-zà-ÿ'-]+")
 
 
 def _words(text: str) -> set[str]:
-    """Tokenise, emitting hyphenated words both whole and split.
+    """Tokenise, emitting hyphenated and possessive words in every useful form.
 
-    `[VERIFIED]` Both forms are needed. Keeping hyphens is required for "re-ups"; splitting
-    them is required for "ex-fiancée", which otherwise never matches "fiancée" and left a
-    child-support story classified medium instead of low.
+    Three forms are needed, and each was added because a real headline failed without it:
+
+    - **Whole, hyphen intact** — `[VERIFIED]` required for "re-ups".
+    - **Hyphen split** — `[VERIFIED]` required for "ex-fiancée", which otherwise never
+      matches "fiancée" and left a child-support story classified medium instead of low.
+    - **Apostrophe stripped** — `[VERIFIED]` required for possessives. "Why the Warriors'
+      pursuit of LeBron never got serious" tokenised as `warriors'` and failed to match the
+      team keyword `warriors`, so an article about a team that played was not recognised
+      as relevant.
     """
     tokens: set[str] = set()
     for token in _WORD_PATTERN.findall(text.lower()):
         tokens.add(token)
         if "-" in token:
             tokens.update(part for part in token.split("-") if part)
-    return tokens
+        if "'" in token or "’" in token:
+            # Possessives and contractions: "warriors'" -> "warriors", "mavs'" -> "mavs".
+            tokens.add(token.replace("'", "").replace("’", ""))
+            tokens.add(token.split("'")[0].split("’")[0])
+    return {token for token in tokens if token}
+
+
+def team_keywords(games: list[GameData]) -> set[str]:
+    """Distinctive one-word names of every team that played, lowercased.
+
+    `[VERIFIED]` Every NBA team's `full_name` ends in a unique nickname — "Los Angeles
+    Lakers" → "lakers", "Portland Trail Blazers" → "blazers", "Oklahoma City Thunder" →
+    "thunder". Matching on that last word avoids both the city (shared by several teams) and
+    the full string (which articles rarely spell out).
+    """
+    keywords: set[str] = set()
+    for game in games:
+        for name in (game.home_team, game.away_team):
+            parts = name.lower().split()
+            if parts:
+                keywords.add(parts[-1])
+    return keywords
 
 
 def classify(article: NewsArticle) -> str:
-    """Return "high", "medium" or "low" for one article.
+    """Return "high", "medium" or "low" for one article, on subject matter alone.
 
     Low beats high when both appear: an article about a player's wedding that happens to use
     the word "deal" is still a wedding story. `[INFERRED]` Misfiling an off-court item as
@@ -133,9 +160,38 @@ def classify(article: NewsArticle) -> str:
     return "medium"
 
 
-def sort_by_priority(articles: list[NewsArticle]) -> list[NewsArticle]:
-    """Return every article, reordered high → medium → low. Nothing is dropped.
+def mentions_team_in_play(article: NewsArticle, tonight: set[str]) -> bool:
+    """Whether the article names a team that played in this run's games."""
+    if not tonight:
+        return False
+    return bool(_words(f"{article.title} {article.summary}") & tonight)
+
+
+def sort_by_priority(
+    articles: list[NewsArticle], games: list[GameData] | None = None
+) -> list[NewsArticle]:
+    """Return every article, reordered by subject, then by tonight's relevance.
 
     `len(output) == len(input)` always holds; this is a permutation, not a filter.
+
+    Passing `games` promotes articles naming a team that played — but **only within their
+    tier**, never across one. `[VERIFIED]` 2026-08-07 an earlier version made "tonight" a
+    top-level tier and put "Doncic's ex-fiancée pulls child support petition" first, because
+    its summary mentions the Lakers. Relevance to tonight does not turn an off-court story
+    into roster news; it only breaks ties among stories of equal kind.
+
+    `[INFERRED]` This is what makes a high-volume community feed usable. r/nba carries far
+    more than an editorial outlet and most of it is unrelated to any given night, but "does
+    this name a team that played?" is an exact filter the pipeline already has for free. It
+    also lifts individual-performance posts ("Jokić drops 50 in the win over the Nets") which
+    carry no roster vocabulary and would otherwise sit in the middle of the pack.
     """
-    return sorted(articles, key=lambda article: _TIER_ORDER[classify(article)])
+    tonight = team_keywords(games) if games else set()
+
+    return sorted(
+        articles,
+        key=lambda article: (
+            _TIER_ORDER[classify(article)],
+            not mentions_team_in_play(article, tonight),
+        ),
+    )
