@@ -1,0 +1,47 @@
+name: Task
+description: Planned work from TASKS.md or the PRD
+labels: ["task"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What needs doing
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why now
+      description: >
+        What is blocked without it, or what evidence triggered it. Several deferred items
+        here have explicit trigger conditions — cite the trigger if this is one of them.
+    validations:
+      required: true
+
+  - type: textarea
+    id: done
+    attributes:
+      label: Definition of done
+      description: >
+        What command, run by whom, produces what output? A task is complete only when the
+        proving output is pasted into the issue. "It works" is not a status.
+      placeholder: |
+        `make check` passes, and `python main.py --dry-run` shows NFL games alongside NBA.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: adr
+    attributes:
+      label: Does this need an ADR?
+      description: >
+        Required if it changes a boundary, adds a dependency, or reverses a recorded
+        decision.
+      options:
+        - "No — routine implementation"
+        - "Yes — changes a boundary or adds a dependency"
+        - "Yes — reverses an existing ADR"
+        - "Unsure"
+    validations:
+      required: true

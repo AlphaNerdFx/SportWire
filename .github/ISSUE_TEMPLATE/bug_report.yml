@@ -1,0 +1,68 @@
+name: Bug report
+description: Something behaves differently from what the documentation claims
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please include the command you ran and its real output. This project's evidence rule
+        applies to issues too: pasted output beats a description of output.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: The actual behaviour, and what you expected instead.
+      placeholder: |
+        Ran `make run`. No messages arrived, but the log said "delivered 3/3".
+    validations:
+      required: true
+
+  - type: textarea
+    id: command-output
+    attributes:
+      label: Command and output
+      description: >
+        The exact command and its full output. Redact your bot token, chat id and API key —
+        the log should not contain them, and it is a separate bug if it does.
+      render: shell
+      placeholder: |
+        $ ./.venv/bin/python main.py --dry-run
+        12:00:00 INFO    sportwire | fetched 0 games, 17 articles
+        ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: reproducible
+    attributes:
+      label: Does it happen every time?
+      options:
+        - Every time
+        - Intermittently
+        - Once, not since
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, and how you ran it.
+      placeholder: WSL2 Ubuntu 22.04, Python 3.10.12, manual `make run`
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: >
+            I ran it from a different working directory
+            (`cd /tmp && /path/to/SportWire/.venv/bin/python /path/to/SportWire/main.py
+            --dry-run`) — scheduled runs behave differently from manual ones, and this is a
+            known source of confusion.
+          required: true
+        - label: "`make check` passes on my checkout"
+          required: false

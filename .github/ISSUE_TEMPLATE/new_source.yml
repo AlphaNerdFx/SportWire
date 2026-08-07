@@ -1,0 +1,82 @@
+name: New data source
+description: Propose a news feed or game-data provider
+labels: ["source"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Adding an RSS feed is usually one entry in `FEEDS` plus a captured fixture. The
+        questions below are the ones that have actually killed candidate sources here.
+
+  - type: input
+    id: source-name
+    attributes:
+      label: Source
+      placeholder: The Athletic, Yahoo Sports, nflverse…
+    validations:
+      required: true
+
+  - type: input
+    id: url
+    attributes:
+      label: Feed or API URL
+    validations:
+      required: true
+
+  - type: dropdown
+    id: access
+    attributes:
+      label: How is it published?
+      description: >
+        A published RSS feed is an invitation to consume it. An undocumented internal
+        endpoint is not, however well it works — see ADR-009 and ADR-010.
+      options:
+        - Public RSS or Atom feed
+        - Documented public API, no key
+        - Documented public API, free key required
+        - Documented API, paid
+        - Undocumented endpoint
+        - Would require scraping HTML
+    validations:
+      required: true
+
+  - type: textarea
+    id: verification
+    attributes:
+      label: Live check
+      description: >
+        Fetch it and paste the result. Include the status code and how many items came back.
+        Please try it with an honest User-Agent — some endpoints serve anonymous clients and
+        reject ones that identify themselves, which tells you what the provider intends.
+      render: shell
+      placeholder: |
+        $ curl -s -o /dev/null -w "%{http_code}\n" -H "User-Agent: SportWire/0.1" <url>
+        200
+        items: 24
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Constraints
+      options:
+        - label: Free, with no recurring cost (C2)
+          required: true
+        - label: >
+            Works from any IP, including datacenters — a source that only works from a
+            residential connection is unusable by anyone who clones the repo (C3)
+          required: true
+        - label: Requires no bypassing of bot protection, and no terms-of-service violation (C3)
+          required: true
+
+  - type: textarea
+    id: overlap
+    attributes:
+      label: What does it add that existing sources do not?
+      description: >
+        Optional but useful. Measured across 612 real cross-source pairs, ESPN and CBS
+        headlines never exceeded 0.44 similarity — outlets write their own headlines rather
+        than syndicating, so more sources means more volume, not deduplication work.
+    validations:
+      required: false

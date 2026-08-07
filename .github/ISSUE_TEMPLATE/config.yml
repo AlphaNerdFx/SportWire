@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/AlphaNerdFx/SportWire/security/advisories/new
+    about: Report privately. Please do not open a public issue for anything exploitable.
+  - name: How something works, and why
+    url: https://github.com/AlphaNerdFx/SportWire/wiki
+    about: Architecture, decisions, and getting started.
+  - name: Why a decision was made
+    url: https://github.com/AlphaNerdFx/SportWire/tree/main/docs/decisions
+    about: Every architectural choice is an ADR with its evidence and a reversal condition.
