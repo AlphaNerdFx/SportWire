@@ -48,6 +48,30 @@ adopted. Run once more against **17 live articles** instead of the 15-article fi
 Three fabricated people and an invented dollar figure. `[INFERRED]` The clean run was a
 property of that input, not of the model.
 
+**Amendment, 2026-08-07 — the substitutions are systematic, not random.** The operator
+observed that "Booker" is a real Suns player and asked whether the model might be correcting
+against real-world news. It cannot: `mistral:7b` runs locally with no network access and
+static weights frozen at its training cutoff, and the Brooks signing postdates that cutoff.
+
+But the observation identified the real pattern. Every substitution replaced a **less famous
+name with a more famous one from the same organisation**:
+
+| Source | Model wrote | Who that is |
+|---|---|---|
+| Brooks (Suns) | **Devin Booker** | The Suns' franchise star |
+| Gersson Rosas (Knicks executive) | **Leon Rose** | The Knicks' actual president |
+| — | **Steve Nash** | Real, famous, NBA-adjacent |
+
+`[INFERRED]` During generation the model weighs `P(token | context)`. Its training strongly
+associates "Suns" with Booker; the prompt said Brooks; **the prior beat the context.**
+
+This inverts the property a news brief needs. The more obscure the subject — and therefore
+the more genuinely newsworthy — the more likely a famous name overwrites it. Routine stories
+about stars survive; the stories you could not have guessed are exactly the ones corrupted.
+
+`[INFERRED]` It also explains why prompt engineering failed to help: the instruction competes
+against the weights rather than configuring them.
+
 **Decision: summarisation is gated behind `main.py --summary` and off by default.** The
 default path makes no model call. The headline list is never wrong; a paragraph that renames
 Dillon Brooks to Devin Booker is worse than no paragraph.
