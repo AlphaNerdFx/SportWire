@@ -51,6 +51,7 @@ python main.py --dry-run --summary
 - `SESSION.md` — current working state, decisions made, open questions
 - `TASKS.md` — the task queue, in priority order, with proof required per completed item
 - `ARCHITECTURE.md` — target system shape
+- `docs/INTERNALS.md` — every non-trivial function and why it is shaped that way
 - `docs/AUDIT.md` — forensic audit of the legacy prototype
 - `docs/decisions/` — architecture decision records (ADRs)
 
