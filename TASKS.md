@@ -245,10 +245,15 @@
     all ten files were agent-written after the operator instructed *"you'll write the code
     not me"* (see ADR-011 §7). Regenerating produces ten files he also has not read.
     Deleting working software would not address the cause.
-  - **Substitute remedy agreed instead: the operator rewrites `processing/dedup.py` himself.**
-    ~40 lines, no network, no database, and it is the module whose behaviour already confused
-    him in real use (two messages instead of three). Passing Q3 and Q7 unaided afterwards
-    closes this task.
+  - **Corrected 2026-08-07.** An earlier substitute remedy had the operator rewrite
+    `processing/dedup.py` himself. That was the superseded ADR-006 contract returning under
+    another name — the operator had already instructed that the agent writes the code, and
+    `OPERATING_RULES.md` §0 now states the agent never sets him code to write.
+  - **Actual remedy: guided walkthrough, then a re-check on the same questions.** The agent
+    explains the specific mechanisms that were missed, in this codebase's terms; if an
+    explanation does not land, the code is simplified rather than the operator retested. The
+    re-check happens after a gap, since understanding measured immediately after an
+    explanation is recall.
   - Proof:
 
 ---

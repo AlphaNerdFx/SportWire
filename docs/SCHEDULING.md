@@ -118,10 +118,10 @@ every run, forever. Messages are separated by a line containing `---`.
 
 `[VERIFIED]` The difference, run twice each:
 
-| | first run | second run |
-|---|---|---|
+|                      | first run                        | second run                                |
+| -------------------- | -------------------------------- | ----------------------------------------- |
 | `--channel stdout` | 17 articles printed and recorded | nothing — "0 articles (17 already sent)" |
-| `--dry-run` | 17 articles printed | the same 17 again |
+| `--dry-run`        | 17 articles printed              | the same 17 again                         |
 
 > **On assistants that reach WhatsApp.** Tools such as OpenClaw can invoke SportWire and relay
 > its output to WhatsApp. `[VERIFIED]` They generally do so through Baileys, an unofficial

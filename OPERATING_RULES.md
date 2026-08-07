@@ -16,6 +16,35 @@ inline. None of it is generic advice.
 
 ---
 
+## 0. Who writes what
+
+**The agent writes the code, the tests and the documentation. The operator does not.**
+
+`[VERIFIED]` 2026-08-05 this replaced ADR-006, which had specified the inverse — the human
+writing signatures, docstrings and test assertions, the agent writing only the bodies. The
+operator reversed it explicitly: *"You'll write the code not me."* ADR-011 §7 records the
+reversal and its consequences.
+
+What follows from that, and what does **not**:
+
+- **The agent never instructs the operator to write code.** Not as a task, not as a remedy,
+  not as an exercise. If the agent believes something would be better understood by writing
+  it, it may say so **once**, as an option, and then drop it.
+- **The agent explains as it goes.** A concept the operator has not shown familiarity with is
+  taught at the point it first appears, before the code that uses it — briefly, grounded in
+  this codebase rather than in the abstract.
+- **The operator reviews and questions.** He decides what is correct, especially for anything
+  user-facing: message content, formatting, what counts as notable, what gets cut.
+- **Understanding is still required, and is still ranked above shipping** (`CLAUDE.md` §1). It
+  is demonstrated by *explaining*, not by authoring. See §10.
+
+`[INFERRED]` The failure mode this guards against is the agent quietly reintroducing the old
+contract because the learning goal makes it tempting. It has already happened once: after the
+reversal, the agent proposed that the operator rewrite `processing/dedup.py` as a remedy for a
+failed knowledge check. That was the superseded contract returning under another name.
+
+---
+
 ## 1. Two tagging systems. Do not mix them.
 
 | Where | Tags | Meaning |
@@ -53,9 +82,13 @@ If you have not read it in **this session**, read it before editing it.
 
 ## 4. Never weaken a test to make it pass.
 
-Under ADR-006 the human writes the assertions and the agent writes the bodies that satisfy
-them. That contract inverts the moment the agent is allowed to edit the assertions: the
-cheapest path to "passing" becomes quietly lowering the bar.
+The agent writes both the code and the tests (see §0). That removes the independent check a
+separate test author would provide, which makes this rule stricter rather than looser: the
+cheapest path to "passing" is quietly lowering the bar, and nobody else is watching for it.
+
+Snapshot tests exist for exactly this reason. The operator approves real output once; any
+later change that alters it fails and shows the diff. **A snapshot is re-approved only after
+the operator has seen the diff and agreed it is correct.**
 
 - Do not edit a test to make it pass **unless you have confirmed the test itself encodes a
   wrong assumption** — and say so explicitly before touching it.
@@ -123,10 +156,26 @@ ever been proven to run.
 A task is done when **all three** hold:
 
 1. A test asserting its **behaviour** passes, and the real output is pasted into `TASKS.md`.
-2. The **operator can explain the implementation aloud, unaided** (ADR-006). If he cannot, the
-   code is deleted and regenerated with a different approach — this is a real outcome, not a
-   formality.
+2. The **operator can explain what it does and why**, unaided. `CLAUDE.md` §1 ranks this above
+   shipping.
 3. No `[UNKNOWN]` remains in the claim being made about it.
+
+**When (2) fails, the remedy is explanation, not rewriting.** ADR-006's original remedy —
+delete the code and regenerate it — assumed the operator had written the interfaces, so a
+failure to explain implied the implementation was too clever. That assumption no longer holds
+(§0): deleting agent-written code produces more agent-written code he also has not read.
+
+So instead:
+
+- The agent walks through the specific thing that was not understood, in this codebase's
+  terms, using a concrete example rather than an abstraction.
+- If the explanation does not land, that is a signal the **code** is too clever, not that the
+  operator is at fault. Simplify the code and explain again.
+- Re-check later, on the same point. Understanding that survives a gap is understanding;
+  understanding measured immediately after an explanation is recall.
+
+**The agent does not set the operator homework.** No "try rewriting this", no exercises, no
+tasks conditional on his authoring code.
 
 ## 11. Context discipline (constraint C6).
 
