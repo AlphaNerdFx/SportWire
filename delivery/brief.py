@@ -27,7 +27,7 @@ revisit if stale items start appearing.
 
 from __future__ import annotations
 
-from models.schemas import GameData, GameHighlight, NewsArticle
+from models.schemas import GameData, GameHighlight, NewsArticle, SeriesContext
 
 DEFAULT_SUMMARY_LIMIT = 256
 
@@ -47,6 +47,9 @@ _CATEGORY_LABELS = {
     "comeback": "Comeback",
     "overtime": "Overtime",
     "closest_finish": "Closest finish",
+    "wire_to_wire": "Wire to wire",
+    "second_half_takeover": "Second-half takeover",
+    "biggest_period": "Biggest quarter",
     "largest_margin": "Biggest win",
     "highest_scoring": "Highest scoring",
 }
@@ -59,6 +62,7 @@ def build_messages(
     summary_limit: int = DEFAULT_SUMMARY_LIMIT,
     news_summary: str | None = None,
     max_articles: int = DEFAULT_MAX_ARTICLES,
+    series: dict[int, SeriesContext] | None = None,
 ) -> list[str]:
     """Render the brief as an ordered list of message bodies, omitting empty sections.
 
@@ -79,7 +83,7 @@ def build_messages(
     messages: list[str] = []
 
     if games:
-        messages.append(_render_scoreboard(games))
+        messages.append(_render_scoreboard(games, series))
 
     if highlights:
         messages.append(_render_highlights(highlights))
@@ -98,15 +102,57 @@ def build_messages(
     return messages
 
 
-def _render_scoreboard(games: list[GameData]) -> str:
-    """Message 1 — every game and its score."""
+def _render_scoreboard(
+    games: list[GameData], series: dict[int, SeriesContext] | None = None
+) -> str:
+    """Message 1 — every game and its score, with season-series context where known."""
     lines = ["🏀 SCORES", ""]
+    series = series or {}
+
     for game in games:
         lines.append(
             f"{game.away_team} {game.away_score} @ "
             f"{game.home_team} {game.home_score}  ({game.status})"
         )
+        note = _series_note(game, series.get(game.game_id))
+        if note:
+            lines.append(f"   {note}")
+
     return "\n".join(lines)
+
+
+def _series_note(game: GameData, context: SeriesContext | None) -> str:
+    """One clause of season-series context, or "" when there is nothing worth saying.
+
+    A first meeting produces nothing. `[INFERRED]` "First meeting this season" is true of
+    every fixture in October and carries no information; the note exists to say how the
+    rivalry stood, and before a rivalry has started there is nothing to report.
+    """
+    if context is None or context.is_first_meeting:
+        return ""
+
+    ordinal = _ordinal(context.meeting_number)
+    home_wins = context.home_team_prior_wins
+    away_wins = context.away_team_prior_wins
+
+    if home_wins == away_wins:
+        return f"{ordinal} meeting — series level at {home_wins}-{away_wins}"
+
+    leader, trailing = (
+        (game.home_team, away_wins)
+        if home_wins > away_wins
+        else (game.away_team, home_wins)
+    )
+    return f"{ordinal} meeting — {leader} led {max(home_wins, away_wins)}-{trailing}"
+
+
+def _ordinal(number: int) -> str:
+    """1 -> "1st". Small helper because "2th meeting" would be an embarrassing bug."""
+    if 10 <= number % 100 <= 20:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(number % 10, "th")
+    return f"{number}{suffix}"
 
 
 def _render_highlights(highlights: list[GameHighlight]) -> str:
@@ -137,6 +183,12 @@ def _describe(highlight: GameHighlight) -> str:
         return f"{winner} won in overtime{suffix}"
     if highlight.category == "closest_finish":
         return f"decided by {game.margin}"
+    if highlight.category == "wire_to_wire":
+        return f"{winner} led at every break"
+    if highlight.category == "second_half_takeover":
+        return f"{winner} outscored them by {game.second_half_swing} after half time"
+    if highlight.category == "biggest_period":
+        return f"a {game.biggest_period}-point quarter"
     if highlight.category == "largest_margin":
         return f"{winner} by {game.margin}"
     if highlight.category == "highest_scoring":

@@ -32,7 +32,7 @@ from delivery.base import DeliveryChannel
 from delivery.brief import DEFAULT_MAX_ARTICLES, build_messages
 from delivery.stdout import StdoutChannel
 from delivery.telegram import TelegramChannel
-from ingestion.nba_games import BallDontLieGamesAdapter
+from ingestion.nba_games import BallDontLieGamesAdapter, BallDontLieSeriesAdapter
 from ingestion.rss_news import FEEDS, RssNewsAdapter
 from models.schemas import NewsArticle
 from processing.dedup import deduplicate_articles, deduplicate_games
@@ -71,10 +71,13 @@ def main(argv: list[str] | None = None) -> int:
     if not settings.can_fetch_games:
         logger.warning("BALL_DONT_LIE_API_KEY is not set; skipping games")
         games = []
+        team_ids = {}
     else:
-        games = BallDontLieGamesAdapter(
+        games_adapter = BallDontLieGamesAdapter(
             api_key=settings.balldontlie_api_key, target_date=target_date
-        ).fetch()
+        )
+        games = games_adapter.fetch()
+        team_ids = games_adapter.last_team_ids
 
     # `--date` reaches the games adapter only. An RSS feed is a document of what is
     # published *now* — the format has no date query, so historical headlines cannot be
@@ -156,11 +159,26 @@ def main(argv: list[str] | None = None) -> int:
                     news_summary = None
 
         # --- format ------------------------------------------------------------
+        # One extra request per game, so it runs only for games actually being reported.
+        # A failure here costs one line of context, never the brief.
+        series = {}
+        if fresh_games and settings.can_fetch_games:
+            contexts = BallDontLieSeriesAdapter(
+                api_key=settings.balldontlie_api_key
+            ).fetch_for(fresh_games, team_ids)
+            series = {c.game_id: c for c in contexts}
+            logger.info(
+                "season-series context for %d of %d games",
+                len(series),
+                len(fresh_games),
+            )
+
         messages = build_messages(
             fresh_games,
             find_notable_games(fresh_games),
             fresh_articles,
             news_summary=news_summary,
+            series=series,
         )
 
         if not messages:

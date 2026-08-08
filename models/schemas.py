@@ -82,6 +82,78 @@ class GameData(BaseModel):
         return largest_deficit
 
     @property
+    def led_wire_to_wire(self) -> bool:
+        """True when the winner was ahead at the end of every period, never level.
+
+        Returns False when period data is unavailable — an unknown is not a claim. A tie at
+        any boundary disqualifies it: "wire to wire" means never headed, and a team that was
+        level was, briefly, not ahead.
+        """
+        leads = self._winner_leads()
+        return bool(leads) and all(lead > 0 for lead in leads)
+
+    @property
+    def largest_lead_lost(self) -> int:
+        """Biggest lead the *losing* team held at a period boundary, or 0 if it never led.
+
+        The mirror of `largest_deficit_overcome` and the same number seen from the other
+        side, kept separate because a brief phrases them differently — "came back from 16
+        down" is about the winner, "blew a 16-point lead" is about the loser. Which reads
+        better depends on which team the reader cares about, and the formatter decides.
+        """
+        return self.largest_deficit_overcome
+
+    @property
+    def biggest_period(self) -> int:
+        """Most points either side scored in a single period. 0 when unknown.
+
+        `[INFERRED]` A 40-point quarter is the kind of detail that makes a scoreline memorable
+        and is invisible in a final score.
+        """
+        return max([*self.home_periods, *self.away_periods], default=0)
+
+    @property
+    def second_half_swing(self) -> int:
+        """How much the winner out- or under-scored the loser after half time.
+
+        Positive means the winner pulled away; negative means they were outscored after the
+        break and won on the strength of the first half. `[INFERRED]` Both are worth saying,
+        and neither is visible in the final score.
+
+        Returns 0 when a game has not reached the second half, or when period data is absent.
+        """
+        if len(self.home_periods) < 4 or len(self.away_periods) < 4:
+            return 0
+
+        home_second = sum(self.home_periods[2:])
+        away_second = sum(self.away_periods[2:])
+        return (
+            home_second - away_second
+            if self.home_score > self.away_score
+            else away_second - home_second
+        )
+
+    def _winner_leads(self) -> list[int]:
+        """The winner's lead at the end of each period. Empty when data is unavailable."""
+        if not self.home_periods or len(self.home_periods) != len(self.away_periods):
+            return []
+
+        home_wins = self.home_score > self.away_score
+        leads: list[int] = []
+        home_running = away_running = 0
+
+        for home_points, away_points in zip(self.home_periods, self.away_periods):
+            home_running += home_points
+            away_running += away_points
+            leads.append(
+                home_running - away_running
+                if home_wins
+                else away_running - home_running
+            )
+
+        return leads
+
+    @property
     def margin(self) -> int:
         """Absolute points difference. Used to classify blowouts and close finishes."""
         return abs(self.home_score - self.away_score)
@@ -107,6 +179,33 @@ class GameData(BaseModel):
         """
         payload = f"{self.game_id}|{self.status}|{self.home_score}|{self.away_score}"
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+class SeriesContext(BaseModel):
+    """How the two teams in one game have fared against each other this season.
+
+    Separate from `GameData` rather than a field on it, because it comes from a different
+    request and is optional. A game is complete without it; forcing the field would make
+    every construction of `GameData` depend on a second API call.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    game_id: int
+
+    # Which meeting of the season this is, counting this one. 1 means first.
+    meeting_number: int
+
+    # Wins *before* this game, attributed to the teams as named in this game. Deliberately
+    # excludes the current result: the brief already states tonight's score, and a record
+    # that silently includes it reads as though the series stood there beforehand.
+    home_team_prior_wins: int
+    away_team_prior_wins: int
+
+    @property
+    def is_first_meeting(self) -> bool:
+        """True when these teams have not played each other yet this season."""
+        return self.meeting_number <= 1
 
 
 class GameHighlight(BaseModel):
