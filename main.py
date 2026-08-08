@@ -32,9 +32,9 @@ from delivery.base import DeliveryChannel
 from delivery.brief import DEFAULT_MAX_ARTICLES, build_messages
 from delivery.stdout import StdoutChannel
 from delivery.telegram import TelegramChannel
-from ingestion.nba_games import BallDontLieGamesAdapter, BallDontLieSeriesAdapter
+from ingestion.nba_games import BallDontLieGamesAdapter
 from ingestion.rss_news import FEEDS, RssNewsAdapter
-from models.schemas import NewsArticle
+from models.schemas import NewsArticle, SeriesContext
 from processing.dedup import deduplicate_articles, deduplicate_games
 from processing.highlights import find_notable_games
 from processing.priority import sort_by_priority
@@ -71,13 +71,10 @@ def main(argv: list[str] | None = None) -> int:
     if not settings.can_fetch_games:
         logger.warning("BALL_DONT_LIE_API_KEY is not set; skipping games")
         games = []
-        team_ids = {}
     else:
-        games_adapter = BallDontLieGamesAdapter(
+        games = BallDontLieGamesAdapter(
             api_key=settings.balldontlie_api_key, target_date=target_date
-        )
-        games = games_adapter.fetch()
-        team_ids = games_adapter.last_team_ids
+        ).fetch()
 
     # `--date` reaches the games adapter only. An RSS feed is a document of what is
     # published *now* — the format has no date query, so historical headlines cannot be
@@ -159,16 +156,27 @@ def main(argv: list[str] | None = None) -> int:
                     news_summary = None
 
         # --- format ------------------------------------------------------------
-        # One extra request per game, so it runs only for games actually being reported.
-        # A failure here costs one line of context, never the brief.
+        # Head-to-head comes from what this instance has already recorded, not the API.
+        # `[VERIFIED]` 2026-08-08: the network version cost one request per fixture and
+        # balldontlie's free tier returned 429 from the sixth, so a nine-game slate got
+        # context for four. Every result needed already passes through this process, so the
+        # local answer costs nothing, cannot be rate-limited, and improves the longer
+        # SportWire runs. It is empty for a season this instance has not seen — which is the
+        # honest answer rather than a guess.
         series = {}
-        if fresh_games and settings.can_fetch_games:
-            contexts = BallDontLieSeriesAdapter(
-                api_key=settings.balldontlie_api_key
-            ).fetch_for(fresh_games, team_ids)
-            series = {c.game_id: c for c in contexts}
+        for game in fresh_games:
+            home_wins, away_wins, meetings = store.head_to_head(game)
+            if meetings:
+                series[game.game_id] = SeriesContext(
+                    game_id=game.game_id,
+                    meeting_number=meetings + 1,
+                    home_team_prior_wins=home_wins,
+                    away_team_prior_wins=away_wins,
+                )
+
+        if fresh_games:
             logger.info(
-                "season-series context for %d of %d games",
+                "season-series context for %d of %d games (from local history)",
                 len(series),
                 len(fresh_games),
             )
