@@ -108,6 +108,42 @@ degrees of freedom — the words shown are the words published. The moment a mod
 them, every fact needs independent verification, and at this model size verification fails
 often enough to make the feature negative-value.
 
+## Follow-up, 2026-08-08 — measured pass rate: **0 of 3**
+
+A validator was built (`processing/validate.py`) that checks every proper name and figure in
+a generated summary against the source articles, so fabrication fails closed to the headline
+list rather than reaching a phone. `[VERIFIED]` It correctly rejects every failure recorded
+above, and correctly passes grounded summaries including ones carrying real figures.
+
+The remaining question was whether fabrication is *occasional* — in which case retrying a
+rejected summary would land a good one — or *constant*. Measured over three attempts on the
+same 12 live articles with `mistral:7b`:
+
+| Attempt | Result | Time | Detail |
+|---|---|---|---|
+| 1 | **no output** | 647s | exceeded the 600s timeout |
+| 2 | **rejected** | 236s | invented "Dallas Mavericks" |
+| 3 | **rejected** | 14s | invented "Al Horford's departure from the Celtics and his arrival in Philadelphia" — a whole transaction |
+
+`[INFERRED]` Retry is therefore not a fix: at a 0/3 pass rate it costs twenty minutes to
+arrive at the same headline list. Attempt 3 is the clearest evidence — it did not slip a name,
+it invented a trade. Runtime also varied by a factor of 46 for identical work.
+
+`[VERIFIED]` Coverage was measured at the same time, and the constraint is upstream:
+
+| Source | Items | Title avg | Descriptions | Desc avg |
+|---|---|---|---|---|
+| ESPN | 15 | 57 | 15/15 | 140 chars |
+| CBS Sports | 36 | 98 | 36/36 | 94 chars |
+| r/nba | 25 | 154 | 13/25 | **653** chars |
+
+Editorial outlets syndicate roughly one sentence. Reddit carries five times more. Richer input
+would require fetching article pages, which is the C3 exposure ADR-009 exists to avoid — so
+this is as much text as the summariser will ever get from published feeds.
+
+**The feature stays built, gated, and off.** The validator makes it safe; the pass rate makes
+it useless. Both facts are worth keeping, because the validator is the reusable part.
+
 ## Reversal condition
 
 Re-enable by default when a locally-runnable model passes the name-invention check across
