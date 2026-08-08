@@ -23,6 +23,8 @@ publishable (C3) — unlike scraping the same outlets' HTML. See ADR-009.
 from __future__ import annotations
 
 import logging
+import re
+from html.parser import HTMLParser
 from xml.etree import ElementTree
 
 import requests
@@ -38,6 +40,41 @@ DC_NAMESPACE = "{http://purl.org/dc/elements/1.1/}"
 
 # Atom is a different specification from RSS 2.0, not a dialect of it. Reddit publishes Atom.
 ATOM_NAMESPACE = "{http://www.w3.org/2005/Atom}"
+
+# Reddit ends every entry with navigation rather than content.
+_SUBMITTED_BY = re.compile(r"submitted by\s*/u/\S+.*$", re.IGNORECASE | re.DOTALL)
+
+# Below this, whatever survived stripping is boilerplate rather than a description. A link
+# post reduces to little more than "[link] [comments]"; a real text post does not.
+MIN_SUMMARY_CHARS = 60
+
+
+class _TextExtractor(HTMLParser):
+    """Collects visible text from an HTML fragment, discarding tags.
+
+    `html.parser` is standard library, so richer markup handling costs nothing here and needs
+    no dependency (`CLAUDE.md` §11). Only Reddit's Atom content requires this — RSS feeds
+    supply plain text already.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._parts: list[str] = []
+
+    def handle_data(self, data: str) -> None:
+        self._parts.append(data)
+
+    @property
+    def text(self) -> str:
+        return " ".join(" ".join(self._parts).split())
+
+
+def strip_html(markup: str) -> str:
+    """Return the visible text of an HTML fragment, whitespace collapsed."""
+    extractor = _TextExtractor()
+    extractor.feed(markup)
+    return extractor.text
+
 
 # Known feeds, keyed by the label stamped onto every article they produce.
 # `[VERIFIED]` 2026-08-06 both return HTTP 200 with parseable items: ESPN 17, CBS 36.
@@ -154,15 +191,35 @@ class RssNewsAdapter(NewsSourceAdapter):
             article_id=f"{self._source_name}:{article_id}",
             title=title,
             url=url,
-            # Atom's <content> is full HTML for Reddit — the whole rendered post. Excluded
-            # deliberately: the brief shows a short description, and stripping markup from
-            # user-submitted HTML is a parsing problem with no upside here. The title alone
-            # carries the substance for this source.
-            summary="",
+            summary=self._atom_summary(entry),
             published_at=published_at,
             author=author,
             source=self._source_name,
         )
+
+    def _atom_summary(self, entry: ElementTree.Element) -> str:
+        """Extract readable text from an Atom <content>, or "" if there is none worth having.
+
+        `[VERIFIED]` Reddit's content is HTML and comes in two shapes. A **text post** carries
+        the real body (`<div class="md"><p>The Los Angeles Clippers and Kawhi Leonard, who are
+        currently under investigation...`), which is genuinely more detailed than the title. A
+        **link post** carries only an image table and a "submitted by" trailer, which is
+        boilerplate.
+
+        So markup is stripped and the result kept only if it survives as something a reader
+        would want. `[INFERRED]` An empty summary is a fine outcome — `delivery/brief.py`
+        omits the line entirely rather than printing a blank.
+        """
+        content = entry.find(f"{ATOM_NAMESPACE}content")
+        if content is None or not content.text:
+            return ""
+
+        text = strip_html(content.text)
+
+        # Reddit appends this to every entry; it is navigation, not content.
+        text = _SUBMITTED_BY.sub("", text).strip()
+
+        return text if len(text) >= MIN_SUMMARY_CHARS else ""
 
     def _parse_item(self, item: ElementTree.Element) -> NewsArticle | None:
         """Convert one <item>, or return None if it lacks the fields we require.

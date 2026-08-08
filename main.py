@@ -29,7 +29,7 @@ from datetime import date, datetime, timezone
 
 from config.settings import Settings, SettingsError
 from delivery.base import DeliveryChannel
-from delivery.brief import build_messages
+from delivery.brief import DEFAULT_MAX_ARTICLES, build_messages
 from delivery.stdout import StdoutChannel
 from delivery.telegram import TelegramChannel
 from ingestion.nba_games import BallDontLieGamesAdapter
@@ -39,6 +39,7 @@ from processing.dedup import deduplicate_articles, deduplicate_games
 from processing.highlights import find_notable_games
 from processing.priority import sort_by_priority
 from processing.summarize import OllamaSummarizer
+from processing.validate import validate_summary
 from storage.db import SeenStore
 
 logger = logging.getLogger("sportwire")
@@ -122,15 +123,37 @@ def main(argv: list[str] | None = None) -> int:
         # so it stays the default until a model earns the swap.
         news_summary: str | None = None
         if fresh_articles and args.summary:
+            # Only what the brief would actually show. `[VERIFIED]` 2026-08-08: summarising
+            # all 78 fetched articles meant 16 chunks and 17 model calls, which exceeded the
+            # 600s timeout and fell back to the headline list anyway. The brief displays 12,
+            # so the other 66 were summarised for nothing. Three sources produce far more
+            # volume than one, and the summariser has to respect the same cap the reader does.
+            to_summarise = fresh_articles[:DEFAULT_MAX_ARTICLES]
+
             summarizer = OllamaSummarizer(model=settings.ollama_model)
             logger.info(
-                "summarising %d articles via %s",
+                "summarising top %d of %d articles via %s",
+                len(to_summarise),
                 len(fresh_articles),
                 summarizer.summarizer_name,
             )
-            news_summary = summarizer.summarise(fresh_articles)
+            news_summary = summarizer.summarise(to_summarise)
+
             if news_summary is None:
                 logger.warning("no summary produced; falling back to the headline list")
+            else:
+                # Every model tested fabricates (ADR-012). The check is mechanical, so a
+                # summary that invents a name or a figure fails closed to the headline list
+                # rather than reaching a phone.
+                result = validate_summary(news_summary, to_summarise)
+                if result.is_safe:
+                    logger.info("summary validated: %s", result.describe())
+                else:
+                    logger.warning(
+                        "summary rejected (%s); falling back to the headline list",
+                        result.describe(),
+                    )
+                    news_summary = None
 
         # --- format ------------------------------------------------------------
         messages = build_messages(
