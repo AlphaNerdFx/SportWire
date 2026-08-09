@@ -35,7 +35,7 @@ from delivery.telegram import TelegramChannel
 from ingestion.nba_games import BallDontLieGamesAdapter
 from ingestion.rss_news import FEEDS, RssNewsAdapter
 from models.schemas import NewsArticle, SeriesContext
-from processing.cluster import group_related
+from processing.cluster import group_related, limit_per_source
 from processing.dedup import deduplicate_articles, deduplicate_games
 from processing.highlights import find_notable_games
 from processing.newsworthy import drop_non_news
@@ -132,6 +132,12 @@ def main(argv: list[str] | None = None) -> int:
         # seven r/nba posts in one capture. Nothing is dropped here — grouping is a view,
         # and every article in a group is still recorded as delivered.
         story_groups = group_related(fresh_articles)
+
+        # Bound how many stories a community feed may lead. `[VERIFIED]` r/nba posts
+        # dozens of items a day regardless of how much news there is, and title-pattern
+        # filtering could not separate its reporting from its chatter. A story it shares
+        # with an outlet is unaffected: those merged above, and the outlet leads them.
+        story_groups = limit_per_source(story_groups)
 
         # Off by default. `[VERIFIED]` 2026-08-06 every local model tested fabricated
         # facts on live data — mistral:7b, the best of them, renamed Dillon Brooks to

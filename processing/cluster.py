@@ -113,6 +113,65 @@ def _names(article: NewsArticle) -> set[str]:
     return found
 
 
+# How many stories a single source may *lead* in one brief. Only community feeds are
+# capped, and only because their volume is unrelated to how much news there is.
+#
+# `[VERIFIED]` 2026-08-09 title-pattern filtering hit its limit on r/nba. A blacklist misses
+# untagged chatter ("announcers thank Russell Westbrook for bricking the game"); a whitelist
+# requiring a news marker kept a HoopsHype listicle and a Dirk Nowitzki highlight while
+# dropping the Pablo Torre/Ballmer reporting, which was the biggest story in the feed. The
+# distinguishing information is not in the title, so the fix is structural rather than
+# smarter rules: bound the volume instead of trying to classify it.
+#
+# `[INFERRED]` Three is judged, not measured. It is enough for the case that justifies the
+# source — breaking news that reaches Reddit before the outlets write it up — while leaving
+# the brief editorial.
+SOURCE_LIMITS: dict[str, int] = {"r/nba": 3}
+
+
+def limit_per_source(
+    groups: list[list[NewsArticle]], limits: dict[str, int] | None = None
+) -> list[list[NewsArticle]]:
+    """Cap how many stories each capped source may lead, keeping the highest-ranked.
+
+    Applied to **groups**, so it counts stories rather than articles — and it counts only
+    the source that *leads* each group. A community post already merged with an editorial
+    article does not count against the cap, because the story is being reported by the
+    outlet and the merge is what corroborates it. Uncapped sources pass untouched.
+
+    Expects input ordered most-important-first, so the surviving stories are the best ones
+    rather than the earliest.
+    """
+    limits = SOURCE_LIMITS if limits is None else limits
+    if not limits:
+        return groups
+
+    used: Counter[str] = Counter()
+    kept: list[list[NewsArticle]] = []
+    dropped: Counter[str] = Counter()
+
+    for group in groups:
+        source = group[0].source
+        cap = limits.get(source)
+
+        if cap is not None and used[source] >= cap:
+            dropped[source] += 1
+            continue
+
+        used[source] += 1
+        kept.append(group)
+
+    for source, count in dropped.items():
+        logger.info(
+            "capped %s at %d stories; %d further stories not shown",
+            source,
+            limits[source],
+            count,
+        )
+
+    return kept
+
+
 def group_related(
     articles: list[NewsArticle],
     max_name_frequency: float = MAX_NAME_FREQUENCY,
