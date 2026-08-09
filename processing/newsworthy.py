@@ -90,6 +90,24 @@ _YEAR_SUBJECT_WINDOW = 30
 # to report" and "forgotten enough to resend".
 MAX_ARTICLE_AGE_HOURS = 168
 
+# Phrases that announce a piece is about the past, whatever its publication date.
+#
+# `[VERIFIED]` 2026-08-10: "On this day in Bucks history: Milwaukee signs Bobby Simmons"
+# reached a brief from Yahoo Sports. It carries no content tag and no year in its opening,
+# so neither existing rule saw it — but it is a retrospective published today.
+#
+# Deliberately short and unambiguous. Phrases like "all-time" were considered and left out:
+# "passes Jordan for third all-time" is current news, and a rule that drops it would remove
+# exactly the kind of story worth reporting.
+RETROSPECTIVE_PHRASES = (
+    "on this day",
+    "years ago",
+    "throwback",
+    "flashback",
+    "remember when",
+    "this day in",
+)
+
 
 def _strip_invisible(text: str) -> str:
     """Remove zero-width and directional marks that break prefix matching."""
@@ -128,6 +146,12 @@ def is_newsworthy(article: NewsArticle, now: datetime | None = None) -> bool:
     # Rule 1 — a content-type tag.
     match = _LEADING_TAG.match(title)
     if match and match.group(1).strip().lower() in REJECTED_TAGS:
+        return False
+
+    # Rule 1b — a phrase announcing the piece is about the past. Checked anywhere in the
+    # title, since "on this day" is unambiguous wherever it appears.
+    lowered = title.lower()
+    if any(phrase in lowered for phrase in RETROSPECTIVE_PHRASES):
         return False
 
     # Rule 2 — the title *opens* by naming a season that has already finished, which marks

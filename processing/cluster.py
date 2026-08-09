@@ -128,34 +128,52 @@ def _names(article: NewsArticle) -> set[str]:
 # the brief editorial.
 SOURCE_LIMITS: dict[str, int] = {"r/nba": 3}
 
+# Ceiling applied to every other source, so no feed can take the whole brief simply by
+# publishing more.
+#
+# `[VERIFIED]` 2026-08-10: this is not only a community-feed problem. Yahoo Sports publishes
+# 50 items a day, all under 48 hours old, while ESPN and CBS produce one or two NBA stories.
+# After deduplication strips what has already been sent, nearly every *remaining* item is
+# Yahoo — a run fetching 99 articles left 51 new ones, dominated by the fastest publisher.
+# Ranking cannot fix that: the items are individually fine, there are just far more of them.
+#
+# `[INFERRED]` Four leaves room for every source to appear within a twelve-story brief while
+# guaranteeing none can fill it.
+DEFAULT_SOURCE_LIMIT = 4
+
 
 def limit_per_source(
-    groups: list[list[NewsArticle]], limits: dict[str, int] | None = None
+    groups: list[list[NewsArticle]],
+    limits: dict[str, int] | None = None,
+    default_limit: int = DEFAULT_SOURCE_LIMIT,
 ) -> list[list[NewsArticle]]:
-    """Cap how many stories each capped source may lead, keeping the highest-ranked.
+    """Cap how many stories each source may lead, keeping the highest-ranked.
 
     Applied to **groups**, so it counts stories rather than articles — and it counts only
-    the source that *leads* each group. A community post already merged with an editorial
-    article does not count against the cap, because the story is being reported by the
-    outlet and the merge is what corroborates it. Uncapped sources pass untouched.
+    the source that *leads* each group. An article already merged with another outlet's
+    coverage does not count against the cap, because the merge is what corroborates it and
+    the story is being reported by whoever leads.
+
+    Every source is capped: `limits` overrides the ceiling for named ones, `default_limit`
+    applies to the rest. Passing `default_limit=0` disables the general ceiling.
 
     Expects input ordered most-important-first, so the surviving stories are the best ones
     rather than the earliest.
     """
     limits = SOURCE_LIMITS if limits is None else limits
-    if not limits:
-        return groups
 
     used: Counter[str] = Counter()
     kept: list[list[NewsArticle]] = []
     dropped: Counter[str] = Counter()
+    applied: dict[str, int] = {}
 
     for group in groups:
         source = group[0].source
-        cap = limits.get(source)
+        cap = limits.get(source, default_limit)
 
-        if cap is not None and used[source] >= cap:
+        if cap and used[source] >= cap:
             dropped[source] += 1
+            applied[source] = cap
             continue
 
         used[source] += 1
@@ -165,7 +183,7 @@ def limit_per_source(
         logger.info(
             "capped %s at %d stories; %d further stories not shown",
             source,
-            limits[source],
+            applied[source],
             count,
         )
 
