@@ -35,6 +35,7 @@ from delivery.telegram import TelegramChannel
 from ingestion.nba_games import BallDontLieGamesAdapter
 from ingestion.rss_news import FEEDS, RssNewsAdapter
 from models.schemas import NewsArticle, SeriesContext
+from processing.cluster import group_related
 from processing.dedup import deduplicate_articles, deduplicate_games
 from processing.highlights import find_notable_games
 from processing.newsworthy import drop_non_news
@@ -126,6 +127,12 @@ def main(argv: list[str] | None = None) -> int:
         # the pipeline already has, at no extra cost.
         fresh_articles = sort_by_priority(fresh_articles, fresh_games)
 
+        # Group articles covering one story, so a widely-reported event takes one slot
+        # rather than seven. `[VERIFIED]` 2026-08-08: a single Kawhi Leonard story produced
+        # seven r/nba posts in one capture. Nothing is dropped here — grouping is a view,
+        # and every article in a group is still recorded as delivered.
+        story_groups = group_related(fresh_articles)
+
         # Off by default. `[VERIFIED]` 2026-08-06 every local model tested fabricated
         # facts on live data — mistral:7b, the best of them, renamed Dillon Brooks to
         # "Devin Booker", invented a "$3.3M" figure, and turned "Knicks executive Rosas"
@@ -194,7 +201,7 @@ def main(argv: list[str] | None = None) -> int:
         messages = build_messages(
             fresh_games,
             find_notable_games(fresh_games),
-            fresh_articles,
+            story_groups,
             news_summary=news_summary,
             series=series,
         )

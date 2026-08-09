@@ -58,7 +58,7 @@ _CATEGORY_LABELS = {
 def build_messages(
     games: list[GameData],
     highlights: list[GameHighlight],
-    articles: list[NewsArticle],
+    article_groups: list[list[NewsArticle]],
     summary_limit: int = DEFAULT_SUMMARY_LIMIT,
     news_summary: str | None = None,
     max_articles: int = DEFAULT_MAX_ARTICLES,
@@ -66,8 +66,10 @@ def build_messages(
 ) -> list[str]:
     """Render the brief as an ordered list of message bodies, omitting empty sections.
 
-    **`articles` must already be ranked most-important-first** — pass them through
-    `processing.priority.sort_by_priority`. The `max_articles` cap keeps the front of the
+    **`article_groups` must already be ranked most-important-first** — sort with
+    `processing.priority.sort_by_priority`, then cluster with
+    `processing.cluster.group_related`, which preserves that order. Each group is one story,
+    its first entry the best-ranked article covering it. The `max_articles` cap keeps the front of the
     list, so unsorted input silently drops whatever happens to be last. `[VERIFIED]`
     2026-08-06: the snapshot test called this with raw feed order and the cap removed
     "How LeBron landed in Philadelphia", the biggest story in the feed.
@@ -88,15 +90,18 @@ def build_messages(
     if highlights:
         messages.append(_render_highlights(highlights))
 
-    if articles:
+    if article_groups:
         if news_summary:
             messages.append(_render_news_summary(news_summary))
         else:
             # Truncation happens here, in presentation, not in dedup: the dropped articles
             # are still recorded as delivered, so they will not reappear next run. They were
-            # ranked lowest, not missed.
+            # ranked lowest, not missed. The cap counts *stories*, so one widely-covered
+            # event no longer consumes half the brief.
             messages.append(
-                _render_news(articles[:max_articles], summary_limit, len(articles))
+                _render_news(
+                    article_groups[:max_articles], summary_limit, len(article_groups)
+                )
             )
 
     return messages
@@ -201,28 +206,54 @@ def _render_news_summary(summary: str) -> str:
     return f"📰 NEWS\n\n{summary}"
 
 
-def _render_news(
-    articles: list[NewsArticle], summary_limit: int, total_available: int
-) -> str:
-    """Message 3 — headline, author, and a truncated description. No links, no dates.
+def _render_story_group(group: list[NewsArticle], summary_limit: int) -> list[str]:
+    """One story: its best article, plus who else covered it.
 
-    `total_available` is the count before the cap, so the brief can say how many were left
-    out. Silently showing 12 of 53 would look like the other 41 never existed.
+    `[VERIFIED]` 2026-08-08 one live capture had seven r/nba posts on a single Kawhi Leonard
+    story. Showing all seven wastes most of a brief; showing one and silently discarding six
+    hides that it was widely reported. Naming the other outlets does both jobs — corroboration
+    is information, and "also on ESPN" says more about a rumour than any headline does.
+    """
+    best = group[0]
+    lines = [best.title]
+
+    summary = _truncate(best.summary, summary_limit)
+    if summary:
+        lines.append(summary)
+
+    byline = best.author or best.source
+
+    if len(group) > 1:
+        # Other outlets, not other posts: three Reddit users on one story is noise, whereas
+        # ESPN and CBS both carrying it is a signal about the story.
+        others = sorted({article.source for article in group[1:]} - {best.source})
+        if others:
+            lines.append(f"— {byline}  (also {', '.join(others)})")
+        else:
+            lines.append(f"— {byline}  (+{len(group) - 1} more)")
+    else:
+        lines.append(f"— {byline}")
+
+    return lines
+
+
+def _render_news(
+    groups: list[list[NewsArticle]], summary_limit: int, total_stories: int
+) -> str:
+    """Message 3 — one entry per story, not per article. No links, no dates.
+
+    Takes **groups** rather than articles because the brief reports stories: seven posts
+    about one investigation is one thing that happened. `total_stories` is the count before
+    the cap, so the brief can say how many were left out — silently showing 12 of 53 would
+    look like the other 41 never existed.
     """
     lines = ["📰 NEWS", ""]
-    for article in articles:
-        lines.append(article.title)
 
-        summary = _truncate(article.summary, summary_limit)
-        if summary:
-            lines.append(summary)
-
-        # Author is genuinely optional — `[VERIFIED]` absent on 2 of 15 real ESPN items —
-        # so the byline falls back to the source rather than printing "None".
-        lines.append(f"— {article.author or article.source}")
+    for group in groups:
+        lines.extend(_render_story_group(group, summary_limit))
         lines.append("")
 
-    omitted = total_available - len(articles)
+    omitted = total_stories - len(groups)
     if omitted > 0:
         lines.append(f"+ {omitted} more, ranked lower")
 

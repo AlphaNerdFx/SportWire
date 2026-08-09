@@ -31,6 +31,7 @@ import pytest
 
 from delivery.brief import build_messages
 from models.schemas import GameData, NewsArticle
+from processing.cluster import group_related
 from processing.highlights import find_notable_games
 from processing.priority import sort_by_priority
 
@@ -71,7 +72,9 @@ def test_full_brief_matches_snapshot(
 ) -> None:
     """The complete three-message brief, exactly as it would be delivered."""
     messages = build_messages(
-        games, find_notable_games(games), sort_by_priority(articles)
+        games,
+        find_notable_games(games),
+        group_related(sort_by_priority(articles)),
     )
     assert len(messages) == 3, "expected scores, notable and news sections"
 
@@ -83,7 +86,7 @@ def test_offseason_brief_matches_snapshot(
     articles: list[NewsArticle], snapshot_update: bool
 ) -> None:
     """With no games — the normal case outside the season — only news is sent."""
-    messages = build_messages([], [], sort_by_priority(articles))
+    messages = build_messages([], [], group_related(sort_by_priority(articles)))
     assert len(messages) == 1, "no games should mean no scores and no notable sections"
 
     assert_matches_snapshot("offseason_brief", messages[0], snapshot_update)
