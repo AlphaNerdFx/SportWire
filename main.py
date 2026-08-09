@@ -37,6 +37,7 @@ from ingestion.rss_news import FEEDS, RssNewsAdapter
 from models.schemas import NewsArticle, SeriesContext
 from processing.dedup import deduplicate_articles, deduplicate_games
 from processing.highlights import find_notable_games
+from processing.newsworthy import drop_non_news
 from processing.priority import sort_by_priority
 from processing.summarize import OllamaSummarizer
 from processing.validate import validate_summary
@@ -93,6 +94,15 @@ def main(argv: list[str] | None = None) -> int:
         fetched = RssNewsAdapter(source_name).fetch()
         logger.info("  %s: %d articles", source_name, len(fetched))
         articles.extend(fetched)
+
+    # Remove items that are not reporting at all — highlight clips, retrospectives,
+    # discussion threads. `[VERIFIED]` A community feed carries these alongside news and
+    # their post timestamps say nothing about when the event happened: one live capture
+    # included a 2017 highlight posted that morning. Editorial feeds are unaffected.
+    #
+    # This runs before dedup so nothing downstream spends effort on items that will never
+    # be shown, and before the seen-store so a rejected item is not recorded as delivered.
+    articles = drop_non_news(articles)
 
     logger.info("fetched %d games, %d articles", len(games), len(articles))
 
