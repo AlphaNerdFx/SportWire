@@ -76,6 +76,20 @@ _YEAR = re.compile(r"\b(19[5-9]\d|20[0-4]\d)\b")
 # a current story reaches its historical aside mid-sentence.
 _YEAR_SUBJECT_WINDOW = 30
 
+# Oldest an item may be and still count as news.
+#
+# `[VERIFIED]` 2026-08-09 this is not hypothetical. The Athletic's NBA feed carries 100
+# items whose oldest is **17 days** and of which exactly one is under 48 hours old — an
+# archive wearing a news feed's clothes. It was rejected as a source, but a feed can start
+# behaving that way at any time and the failure is invisible: old articles simply appear in
+# the brief looking current.
+#
+# Seven days rather than two, because the dedup window is 168 hours: anything older than
+# that could be re-delivered as if new, and anything newer has either already been sent or
+# is legitimately recent. Tying the two together means an item can never be both "too old
+# to report" and "forgotten enough to resend".
+MAX_ARTICLE_AGE_HOURS = 168
+
 
 def _strip_invisible(text: str) -> str:
     """Remove zero-width and directional marks that break prefix matching."""
@@ -95,10 +109,18 @@ def _current_season_year(now: datetime | None = None) -> int:
 def is_newsworthy(article: NewsArticle, now: datetime | None = None) -> bool:
     """Whether an item is reporting rather than community content.
 
-    Two rules, both deliberately narrow. Anything ambiguous is kept — `[INFERRED]` a
+    Three rules, all deliberately narrow. Anything ambiguous is kept — `[INFERRED]` a
     borderline item in the brief costs a line, while a wrongly rejected one is invisible, and
     invisible failures are the class this project keeps being bitten by.
     """
+    now = now or datetime.now(timezone.utc)
+
+    # Rule 0 — too old to be news, whatever it says. This one is about the *item*, not its
+    # wording, so it catches a feed that has quietly turned into an archive.
+    age_hours = (now - article.published_at).total_seconds() / 3600
+    if age_hours > MAX_ARTICLE_AGE_HOURS:
+        return False
+
     # Invisible characters are stripped first, or a leading zero-width space defeats the
     # tag match entirely.
     title = _strip_invisible(article.title).strip()

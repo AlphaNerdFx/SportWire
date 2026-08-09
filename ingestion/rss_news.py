@@ -81,6 +81,11 @@ def strip_html(markup: str) -> str:
 FEEDS: dict[str, str] = {
     "ESPN": "https://www.espn.com/espn/rss/nba/news",
     "CBS Sports": "https://www.cbssports.com/rss/headlines/nba/",
+    # `[VERIFIED]` 2026-08-09: 50 items, every one published within 48 hours and the newest
+    # under three. Added because editorial outlets publish slowly in the offseason — ESPN
+    # and CBS produce a couple of NBA stories a day, so nearly every *new* item in a run was
+    # coming from Reddit and the brief had drifted community-heavy.
+    "Yahoo Sports": "https://sports.yahoo.com/nba/rss/",
     # Community feed. Far noisier than an editorial outlet, and included on that basis:
     # `processing/priority.py` promotes anything naming a team that played tonight, which
     # turns the volume into coverage rather than noise. It is also where individual
@@ -89,6 +94,21 @@ FEEDS: dict[str, str] = {
     # HTTP 429s. One fetch per run is fine; never retry in a loop.
     "r/nba": "https://www.reddit.com/r/nba/.rss",
 }
+
+# Feeds evaluated and rejected, recorded so they are not re-proposed:
+#
+#   The Athletic (theathletic.com/nba/?rss=1)
+#       `[VERIFIED]` 2026-08-09: 100 items, newest 42h old, oldest **17 days**, and only 1
+#       within 48 hours. It is an archive rather than a news feed; adding it would have
+#       flooded the brief with fortnight-old articles.
+#   Sporting News (sportingnews.com/us/rss)
+#       `[VERIFIED]` All sports, not NBA — the sample carried Phillies, WNBA and betting
+#       promotions. Would need its own filtering to be usable.
+#   NYT Basketball
+#       `[VERIFIED]` 10 items and stale; the sample led with a Knicks title celebration
+#       from the previous season.
+#   NBA.com, SI, Bleacher Report, SB Nation
+#       `[VERIFIED]` HTTP 404 at their documented feed paths. HoopsHype returns 406.
 
 
 class RssNewsAdapter(NewsSourceAdapter):
