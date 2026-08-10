@@ -45,10 +45,21 @@ from abc import ABC, abstractmethod
 import requests
 
 from models.schemas import NewsArticle
+from processing.validate import validate_summary
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_SUMMARY_CHARS = 1024
+
+# How many times to ask the model before giving up and using the headline list.
+#
+# `[VERIFIED]` 2026-08-10: `mistral:7b` passed validation on 3 of 5 attempts over the same
+# twelve articles. Two attempts therefore reach roughly 84%, three roughly 94%, at about 20
+# seconds each once the model is warm. Beyond that the returns are small and the wait grows.
+#
+# `[VERIFIED]` The first call of a run pays a cold model load -- measured at 490-668 seconds
+# against 16-19 for subsequent calls -- so a retry is far cheaper than the attempt before it.
+DEFAULT_ATTEMPTS = 3
 
 # `[VERIFIED]` 2026-08-06, all four models run against the same 15-article fixture with the
 # same prompts, scored on stories missed and names invented:
@@ -149,31 +160,60 @@ class Summarizer(ABC):
         """
 
     def summarise(
-        self, articles: list[NewsArticle], max_chars: int = DEFAULT_SUMMARY_CHARS
+        self,
+        articles: list[NewsArticle],
+        max_chars: int = DEFAULT_SUMMARY_CHARS,
+        attempts: int = DEFAULT_ATTEMPTS,
     ) -> str | None:
-        """Summarise articles, returning None if summarisation is unavailable.
+        """Summarise articles, retrying until the result survives validation.
 
-        None means "fall back to the headline list", not "fail the run". A summarizer that is
-        offline must degrade the brief exactly as a dead source does, never crash it
-        (`CLAUDE.md` §5 rule 6).
+        Returns None when no attempt produced something safe, which means "fall back to the
+        headline list", not "fail the run". A summarizer that is offline or unreliable must
+        degrade the brief exactly as a dead source does, never crash it (`CLAUDE.md` §5.6).
+
+        **Retry only makes sense because the check is mechanical.** `[VERIFIED]` 2026-08-10
+        `mistral:7b` passed validation on 3 of 5 attempts over the same articles, so a second
+        attempt turns roughly 60% into roughly 84%. Retrying without a check would simply
+        produce a different fabrication.
+
+        `[VERIFIED]` An earlier measurement on noisier input scored 0 of 3, and retry was
+        correctly rejected then — at a zero pass rate it only burns time. What changed is the
+        input, not the model: filtering retrospectives and capping per source left twelve
+        coherent current stories instead of a mix including 2017 highlight clips and
+        week-old articles.
         """
         if not articles:
             return None
 
-        try:
-            text = self._summarise(articles, max_chars)
-        except Exception:
-            logger.exception(
-                "%s failed; falling back to headline list", self.summarizer_name
-            )
-            return None
+        for attempt in range(1, max(1, attempts) + 1):
+            try:
+                text = self._summarise(articles, max_chars)
+            except Exception:
+                logger.exception(
+                    "%s failed on attempt %d; falling back to headline list",
+                    self.summarizer_name,
+                    attempt,
+                )
+                return None
 
-        cleaned = " ".join(text.split())
-        if not cleaned:
-            logger.warning("%s returned empty text", self.summarizer_name)
-            return None
+            cleaned = " ".join(text.split())
+            if not cleaned:
+                logger.warning("%s returned empty text", self.summarizer_name)
+                continue
 
-        return cleaned
+            result = validate_summary(cleaned, articles)
+            if result.is_safe:
+                if attempt > 1:
+                    logger.info("summary accepted on attempt %d", attempt)
+                return cleaned
+
+            logger.warning("attempt %d rejected (%s)", attempt, result.describe())
+
+        logger.warning(
+            "no attempt passed validation after %d tries; using the headline list",
+            attempts,
+        )
+        return None
 
 
 class OllamaSummarizer(Summarizer):

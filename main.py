@@ -41,7 +41,6 @@ from processing.highlights import find_notable_games
 from processing.newsworthy import drop_non_news
 from processing.priority import sort_by_priority
 from processing.summarize import OllamaSummarizer
-from processing.validate import validate_summary
 from storage.db import SeenStore
 
 logger = logging.getLogger("sportwire")
@@ -139,44 +138,31 @@ def main(argv: list[str] | None = None) -> int:
         # with an outlet is unaffected: those merged above, and the outlet leads them.
         story_groups = limit_per_source(story_groups)
 
-        # Off by default. `[VERIFIED]` 2026-08-06 every local model tested fabricated
-        # facts on live data — mistral:7b, the best of them, renamed Dillon Brooks to
-        # "Devin Booker", invented a "$3.3M" figure, and turned "Knicks executive Rosas"
-        # into "Steve Nash's right-hand man, Leon Rose". The headline list is never wrong,
-        # so it stays the default until a model earns the swap.
+        # On by default since 2026-08-10. `[VERIFIED]` mistral:7b now passes validation
+        # on 3 of 5 attempts, so with retries the brief carries written prose roughly 84%
+        # of the time and the headline list otherwise. It was off while that rate was 0/3;
+        # what changed is the input, not the model — filtering retrospectives and capping
+        # per source leaves twelve coherent current stories.
+        #
+        # The summarizer validates its own output and returns None when nothing passes, so
+        # a fabrication can never reach a phone: the worst case is the headline list.
         news_summary: str | None = None
-        if fresh_articles and args.summary:
+        if story_groups and not args.no_summary:
             # Only what the brief would actually show. `[VERIFIED]` 2026-08-08: summarising
-            # all 78 fetched articles meant 16 chunks and 17 model calls, which exceeded the
-            # 600s timeout and fell back to the headline list anyway. The brief displays 12,
-            # so the other 66 were summarised for nothing. Three sources produce far more
-            # volume than one, and the summariser has to respect the same cap the reader does.
-            to_summarise = fresh_articles[:DEFAULT_MAX_ARTICLES]
+            # everything fetched meant 16 chunks and 17 model calls, exceeding the timeout
+            # and falling back to the headline list anyway.
+            to_summarise = [group[0] for group in story_groups[:DEFAULT_MAX_ARTICLES]]
 
             summarizer = OllamaSummarizer(model=settings.ollama_model)
             logger.info(
-                "summarising top %d of %d articles via %s",
+                "summarising %d stories via %s",
                 len(to_summarise),
-                len(fresh_articles),
                 summarizer.summarizer_name,
             )
             news_summary = summarizer.summarise(to_summarise)
 
             if news_summary is None:
-                logger.warning("no summary produced; falling back to the headline list")
-            else:
-                # Every model tested fabricates (ADR-012). The check is mechanical, so a
-                # summary that invents a name or a figure fails closed to the headline list
-                # rather than reaching a phone.
-                result = validate_summary(news_summary, to_summarise)
-                if result.is_safe:
-                    logger.info("summary validated: %s", result.describe())
-                else:
-                    logger.warning(
-                        "summary rejected (%s); falling back to the headline list",
-                        result.describe(),
-                    )
-                    news_summary = None
+                logger.info("using the headline list")
 
         # --- format ------------------------------------------------------------
         # Head-to-head comes from what this instance has already recorded, not the API.
@@ -305,12 +291,11 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
-        "--summary",
+        "--no-summary",
         action="store_true",
         help=(
-            "EXPERIMENTAL: replace the headline list with an LLM-written paragraph. "
-            "Off by default because every local model tested fabricated player names and "
-            "figures on live data — see processing/summarize.py"
+            "skip the LLM summary and send the headline list. Useful when Ollama is "
+            "unavailable, or to compare the two forms"
         ),
     )
     parser.add_argument(

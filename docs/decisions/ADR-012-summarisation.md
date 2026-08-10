@@ -144,6 +144,48 @@ this is as much text as the summariser will ever get from published feeds.
 **The feature stays built, gated, and off.** The validator makes it safe; the pass rate makes
 it useless. Both facts are worth keeping, because the validator is the reusable part.
 
+## Reversed, 2026-08-10 — summarisation is now on by default
+
+**The reversal condition below was met, and by a route neither obvious nor anticipated: the
+input changed, not the model.**
+
+Re-measured on the same `mistral:7b`, five attempts over twelve stories:
+
+| Attempt | Result | Time |
+|---|---|---|
+| 1 | no output | 668s (cold load exceeded the timeout) |
+| 2 | **pass** | 490s |
+| 3 | **pass** | 16s |
+| 4 | rejected — invented "Jimmy Butler" | 16s |
+| 5 | **pass** | 19s |
+
+**3 of 5, against 0 of 3 previously.** Nothing about the model changed. What changed was
+what it was given: retrospectives and highlight clips are now filtered
+(`processing/newsworthy.py`), stale items are dropped by an age guard, stories covered by
+several outlets are merged (`processing/cluster.py`), and no source may lead more than four.
+The model receives twelve coherent current stories instead of a mix including 2017 highlight
+clips and week-old articles. `[INFERRED]` **Less noise in, less invention out** — which was
+not something the earlier evaluation predicted or looked for.
+
+**Retry is now worth doing, and only because the check is mechanical.** At a 0/3 rate it
+merely burned time; at 3/5 a second attempt reaches roughly 84% and a third roughly 94%.
+Retrying *without* validation would only produce a different fabrication.
+
+`[VERIFIED]` The safety property is unchanged and is what makes this defensible: the
+summarizer validates its own output and returns `None` when nothing passes, so the worst case
+is the headline list. A fabrication still cannot reach a phone.
+
+`[VERIFIED]` First production run with it enabled passed on attempt one — 1,060 characters,
+every name traceable to a source article.
+
+`[VERIFIED]` Runtime is bimodal rather than variable: 16–19s warm, 490–668s cold, because
+Ollama unloads the model when idle. The first call of each cron run pays that load; retries
+are cheap.
+
+**Still true, and worth keeping in view:** one attempt in five invents something. The
+validator catches it, but the underlying model is no more reliable than it was — the system
+around it is.
+
 ## Reversal condition
 
 Re-enable by default when a locally-runnable model passes the name-invention check across
