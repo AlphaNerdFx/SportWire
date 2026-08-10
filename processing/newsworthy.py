@@ -68,13 +68,21 @@ _INVISIBLE_CODEPOINTS = frozenset(
 # Any four-digit year that could name a past season.
 _YEAR = re.compile(r"\b(19[5-9]\d|20[0-4]\d)\b")
 
-# How far into a title a past year must appear to be treated as the *subject* rather than
-# context. `[VERIFIED]` 2026-08-08: this rule wrongly dropped "Pablo Torre on Ballmer's cap
-# circumvention: 'This is not a first-time offense. In 2015, Ballmer & the Clippers get
-# fined $250k...'" — current reporting that cites a past incident. A post genuinely *about*
-# an old event says so up front ("From 1987-1998, every team that won the finals..."), while
-# a current story reaches its historical aside mid-sentence.
-_YEAR_SUBJECT_WINDOW = 30
+# Quoted spans, in every quote character these feeds actually use.
+#
+# A year inside quotation marks is somebody *citing* the past; a year outside is what the
+# piece is *about*. `[VERIFIED]` 2026-08-10 this distinction is what separates two real
+# items that a position-based rule could not tell apart:
+#
+#   kept    Pablo Torre on Ballmer's cap circumvention: "This is not a first-time
+#           offense. In 2015, Ballmer & the Clippers get fined $250k..."
+#           -- current reporting; the year is inside the quote
+#   dropped After Leonard signed with the Clippers in 2019, Masai Ujiri was asked...
+#           -- a 2019 story; the year frames the sentence, outside any quote
+#
+# An earlier version only searched the first 30 characters, which kept the first correctly
+# and the second wrongly.
+_QUOTED = re.compile(r"[\"“‘'][^\"”’]{0,400}?[\"”’']")
 
 # Oldest an item may be and still count as news.
 #
@@ -106,7 +114,19 @@ RETROSPECTIVE_PHRASES = (
     "flashback",
     "remember when",
     "this day in",
+    # `[VERIFIED]` 2026-08-10: "During his NBA career, Bill Russell led the five best
+    # defenses ever..." reached a brief. It names no year in the title at all — the 1980
+    # reference sits in the body — so only the framing gives it away.
+    "during his career",
+    "during his nba career",
+    "in his career",
+    "career retrospective",
 )
+
+
+def _strip_quoted(text: str) -> str:
+    """Remove quoted spans, so only the piece's own words are searched."""
+    return _QUOTED.sub(" ", text)
 
 
 def _strip_invisible(text: str) -> str:
@@ -154,12 +174,11 @@ def is_newsworthy(article: NewsArticle, now: datetime | None = None) -> bool:
     if any(phrase in lowered for phrase in RETROSPECTIVE_PHRASES):
         return False
 
-    # Rule 2 — the title *opens* by naming a season that has already finished, which marks
-    # the post as being about that season. Only the title is searched, and only its first
-    # characters: a current story citing an old incident mid-sentence is still current.
+    # Rule 2 — the title names a finished season *outside* any quotation, which marks the
+    # post as being about that season rather than citing it.
     season = _current_season_year(now)
-    opening = title[:_YEAR_SUBJECT_WINDOW]
-    is_about_a_past_season = any(int(year) < season for year in _YEAR.findall(opening))
+    unquoted = _strip_quoted(title)
+    is_about_a_past_season = any(int(year) < season for year in _YEAR.findall(unquoted))
 
     return not is_about_a_past_season
 

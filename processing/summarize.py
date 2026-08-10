@@ -189,12 +189,19 @@ class Summarizer(ABC):
             try:
                 text = self._summarise(articles, max_chars)
             except Exception:
-                logger.exception(
-                    "%s failed on attempt %d; falling back to headline list",
+                # `[VERIFIED]` 2026-08-10 a production run got HTTP 500 from Ollama on the
+                # first attempt and gave up, delivering the headline list — an earlier
+                # version returned here instead of continuing. Request failures are the
+                # clearest case for retry: a 500 is transient, and a timeout has usually
+                # just finished loading the model, so the next attempt is warm and fast.
+                logger.warning(
+                    "%s errored on attempt %d of %d",
                     self.summarizer_name,
                     attempt,
+                    attempts,
+                    exc_info=True,
                 )
-                return None
+                continue
 
             cleaned = " ".join(text.split())
             if not cleaned:
