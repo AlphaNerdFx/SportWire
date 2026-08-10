@@ -101,9 +101,8 @@ def validate_summary(summary: str, articles: list[NewsArticle]) -> ValidationRes
 
     candidates: list[str] = []
     for sentence in _SENTENCE_BREAK.split(summary):
-        candidates.extend(
-            name.strip(" .,;:") for name in _PROPER_NAME.findall(sentence)
-        )
+        for name in _PROPER_NAME.findall(sentence):
+            candidates.append(_drop_leading_stopword(name.strip(" .,;:")))
 
     invented_names = [
         name
@@ -122,6 +121,57 @@ def validate_summary(summary: str, articles: list[NewsArticle]) -> ValidationRes
         invented_figures=invented_figures,
         has_preamble=bool(_PREAMBLE.match(summary.strip())),
     )
+
+
+# Words that are only capitalised because a sentence started with them. `[VERIFIED]`
+# 2026-08-11 a live summary was rejected for the invented name "In Detroit" — the sentence
+# began "In Detroit, ...", and the pattern swept the preposition into the name. Every
+# rejection costs a correct summary, so this specific artifact is worth removing.
+_SENTENCE_STARTERS = frozenset(
+    {
+        "in",
+        "on",
+        "at",
+        "the",
+        "a",
+        "an",
+        "and",
+        "but",
+        "for",
+        "with",
+        "after",
+        "before",
+        "meanwhile",
+        "elsewhere",
+        "also",
+        "however",
+        "while",
+        "as",
+        "by",
+        "from",
+        "to",
+        "of",
+        "this",
+        "that",
+        "these",
+        "those",
+        "his",
+        "her",
+        "their",
+    }
+)
+
+
+def _drop_leading_stopword(name: str) -> str:
+    """Strip a leading sentence-starter, so "In Detroit" is checked as "Detroit".
+
+    Only the first word, and only when something remains — "The Athletic" keeps its article
+    if stripping would leave nothing meaningful.
+    """
+    parts = name.split()
+    if len(parts) > 1 and parts[0].lower() in _SENTENCE_STARTERS:
+        return " ".join(parts[1:])
+    return name
 
 
 def _depossess(word: str) -> str:
