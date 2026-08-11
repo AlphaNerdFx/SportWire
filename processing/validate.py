@@ -188,17 +188,33 @@ def _depossess(word: str) -> str:
 def _grounded(name: str, source: str, source_lower: str) -> bool:
     """Whether a proper name is traceable to the sources.
 
-    Accepts the full phrase, or every individual word appearing somewhere, with possessives
-    normalised on both sides. "Golden State Warriors" is grounded by a source saying "the
-    Warriors"; "Devin Booker" is not grounded by a source mentioning neither Devin nor Booker.
+    Three ways to be grounded, in increasing generosity: the whole phrase appears, every
+    word appears, or the **last** word appears.
+
+    `[VERIFIED]` 2026-08-11 the last-word rule is what makes this usable. Requiring every
+    word rejected three live summaries for names that were entirely correct — "New York
+    Knicks" where the source said "Knicks", "Oklahoma City Thunder" where it said "Thunder",
+    and "Anthony Towns" where it said "Karl-Anthony Towns". Expanding a team's city or
+    shortening a hyphenated first name is good writing, not invention.
+
+    `[INFERRED]` The last word carries the identity — surname or team nickname — so it is
+    also what a fabrication gets wrong. Every measured fabrication fails this test: "Devin
+    Booker" against a source saying Brooks, "Joe Dumars" against one naming no Dumars, "Leon
+    Rose" against one naming Rosas. The failure mode it *would* miss is a wrong first name
+    beside a right surname, which is a smaller error than inventing a person.
     """
     if name.lower() in source_lower:
         return True
 
     normalised_source = _depossess_text(source_lower)
-    return all(
-        _depossess(word.lower()) in normalised_source for word in name.split() if word
-    )
+    words = [_depossess(word.lower()) for word in name.split() if word]
+    if not words:
+        return False
+
+    if all(word in normalised_source for word in words):
+        return True
+
+    return words[-1] in normalised_source
 
 
 def _depossess_text(text: str) -> str:
