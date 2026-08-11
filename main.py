@@ -39,8 +39,9 @@ from processing.cluster import group_related, limit_per_source
 from processing.dedup import deduplicate_articles, deduplicate_games
 from processing.highlights import find_notable_games
 from processing.newsworthy import drop_non_news
+from processing.openrouter import OpenRouterSummarizer
 from processing.priority import sort_by_priority
-from processing.summarize import OllamaSummarizer
+from processing.summarize import OllamaSummarizer, Summarizer
 from storage.db import SeenStore
 
 logger = logging.getLogger("sportwire")
@@ -153,7 +154,18 @@ def main(argv: list[str] | None = None) -> int:
             # and falling back to the headline list anyway.
             to_summarise = [group[0] for group in story_groups[:DEFAULT_MAX_ARTICLES]]
 
-            summarizer = OllamaSummarizer(model=settings.ollama_model)
+            # Hosted when a key is configured, local otherwise. `[VERIFIED]` local 7B
+            # fabrication repeats identically across attempts -- "Joe Dumars" invented three
+            # times from one Pistons story -- so retry cannot rescue it and parameter count
+            # is the only remaining lever (ADR-012).
+            summarizer: Summarizer
+            if settings.prefers_hosted_summariser:
+                summarizer = OpenRouterSummarizer(
+                    api_key=settings.openrouter_api_key,
+                    model=settings.openrouter_model,
+                )
+            else:
+                summarizer = OllamaSummarizer(model=settings.ollama_model)
             logger.info(
                 "summarising %d stories via %s",
                 len(to_summarise),

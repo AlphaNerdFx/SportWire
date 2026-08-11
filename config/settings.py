@@ -36,6 +36,10 @@ DEFAULT_POLL_INTERVAL_HOURS = 8
 DEFAULT_DEDUP_WINDOW_HOURS = 168
 DEFAULT_OLLAMA_MODEL = "mistral:7b"
 
+# Hosted summarisation, used when a key is present. Free tier, open-weight model, 262k
+# context — see processing/openrouter.py and ADR-012.
+DEFAULT_OPENROUTER_MODEL = "google/gemma-4-31b-it:free"
+
 
 class SettingsError(RuntimeError):
     """Raised when configuration is missing or malformed.
@@ -61,6 +65,8 @@ class Settings:
     poll_interval_hours: int = DEFAULT_POLL_INTERVAL_HOURS
     dedup_window_hours: int = DEFAULT_DEDUP_WINDOW_HOURS
     ollama_model: str = DEFAULT_OLLAMA_MODEL
+    openrouter_api_key: str = ""
+    openrouter_model: str = DEFAULT_OPENROUTER_MODEL
 
     @classmethod
     def from_env(cls, env_file: str | Path | None = None) -> Settings:
@@ -88,12 +94,24 @@ class Settings:
                 "DEDUP_WINDOW_HOURS", DEFAULT_DEDUP_WINDOW_HOURS
             ),
             ollama_model=_text("OLLAMA_MODEL") or DEFAULT_OLLAMA_MODEL,
+            openrouter_api_key=_text("OPENROUTER_API_KEY"),
+            openrouter_model=_text("OPENROUTER_MODEL") or DEFAULT_OPENROUTER_MODEL,
         )
 
     @property
     def can_fetch_games(self) -> bool:
         """Whether game fetching is configured. False degrades the brief, it does not fail."""
         return bool(self.balldontlie_api_key)
+
+    @property
+    def prefers_hosted_summariser(self) -> bool:
+        """Whether a hosted summarizer is configured.
+
+        Presence of the key is the switch. `[INFERRED]` Someone who has gone to the trouble
+        of obtaining one wants it used; making them set a second flag as well would be
+        configuration for its own sake.
+        """
+        return bool(self.openrouter_api_key)
 
     @property
     def can_deliver(self) -> bool:
