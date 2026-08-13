@@ -12,6 +12,8 @@ model; everything imports from `models.schemas`.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +24,54 @@ from ingestion.rss_news import RssNewsAdapter
 from models.schemas import GameData, NewsArticle
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+# A fixed "now", so "is this too old" is arithmetic rather than a race against the clock.
+# August is deliberate: the deleted year rule treated pre-October as the previous season, and
+# that off-by-one is exactly what a test pinned to the current date would hide half the year.
+NOW = datetime(2026, 8, 13, 16, 0, tzinfo=timezone.utc)
+
+
+@pytest.fixture
+def now() -> datetime:
+    """The fixed "current time" that `make_article` measures article age against.
+
+    Exposed as a fixture rather than imported from this module, so tests do not depend on
+    `tests/` happening to be importable — that varies with pytest's rootdir and import mode.
+    """
+    return NOW
+
+
+@pytest.fixture
+def make_article() -> Callable[..., NewsArticle]:
+    """Build a real `NewsArticle`, for tests that need a specific title or summary.
+
+    One factory rather than one per test module. `[VERIFIED]` The legacy repo defined
+    `NewsArticle` in four places, one of them inside its own `conftest.py`, and the copies
+    drifted silently because Python raises no error when four modules define one class
+    (`OPERATING_RULES.md` §5). Two factories with different defaults would drift the same way:
+    a test asserting on "recent" articles would quietly mean something different per file.
+
+    Nothing here defines a shape — this constructs `models.schemas.NewsArticle`, so a schema
+    change breaks these tests rather than sliding past them.
+    """
+
+    def build(
+        title: str,
+        *,
+        summary: str = "",
+        hours_old: float = 2.0,
+        source: str = "r/nba",
+    ) -> NewsArticle:
+        return NewsArticle(
+            article_id=f"id-{abs(hash((title, summary)))}",
+            title=title,
+            url="https://example.com/story",
+            summary=summary,
+            published_at=NOW - timedelta(hours=hours_old),
+            source=source,
+        )
+
+    return build
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
