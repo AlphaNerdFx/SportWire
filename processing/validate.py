@@ -102,7 +102,7 @@ def validate_summary(summary: str, articles: list[NewsArticle]) -> ValidationRes
     candidates: list[str] = []
     for sentence in _SENTENCE_BREAK.split(summary):
         for name in _PROPER_NAME.findall(sentence):
-            candidates.append(_drop_leading_stopword(name.strip(" .,;:")))
+            candidates.append(_trim_name_for_reporting(name.strip(" .,;:")))
 
     invented_names = [
         name
@@ -125,8 +125,20 @@ def validate_summary(summary: str, articles: list[NewsArticle]) -> ValidationRes
 
 # Words that are only capitalised because a sentence started with them. `[VERIFIED]`
 # 2026-08-11 a live summary was rejected for the invented name "In Detroit" — the sentence
-# began "In Detroit, ...", and the pattern swept the preposition into the name. Every
-# rejection costs a correct summary, so this specific artifact is worth removing.
+# began "In Detroit, ...", and the pattern swept the preposition into the name.
+#
+# ~~Every rejection costs a correct summary, so this specific artifact is worth removing.~~
+# **Corrected 2026-08-13 (TASKS.md P6).** `[VERIFIED]` by mutation: disabling the trim below
+# changes **no** pass/fail outcome in the test suite. `[INFERRED]` It cannot, by construction
+# — it strips only a name's *first* word, while `_grounded` decides on the *last*, so a
+# grounded name stays grounded and an ungrounded one stays ungrounded either way. Commit
+# `7323396` (last-word grounding, 2026-08-12) made this redundant as a correctness mechanism
+# one day after `c522d8e` added it; both were fixing the same live symptom, so neither had
+# reason to look at the other.
+#
+# It is kept for **diagnosis**: a log reading `invented names: Portland` points at the real
+# problem, while `In Portland` sends the reader after a preposition. Asserted in
+# `tests/test_validate.py::test_sentence_initial_preposition_is_stripped_from_the_reported_name`.
 _SENTENCE_STARTERS = frozenset(
     {
         "in",
@@ -162,8 +174,12 @@ _SENTENCE_STARTERS = frozenset(
 )
 
 
-def _drop_leading_stopword(name: str) -> str:
-    """Strip a leading sentence-starter, so "In Detroit" is checked as "Detroit".
+def _trim_name_for_reporting(name: str) -> str:
+    """Strip a leading sentence-starter, so "In Detroit" is *reported* as "Detroit".
+
+    **Verdict-neutral.** `[VERIFIED]` This cannot change whether a name is judged invented —
+    see the note above `_SENTENCE_STARTERS`. It exists so the log names the thing that is
+    actually ungrounded.
 
     Only the first word, and only when something remains — "The Athletic" keeps its article
     if stripping would leave nothing meaningful.

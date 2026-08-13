@@ -108,7 +108,7 @@ stop citing them as documents; do not assume a reader can open one.
 | 002 | Telegram, not WhatsApp — no per-message cost, no ban risk | no |
 | 003 | balldontlie for games; `cdn.nba.com` is dead (403 from every network) | **yes** |
 | 004 | SQLite. Reaffirmed against a Postgres proposal — open-sourcing *strengthens* the case | no |
-| 005 | Semantic dedup declined **on evidence**: 612 real cross-source pairs, max similarity 0.439 | no |
+| 005 | Semantic dedup declined **on evidence**: ~~612 pairs, max 0.439~~ → **540 pairs, max 0.425** (corrected 2026-08-13, P8: the original was measured live and does not reproduce from the committed fixtures; the decision is unchanged and slightly stronger) | no |
 | 006 | **Superseded.** Human writes interfaces, agent writes bodies — reversed 2026-08-05 (§4) | no |
 | 009 | ESPN RSS for news — a published feed is an invitation; scraping is not | **yes** |
 | 010 | No individual player statistics. Every free source blocked, paywalled or ToS-barred | **yes** |

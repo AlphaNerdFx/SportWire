@@ -35,11 +35,23 @@ from models.schemas import GameData, NewsArticle
 logger = logging.getLogger(__name__)
 
 # `[VERIFIED]` 2026-08-06, measured once CBS Sports was added as a second feed — this value
-# was previously `[UNKNOWN]` pending exactly that. Across **612 real cross-source pairs**
-# (17 ESPN × 36 CBS), the highest similarity was **0.439**. Zero pairs would collapse at any
+# was previously `[UNKNOWN]` pending exactly that. ~~Across **612 real cross-source pairs**
+# (17 ESPN × 36 CBS), the highest similarity was **0.439**.~~ Zero pairs would collapse at any
 # threshold down to 0.50, and below that genuinely unrelated stories begin merging: "Sources:
 # Knicks executive Rosas leaving team" and "Why the 76ers have the Celtics and Knicks to
 # thank for landing LeBron" score 0.420.
+#
+# **Corrected 2026-08-13 (TASKS.md P8).** `[VERIFIED]` Re-measured from the committed
+# fixtures: **540 pairs (15 ESPN × 36 CBS), highest similarity 0.425.** The struck figures
+# came from a *live* ESPN fetch of 17 items; the saved fixture holds 15, so nothing in this
+# repository reproduces them. The conclusion is unchanged and slightly stronger — 0.425 is
+# further from 0.85 than 0.439 — but a load-bearing number was recorded from data that was
+# never committed, which is the failure `OPERATING_RULES.md` §2 exists to prevent, benign
+# this time.
+#
+# `tests/test_dedup.py::test_real_cross_source_pairs_do_not_collapse` now recomputes this on
+# every run, so the threshold is guarded by arithmetic over real headlines rather than by
+# this comment.
 #
 # `[INFERRED]` The assumption behind pass 2 was wrong in a structural way: outlets write
 # their own headlines rather than syndicating one. Two outlets covering the same signing

@@ -120,7 +120,7 @@ def test_sentence_initial_preposition_is_stripped_from_the_reported_name(
 
     **This test asserts the log text, not the verdict, and that is deliberate.**
 
-    `[VERIFIED]` 2026-08-13, by mutation: disabling `_drop_leading_stopword` changes no
+    `[VERIFIED]` 2026-08-13, by mutation: disabling `_trim_name_for_reporting` changes no
     pass/fail outcome in this suite. `[INFERRED]` It cannot, by construction — stripping the
     *first* word never changes the *last* word, and `_grounded` returns True whenever the last
     word appears in the sources. If the last word is grounded both forms pass; if it is not,

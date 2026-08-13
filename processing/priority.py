@@ -97,8 +97,20 @@ LOW_SIGNALS = frozenset(
 
 _TIER_ORDER = {"high": 0, "medium": 1, "low": 2}
 
-# Word-boundary matching. Substring matching would classify "signs of improvement" as a
-# signing and "designated" as containing "sign".
+# Word-boundary matching. ~~Substring matching would classify "signs of improvement" as a
+# signing and "designated" as containing "sign".~~
+#
+# **Corrected 2026-08-13 (TASKS.md P7).** Only the second example holds. `[VERIFIED]`
+# `classify()` on the three real shapes: "Coach praises the designated starter" → medium, so
+# word matching does fix that one; "Jokic signs a max extension" → high, correct; but
+# **"Curry shows signs of improvement in return" → high**, which the original comment claimed
+# this pattern prevents. It cannot: `signs` *is* a standalone word there, so no
+# boundary-matching scheme can tell it apart from a transaction.
+#
+# `[INFERRED]` Left as-is deliberately. The cost is one story ranked high that should be
+# medium, in a list nothing is dropped from, and this project's record (P3, twice) is that
+# narrowing a keyword rule produces invisible false negatives — a worse error than a visible
+# false positive.
 _WORD_PATTERN = re.compile(r"[a-zà-ÿ'-]+")
 
 
