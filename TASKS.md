@@ -409,8 +409,36 @@ what each turned into, since several changed shape on contact with real data.
       adding scores to `make_game`'s derived `game_id` made one game at half time and at full
       time read as two different games, breaking `test_a_game_whose_score_changed_is_not_a_duplicate`.
       `game_id` identifies a game; `state_hash` distinguishes its states. Reverted.
-  - [ ] `summarize.py`, `storage/db.py`, `settings.py`, both RSS parsers,
-    the Telegram message splitter.
+  - [x] **`summarize.py`** — 2026-08-13, commit pending. 20 tests, **no model and no
+    network**. The largest module in `processing/` and the least verifiable — what
+    `mistral:7b` writes on a given night cannot be asserted — but both recorded bugs here
+    were in the machinery around it, and that is fully testable.
+    - `[VERIFIED]` The `Summarizer` ABC is what makes this possible: `_summarise` is the only
+      abstract piece, so a stub subclass exercises the retry-and-validate loop with no Ollama
+      running. This is the `_fetch`/`fetch` pattern in a second place — H13 Q2 asked why that
+      split exists and the answer did not land; these tests are what it buys.
+    - Proof: `make check` → **126 passed, 1 xfailed**.
+    - Proof — `[VERIFIED]` mutation results, all five caught:
+
+      | Mutation | Result |
+      |---|---|
+      | give up on the first request failure (the 08-10 bug) | 1 failed |
+      | `_tidy` flattens paragraphs again (the 08-12 bug) | 2 failed |
+      | validation bypassed entirely | 3 failed |
+      | chunking disabled | 1 failed |
+      | note preamble no longer discarded | 1 failed |
+
+    - `[VERIFIED]` The `_tidy` mutation **silently failed to apply on the first try** (shell
+      escaping), and its "20 passed" was meaningless rather than reassuring. Re-run properly
+      it fails 2 tests. `[INFERRED]` A mutation that does not apply looks exactly like a
+      mutation the suite survived — worth asserting `s != before` in every mutation script,
+      which is now done.
+
+  **`processing/` is covered.** `[VERIFIED]` 7 of 8 modules have behaviour tests; the eighth,
+  `openrouter.py`, is dormant until an API key exists and is not on `SESSION.md` §8's list.
+
+  - [ ] **Outside `processing/`, still uncovered** (all from `SESSION.md` §8): `storage/db.py`,
+    `config/settings.py`, both RSS parsers, the Telegram message splitter.
   - Proof:
 
 - [x] **P2. Verify the paragraph and subject-grouping prompt.** — 2026-08-13, **provisionally**
