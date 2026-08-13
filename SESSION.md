@@ -1,12 +1,16 @@
 # SESSION.md — Current Working State
 
-**Last updated:** 2026-08-03
-**Session type:** Architectural review and forensic audit. **No code was written or modified
-in this session.**
-**Next session should begin with:** the prompt in §10.
+**Last updated:** 2026-08-13
+**Repository:** https://github.com/AlphaNerdFx/SportWire (public)
+**Next session should begin with:** §10.
 
-> **Evidence tags used throughout:** `[VERIFIED]` = observed directly. `[INFERRED]` = reasoned
-> from stated evidence. `[UNKNOWN]` = not known; do not guess. See `CLAUDE.md` §0.
+> **Evidence tags:** `[VERIFIED]` = a command was run and its output seen. `[INFERRED]` =
+> reasoned from stated evidence. `[UNKNOWN]` = not known; do not guess. `CLAUDE.md` §0.
+>
+> **Tags expire.** A `[VERIFIED]` claim from a previous session is `[Likely]` today —
+> external services change. `OPERATING_RULES.md` §2. This has already cost this project one
+> full data source: `cdn.nba.com` was documented as working "from anywhere" and returns 403
+> from every network tried.
 
 ---
 
@@ -14,393 +18,287 @@ in this session.**
 
 | Field | Value |
 |---|---|
-| **Name** | SportWire — NBA/NFL News & Games Retrieval Assistant. `[VERIFIED]` Renamed from "OpenClaw" 2026-08-04: that name collides with an established open-source project (a *Captain Claw* game reimplementation) — `pypi.org/pypi/openclaw` and `github.com/openclaw` both return HTTP 200 — which would bury this repo in search results. `sportwire` is free on both. |
-| **Purpose** | Aggregate NBA and NFL news and game data from multiple sources, deduplicate stories, summarize them, and deliver a periodic brief to the operator's phone. |
-| **End goal** | A publishable, generalizable open-source repo, plus — weighted higher — the operator learning system design, end-to-end development, DevOps fundamentals, and agentic coding practice. |
-| **Stage** | Pre-implementation. Architecture decided; clean repository not yet created. |
-| **Progress (clean repo)** | `[VERIFIED]` 0%. It does not exist. |
-| **Progress (legacy repo)** | `[INFERRED]` 15–25% of a much larger design, of which a large fraction is duplicated or superseded. **No end-to-end path has ever executed.** |
-| **Runtime target** | `[VERIFIED]` Operator's own Windows machine via WSL2 Ubuntu, Python 3.10, `.venv`. Not cloud. Possible later port to phone. |
+| **Name** | SportWire — NBA news and game-data brief, delivered to Telegram |
+| **Stage** | **Working and running unattended.** Cron delivers every 8 hours. |
+| **Repo** | Public, MIT, CI green. `[VERIFIED]` 15 issues: 13 open, #6 and #14 closed |
+| **Runtime** | `[VERIFIED]` WSL2 Ubuntu, Python 3.10.12, `.venv` (68 MB, 21 packages) |
+| **Sources** | ESPN, CBS Sports, Yahoo Sports, r/nba (news); balldontlie (games) |
+| **Delivery** | Telegram `@sportwire_news_bot`, three messages, one notification |
 
 ---
 
-## 2. What Actually Happened This Session
+## 2. What exists and works
 
-The operator arrived with `HANDOFF.md`, an architecture PDF, and a flow diagram, all
-produced in a prior session with a different model. He believed the project was substantially
-built. The session established that it is not.
+`[VERIFIED]` All of the following has run in production, unattended, on a schedule:
 
-**Method:** cross-checking the documents against each other and against a full `tree` of the
-repository. No Python source was read. This is a limitation of the findings below and is
-stated explicitly rather than papered over.
-
----
-
-## 3. Forensic Findings
-
-### 3.1 The prior handoff document is not a description of the repository
-
-`[VERIFIED]` `HANDOFF.md` omits, among others: `schemas/`, `services/`, `Dockerfile`,
-`docker-compose.yml`, `run_pipeline.py`, `delivery/messenger_os.py`, `storage/models.py`, and
-eleven files inside `ingestion/`. It presents a clean arrangement that does not exist on disk.
-
-`[VERIFIED]` Internal contradictions between the handoff and the architecture PDF:
-
-| Claim | `HANDOFF.md` | Architecture PDF |
-|---|---|---|
-| Dedup window | 48-hour lexical window | 8-hour semantic window |
-| WhatsApp path | Evolution-API / Twilio | Meta API / WhatsApp Business API |
-
-`[INFERRED]` These are mutually exclusive. Evolution API is an unofficial Baileys-based bridge;
-Twilio and Meta Business API are licensed paths. A single module cannot be both. The
-documents were generated, not observed.
-
-`[INFERRED]` The narrative in `HANDOFF.md` §4 ("Everything We've Tried and Failed") — memory
-saturation from in-memory vector loops, an `ArticleChunk` sharded schema, corrupted rows from
-a shared insertion endpoint — reads as lived history but no artifact confirms any of it.
-**Treat all of it as unverified.** Designing around fabricated constraints is worse than
-designing around none.
-
-### 3.2 Nine concerns are implemented two or three times over
-
-`[VERIFIED]` from the directory listing:
-
-| Concern | Competing implementations |
+| Module | Job |
 |---|---|
-| Article schema | `ingestion/schemas.py`, `models/schemas.py`, `schemas/normalized.py`, `ingestion/models.py` |
-| ORM models | `database/models.py`, `storage/models.py`, `ingestion/models.py` |
-| Orchestrator | `ingestion/orchestrator.py`, `pipeline/orchestrator.py` |
-| Normalizer | `ingestion/normalization.py`, `ingestion/normalizer.py` |
-| DB connection | `database/connection.py`, `storage/database.py` |
-| NBA fetching | `ingestion/nba_client.py`, `ingestion/apis/nba_stats.py`, `ingestion/adapters/nba_api_adapter.py` |
-| NFL fetching | `ingestion/nfl_client.py`, `ingestion/apis/nfl_stats.py` |
-| WhatsApp delivery | `delivery/whatsapp_os.py`, `services/whatsapp_gateway.py` |
-| Routing | `delivery/router.py`, `ingestion/subrouters.py` |
-| Entrypoint | `run_pipeline.py`, `ingestion/run_ingestion.py` |
+| `config/settings.py` | The only place `.env` is read. Paths anchored to `PROJECT_ROOT`, not the cwd. |
+| `models/schemas.py` | `GameData`, `NewsArticle`, `GameHighlight`, `SeriesContext`. All frozen. |
+| `ingestion/base.py` | Two source ABCs. `fetch()` owns the try/except so adapters cannot skip it. |
+| `ingestion/rss_news.py` | One adapter, four feeds. Reads **both** RSS 2.0 and Atom. |
+| `ingestion/nba_games.py` | balldontlie games, per-period scores, team ids as a side channel. |
+| `processing/newsworthy.py` | **The only module that removes articles.** Age, content tags, retrospective phrases. |
+| `processing/dedup.py` | Pass 1 exact id across runs; pass 2 near-identical titles within a run. |
+| `processing/priority.py` | Sorts high/medium/low, with tonight's teams as a within-tier tiebreaker. |
+| `processing/cluster.py` | Groups articles covering one story; caps stories per source. |
+| `processing/highlights.py` | Comeback, overtime, closest finish, wire-to-wire, biggest quarter, second-half takeover. |
+| `processing/summarize.py` | `Summarizer` ABC + Ollama, map-reduce chunking, validated retry. |
+| `processing/validate.py` | Checks every name and figure against sources. **Fails closed.** |
+| `processing/openrouter.py` | Hosted summarizer, dormant until a key exists. |
+| `storage/db.py` | Seen-ids, game results, local head-to-head. |
+| `delivery/` | `DeliveryChannel` ABC, Telegram, stdout, three-message formatting. |
+| `main.py` | The single entrypoint. The only file naming a concrete class. |
 
-`[VERIFIED]` `ingestion/normalization.py` **and** `ingestion/normalizer.py` both have compiled
-bytecode, meaning both were imported in the same interpreter session. The handoff's claim of
-"uniform data definitions enforced by strict base adapter interfaces" cannot hold when four
-modules define the article shape.
+---
 
-### 3.3 Bytecode proves which layers have never run
+## 3. How it is operated
 
-`[VERIFIED]` Bytecode writing was clearly enabled (`ingestion/` and `storage/` are full of
-`.pyc` files). Directories with **no `__pycache__` at all** contain code that has never been
-imported:
+`[VERIFIED]` Cron, every 8 hours, surviving terminal closes and running unattended for days:
 
-| Directory | Files | Implication |
+```cron
+0 */8 * * * cd "/mnt/c/DSC/.../SportWire" && ./.venv/bin/python main.py >> ".../logs/sportwire.log" 2>&1
+```
+
+Logs live in `logs/` (gitignored) rather than `/tmp`, which WSL clears on restart.
+
+```bash
+make dry-run   # fetch and print, send nothing, record nothing
+make run       # fetch and send now
+make check     # ruff + pytest, exactly what CI runs
+```
+
+`[Likely]` The one fragility: WSL cron stops if the WSL instance shuts down. If briefs stop
+with no error, check `service cron status` first. `docs/SCHEDULING.md` §Option B has a
+Windows Task Scheduler command that survives reboots.
+
+---
+
+## 4. The working agreement (changed mid-project — read this)
+
+`[VERIFIED]` ADR-006 originally specified that the human writes signatures, docstrings and
+test assertions while the agent writes only bodies. **The operator reversed this on
+2026-08-05:** *"You'll write the code not me."*
+
+`OPERATING_RULES.md` §0 now governs:
+
+- **The agent writes the code, tests and documentation. The operator does not.**
+- **The agent never sets the operator code to write** — not as a task, remedy or exercise.
+  `[VERIFIED]` This has already been violated once: after the reversal, the agent proposed
+  the operator rewrite `processing/dedup.py` as a remedy for a failed knowledge check. That
+  was the superseded contract returning under another name.
+- **The agent explains as it goes**, at the point a concept first appears.
+- **Understanding is still required and still ranked above shipping** (`CLAUDE.md` §1). It is
+  demonstrated by explaining, not authoring.
+- When an explanation does not land, that is evidence the **code** is too clever. Simplify
+  it; do not retest the operator.
+
+---
+
+## 5. Decisions
+
+`[VERIFIED]` **Only six ADRs exist as files:** 003, 009, 010, 011, 012, 013
+(`ls docs/decisions/`). Decisions 001–008 were taken on 2026-08-03 and recorded **in this
+table only** — the numbering implies files that were never written. Either backfill them or
+stop citing them as documents; do not assume a reader can open one.
+
+| ADR | Decision | File? |
 |---|---|---|
-| `ingestion/scrapers/` | `espn.py`, `hoopshype.py`, `base.py` | **No web scraping has ever run.** |
-| `ingestion/apis/` | `nba_stats.py`, `nfl_stats.py`, `sports_clients.py` | **No stats API call has ever run.** |
-| `delivery/` | `router.py`, `whatsapp_os.py`, `messenger_os.py`, `base.py` | **The entire delivery layer has never executed.** |
-| `services/` | `llm_summarizer.py`, `whatsapp_gateway.py` | **Nothing has ever been summarized.** |
-| `config/` | `settings.py` | **No configuration has ever been loaded by running code.** |
-| `ingestion/adapters/` | `web_scraper_adapter.py` only | The other two adapters have bytecode; this one has never run. |
-
-`[VERIFIED]` What *has* run: `storage/`, `database/`, `ingestion/deduplicator.py`,
-`ingestion/base.py`, and the test suite — i.e. exactly the components that can execute without
-touching the outside world.
-
-`[INFERRED]` Caveat that keeps this honest: a file executed directly as `python file.py` does
-not write its own `.pyc`, which explains `run_pipeline.py`. That exception does not apply to
-modules inside packages, so the table above stands.
-
-### 3.4 The test suite is not evidence
-
-`[VERIFIED]` 12 test files exist. The operator has run only the ones an AI agent suggested —
-the author of the code selected the exam. `[VERIFIED]` `test_ingestion_setup.py` passed in
-3.32s; that runtime is incompatible with any network or database I/O, so it asserted imports
-and class existence only. `[VERIFIED]` The operator has never run the full project.
-
-### 3.5 Root cause
-
-`[INFERRED]` The generating agent exceeded its context window mid-project, lost track of
-`ingestion/nba_client.py`, and wrote `ingestion/apis/nba_stats.py` for the same job, then
-`adapters/nba_api_adapter.py` again. Python raises no error when four modules define the same
-class, so the failure was silent and cumulative.
-
-**Lesson recorded:** agents do not fail loudly on architectural drift; they fail by accretion.
-The defenses are a small surface area, a single entrypoint, a duplicate-check before every
-file creation, and a human who reads the diff.
+| 001 | Fork clean rather than salvage the prototype | no |
+| 002 | Telegram, not WhatsApp — no per-message cost, no ban risk | no |
+| 003 | balldontlie for games; `cdn.nba.com` is dead (403 from every network) | **yes** |
+| 004 | SQLite. Reaffirmed against a Postgres proposal — open-sourcing *strengthens* the case | no |
+| 005 | Semantic dedup declined **on evidence**: 612 real cross-source pairs, max similarity 0.439 | no |
+| 006 | **Superseded.** Human writes interfaces, agent writes bodies — reversed 2026-08-05 (§4) | no |
+| 009 | ESPN RSS for news — a published feed is an invitation; scraping is not | **yes** |
+| 010 | No individual player statistics. Every free source blocked, paywalled or ToS-barred | **yes** |
+| 011 | Slice 1 retrospective | **yes** |
+| 012 | Summarisation: off → **on**, with a validator and retry | **yes** |
+| 013 | OpenClaw may orchestrate SportWire externally, but must never be a dependency | **yes** |
 
 ---
 
-## 4. Current State by Category
+## 6. Where the summarizer actually stands
 
-### Completed
-- `[VERIFIED]` Architectural direction decided (see §5).
-- `[VERIFIED]` External-service constraints researched and confirmed (NBA IP/TLS blocking;
-  WhatsApp per-message pricing and BSP requirement).
-- `[VERIFIED]` Legacy repo audited at directory level.
+This consumed most of 2026-08-06 to 08-12 and the state is nuanced.
 
-### Partially complete
-- `[INFERRED]` Legacy `storage/` and `ingestion/deduplicator.py` contain code that at least
-  imports and runs under test. Whether it is *correct* is `[UNKNOWN]` — no line has been read.
+**On, by default, using `mistral:7b` locally.** Every summary is checked by
+`processing/validate.py` before it can be delivered; a failed check falls back to the
+headline list. `[VERIFIED]` **No fabrication has ever reached the phone.**
 
-### Not started
-- Clean repository. Vertical slice. Telegram delivery. Persistence. Summarization.
-  NFL sources. Scheduling. ADR folder.
+**What made it work was cleaning the input, not changing the model.** `[VERIFIED]` The same
+`mistral:7b` went from 0/3 to 3/5 on validation after retrospectives were filtered, stale
+articles dropped, duplicate coverage merged and sources capped.
 
-### Blockers
+**Two of my own bugs looked like model failures and were not:**
 
-| ID | Blocker | Severity | Resolution |
-|---|---|---|---|
-| B1 | Clean repo does not exist. | Critical | Task C1–C3 in `TASKS.md`. |
-| B2 | `[UNKNOWN]` whether legacy `.gitignore` exists and whether `.env` / `__pycache__` are in git history. **Blocks open-sourcing the legacy repo.** | High | `git log --all --name-only \| grep -i "\.env\|\.pyc"` |
-| B3 | `[UNKNOWN]` how many `NewsArticle` definitions actually exist in source (directory names imply four; unconfirmed). | Medium | `grep -rn "class NewsArticle" --include="*.py" .` |
-| B4 | Telegram bot token and chat ID not yet obtained. | Medium | Operator creates bot via @BotFather. |
-| B5 | Operator cannot yet explain the adapter pattern / dependency inversion, or DB migrations. Both are load-bearing in the target design. | Medium (learning-goal blocker) | Teach inline at first use; do not assume. |
+- `[VERIFIED]` The validator required *every* word of a name to appear in the sources, so it
+  rejected "New York Knicks" whenever a source wrote "Knicks". Three correct summaries were
+  thrown away. Grounding now accepts the **last** word — the identifying one.
+- `[VERIFIED]` `" ".join(text.split())` collapsed newlines, so a multi-paragraph summary
+  arrived as one block and the prompt looked ignored.
 
----
+**Genuine model failures that remain:** `[VERIFIED]` `mistral:7b` invented "Joe Dumars" on
+three consecutive attempts from a Pistons story — pattern-completing from training priors.
+**Retry assumes independent failures and cannot help when the error repeats identically.**
 
-## 5. Decisions Made This Session
+### `[VERIFIED]` 2026-08-13, from `logs/sportwire.log` — read this before quoting a pass rate
 
-Each should become an ADR file in `docs/decisions/` in the clean repo.
+Two consecutive scheduled runs, and they disagree:
 
-### ADR-001 — Fork clean rather than salvage
-- **Decision:** Freeze the legacy repo on a `legacy` branch. Start a new repository. Copy files
-  across one at a time, only when a slice needs them, and only after the human has read them.
-- **Why:** `[VERIFIED]` Nine duplicated concerns and a delivery layer that has never executed.
-  Untangling four article schemas the operator cannot yet read costs more than writing ~150
-  lines fresh.
-- **Alternatives considered:** (a) Incremental refactor in place — rejected: every future bug
-  would have three plausible causes in three files. (b) Delete outright — rejected: the legacy
-  repo is a genuine portfolio artifact and a reference for parts that may be salvageable.
-- **Tradeoff:** Loses whatever working code exists in `storage/`. Accepted, because that code
-  serves a scale problem the project does not have.
-- **Reversal condition:** If reading `storage/repository.py` and `ingestion/deduplicator.py`
-  shows genuinely correct, tested logic, copy those two files rather than rewriting them.
+| Run | Result |
+|---|---|
+| **00:00** | **0 of 3.** `invented names: Ayo Dosunmu, Kofi Cockburn, Dallas` → `Ayo Dosunmu` → `Ayo Dosunmu, Trent Frazier, Dallas`. Fell back to headlines. |
+| **08:00** | **Passed.** No rejection logged, delivered. |
 
-### ADR-002 — Telegram before WhatsApp
-- **Decision:** v1 delivers via Telegram Bot API. WhatsApp becomes an optional second adapter.
-- **Why:** `[VERIFIED]` WhatsApp Business API bills every business-initiated message with no
-  free tier and requires a BSP (violates C2). `[INFERRED]` Unofficial bridges risk a permanent
-  ban of the operator's personal number and cannot be published (violates C3).
-- **Alternatives:** WhatsApp Business API via low-margin BSP (rejected: recurring cost);
-  Evolution API / Baileys (rejected: ToS, ban risk, unpublishable); email/SMS (rejected: worse
-  UX, SMS also costs).
-- **Tradeoff:** Departs from the original diagram, which the operator is attached to. Mitigated
-  by the delivery-adapter interface — swapping channels later is a small change, and building
-  that swap is itself the adapter-pattern lesson (addresses B5).
+Three things follow, and the third is the one that matters:
 
-### ADR-003 — `cdn.nba.com` on the critical path, `stats.nba.com` as optional enrichment
-- **Why:** `[VERIFIED]` `stats.nba.com` is blocked on datacenter IPs and behind Akamai TLS
-  fingerprinting; `cdn.nba.com` live endpoints are unprotected. `[INFERRED]` The operator's
-  residential IP hides this problem today, which makes it more dangerous, not less — the repo
-  would be unusable for anyone who clones it.
-- **Tradeoff:** Less historical/statistical depth in v1. Accepted.
+1. **The "~84%" figure quoted elsewhere is not supported.** It came from 3/5 on one sitting.
+   Two runs later the observed rate is 1/2 and the confidence interval on either number is
+   far too wide to quote. `[UNKNOWN]` The real rate. Count over the soak; do not restate 84%.
+2. `[VERIFIED]` **The identical-repeat failure mode is confirmed, not a one-off.** "Ayo
+   Dosunmu" was invented on all three attempts. `[Likely]` Dosunmu, Cockburn and Frazier were
+   Illinois teammates — the model is emitting a **co-occurrence cluster** from training, so
+   one hallucinated name drags in its associates. `[INFERRED]` Retry cannot fix this by
+   construction: it assumes independent failures.
+3. `[VERIFIED]` **It is slow.** The failed run spent **19 minutes** on three attempts before
+   falling back; the successful one took 12. Roughly 5–9 minutes per attempt on 12 stories.
+   `[INFERRED]` This is why the interactive dry-run kept exceeding the command timeout — the
+   timeout was not the bug, the runtime is simply longer than an interactive command allows.
 
-### ADR-004 — SQLite now; Postgres/pgvector only on demonstrated need
-- **Why:** `[INFERRED]` Workload is roughly 50–200 headlines per 8-hour cycle. Exact-hash plus
-  fuzzy title matching over 200 items is ~20,000 comparisons — microseconds in pure Python.
-- **Alternatives:** Postgres + `pgvector` + `asyncpg` + Alembic as designed in `HANDOFF.md`
-  (rejected: weeks of infrastructure debugging before proving a story can reach a phone).
-- **Tradeoff:** A later migration if scale grows. `[INFERRED]` Likely never needed; if it is,
-  performing that migration under real conditions is a better lesson than pre-building for it
-  (also addresses B5's migrations gap).
-- **Reaffirmed 2026-08-04** after the operator proposed "our stack will rely on Postgres for
-  multi extension use." Clarified against three possible meanings; operator's answers:
-  (1) RAG/vector search → **post-v1.0.0**, deferred behind ADR-005's trigger;
-  (2) multiple sports/sources → not required, except possibly to route around a single
-  source's rate limits, which is not a storage concern;
-  (3) multi-user → possibly later, but v1 is for open-source distribution.
-- **New argument for SQLite, not present in the original ADR:** `[INFERRED]` open-sourcing the
-  repo *strengthens* the SQLite case rather than weakening it. Publishing means many people each
-  run their **own instance with their own database** — single-writer per instance. Requiring
-  Postgres would force every person who clones the repo to install, configure and migrate a
-  database **server** before seeing a single score, which is a severe adoption barrier and
-  directly contradicts the deferred goal in §9 Q10 / `TASKS.md` L13 (lower setup friction for
-  non-technical users). SQLite is a file created on first run. `[VERIFIED]` `sqlite3` is in the
-  standard library — zero install.
-- **Distinction worth keeping straight:** *open-source* ≠ *multi-user*. Many instances with one
-  writer each is not the workload that breaks SQLite; one instance with many concurrent writers
-  is. Only the latter triggers this ADR's reversal condition.
-
-### ADR-005 — Defer embeddings until lexical dedup provably fails
-- **Decision:** Semantic dedup is added only after capturing a specific real pair of near-
-  duplicate headlines that `difflib.SequenceMatcher` failed to catch. Save the pair as a test
-  fixture; it becomes the regression test for the semantic pass.
-- **Why:** `sentence-transformers` pulls ~2GB of PyTorch to solve a problem not yet observed.
-- **Tradeoff:** Possible brief-quality gap in the interim, which is measurable and acceptable.
-
-### ADR-006 — Human writes interfaces, agent writes implementations
-- **Why:** `[INFERRED]` The operator's two constraints — "prefer agentic over hardcoded" and
-  "I want to learn to build a system end-to-end" — are in direct conflict. If the agent writes
-  the interfaces, the operator ends with pattern recognition and no generative ability. He has
-  self-reported difficulty with brute-learning, which makes the feeling of productivity
-  especially hazardous.
-- **Tradeoff:** Slower. Accepted; goal 2 outranks goal 1.
-
-### ADR-007 — Three-layer explanations at decision points only
-- **Why:** `[VERIFIED]` Pro-tier usage and context are finite. `[INFERRED]` Per-change essays
-  would exhaust both faster than the coding, and go unread within days.
-- **Result:** ~one ADR per working session; one-line rationale for routine work. The ADR folder
-  becomes the repo's most valuable open-source artifact.
-
-### ADR-008 — Evidence tagging is mandatory in all project documentation
-- **Why:** `[VERIFIED]` The prior fabricated handoff was the project's most expensive failure.
-- **Tradeoff:** Documents read as less confident. That is the point.
+`[UNKNOWN]` Whether the paragraph/grouping prompt works. `[VERIFIED]` The 08:00 run on
+2026-08-13 produced a validated summary, so the change did not break delivery — **but the
+log records only that it passed, not its shape.** Judging paragraphs and subject grouping
+needs the delivered text, which lives on the operator's phone. **Ask him.**
 
 ---
 
-## 6. Implementation Details
+## 7. Known limitations
 
-**`[UNKNOWN]` — and this section is deliberately near-empty.**
-
-No algorithms, business logic, validation rules or edge cases have been implemented or
-specified beyond the design intent in `ARCHITECTURE.md`. The request that generated this
-document asked for a complete description of algorithms, workflows, business logic, validation
-logic, edge cases and assumptions. **Supplying them would mean inventing them**, which is the
-precise failure this session exists to correct.
-
-What *is* decided, at the level of intent only:
-
-- **Dedup, pass 1:** exact hash of a normalized title string. Normalization scheme `[UNKNOWN]`.
-- **Dedup, pass 2:** `difflib.SequenceMatcher` ratio over normalized titles within the window.
-  Threshold `[UNKNOWN]` — must be tuned against real captured headlines, not guessed.
-- **Dedup, pass 3:** deferred (ADR-005).
-- **Window:** the two source documents disagree (48h vs 8h). **Unresolved — see Open Questions.**
-- **Failure policy:** any source that errors returns an empty list and logs; the run continues.
-- **Edge cases:** `[UNKNOWN]`. Will emerge from real payloads. Every one found gets a saved
-  fixture in `tests/fixtures/` and a test.
+| # | Limitation |
+|---|---|
+| L-1 | `--date` affects games only. RSS has no date query, so SportWire cannot reconstruct a past day. |
+| L-2 | No individual player statistics (ADR-010). |
+| L-3 | `[UNKNOWN]` Live and scheduled game payload shapes. Every game ever captured reads `Final` — it has been the offseason throughout. **Resolve after 2026-09-30.** |
+| L-4 | Head-to-head only knows games this instance has delivered. Empty early in a season. |
+| L-5 | Reddit contributes chatter that title-pattern filtering provably cannot separate from news. Capped at 3 stories rather than classified. |
 
 ---
 
-## 7. Files Modified This Session
+## 8. The most important open problem
 
-**None.** `[VERIFIED]` This was an analysis session. No file in the repository was created,
-edited, or deleted.
+**`processing/` has almost no tests. Issue #15.**
 
-Files *discussed*, and what is known about each:
+`[VERIFIED]` **19 source modules. One test file. Three test functions, all three testing
+rendering** (`tests/test_brief_snapshot.py`). Nothing covers `dedup`, `cluster`,
+`newsworthy`, `priority`, `validate`, `highlights`, `storage/db`, `settings`, either RSS
+parser, or the Telegram message splitter.
 
-| File | Purpose (as claimed) | Verified state |
-|---|---|---|
-| `HANDOFF.md` | Prior transfer document | `[VERIFIED]` Does not match the repo. Superseded by this file. Do not trust. |
-| `sources/docs/Prototype_APIs_and_Tools_Functional_Overview.pdf` | Tool inventory | `[VERIFIED]` Contradicts `HANDOFF.md` on window length and WhatsApp path. |
-| `Prototype Diagram.png` / `.drawio` | Flow diagram | `[VERIFIED]` Depicts the target flow; delivery leg superseded by ADR-002. |
-| `ingestion/deduplicator.py` | Lexical + cascade dedup | `[VERIFIED]` Has bytecode, so it has run. Contents `[UNKNOWN]` — never read. |
-| `storage/repository.py` | pgvector distance search | `[VERIFIED]` Has bytecode. Contents `[UNKNOWN]`. Superseded by ADR-004. |
-| `ingestion/scrapers/espn.py`, `hoopshype.py` | Page parsers | `[VERIFIED]` Never imported. `[INFERRED]` Almost certainly stubs. |
-| `delivery/whatsapp_os.py`, `services/whatsapp_gateway.py` | WhatsApp delivery | `[VERIFIED]` Never imported. Superseded by ADR-002. |
-| `config/settings.py` | App settings | `[VERIFIED]` Never imported by running code. |
-| All other legacy files | — | `[UNKNOWN]`. Not read. |
+`[VERIFIED]` **Nine real bugs were found in six days, every one by reading live output** —
+never by a test:
 
----
+| Bug | Module |
+|---|---|
+| "tonight" tier ranked a child-support story first | priority |
+| `Warriors'` failed to match `warriors` | priority |
+| A current story dropped for citing "2015" | newsworthy |
+| `U+2060` before `[Highlight]` defeated the tag match | newsworthy |
+| "On this day" retrospectives reached a brief | newsworthy |
+| Ujiri/Russell retrospectives past the year window | newsworthy |
+| `In Detroit` flagged as an invented name | validate |
+| Every-word grounding rejected `New York Knicks` | validate |
+| Retry gave up on the first HTTP 500 | summarize |
+| **A Westbrook retirement report dropped for citing his 2008 debut** | newsworthy |
+| **The drop log recorded no reason and truncated the title at 80 chars** | newsworthy |
 
-## 8. Known Bugs
+**Eleven now, and the tenth is the ninth returning.** `[VERIFIED]` 2026-08-13: r/nba's
+`[Charania] After 18 NBA seasons, Russell Westbrook has retired…` was filtered out. Rule 2
+fires on any past year outside quotes, and a retirement report naturally cites the career
+start. **This is the same rule, the same class, and the second time** — it was already
+narrowed once after dropping a current Ballmer story for citing 2015.
 
-`[UNKNOWN]` — **zero runtime bugs are known, because the system has never run end to end.**
-Reporting bugs here would be fabrication.
+`[VERIFIED]` The brief still covered the retirement, because ESPN and CBS carried it under
+titles with no year. `[INFERRED]` **That is luck, not resilience** — a Reddit-only story
+would have vanished silently, which is precisely the failure class this filter's own
+docstring says it exists to prevent.
 
-What exist instead are **structural defects**, which are certain:
+`[VERIFIED]` **Fixed the diagnosis, not the rule.** `drop_non_news` now logs which rule
+fired and the offending text, and the full title. The rule itself has more than one
+defensible fix — drop it, require two past years, require the year early in the title, or
+exempt retirement and contract contexts — so per `CLAUDE.md` §6 it is **not** picked
+silently. Decide it with the operator.
 
-| ID | Defect | Symptom | Likely cause | Attempted fixes | Remaining work |
-|---|---|---|---|---|---|
-| D1 | Nine duplicated concerns | Imports ambiguous; four article schemas | Agent context loss mid-build | None | Superseded by ADR-001 (fork clean) |
-| D2 | Delivery layer never imported | No brief has ever been sent | Never wired to the pipeline | None | Rebuild as Telegram adapter |
-| D3 | `config/settings.py` never imported | Documented thresholds have no effect | Config layer never wired | None | Single settings module in clean repo |
-| D4 | Docs contradict repo and each other | Operator planned against fiction | LLM-generated documentation | This document set | Enforce evidence tagging |
-| D5 | Two normalizer modules both executed | Data shape non-deterministic | Duplicate implementations | None | One canonical schema module |
-| D6 | Possible secrets/bytecode in git history | `[UNKNOWN]` | `.gitignore` status unknown | None | Run B2 command |
-
----
-
-## 8b. Known Limitations (real, observed, not bugs)
-
-| # | Limitation | Evidence | Consequence |
-|---|---|---|---|
-| L-1 | **`--date` affects games only; news is always current.** | `[VERIFIED]` 2026-08-05: `python main.py --date 2026-01-15` delivered January's scoreboard alongside today's offseason headlines. Reported by the operator from the delivered brief. | RSS is a feed of what is published *now*; the format has no date parameter, so historical headlines cannot be requested from ESPN at all. Harmless for the intended daily run. **Means SportWire cannot reconstruct a past day** — if that scope is ever wanted, it needs a news source with a date-queryable archive, which none of the free candidates in ADR-009/ADR-010 provide. Surfaced at runtime as a warning rather than hidden. |
-| L-2 | **Individual player performances are unavailable.** | ADR-010. | Message 2 is team-level only. `[INFERRED]` Recoverable later by having M7's LLM extract performances from article prose, since the articles are already fetched legally. |
-| L-3 | **Live/scheduled game shapes are unobserved.** | `[UNKNOWN]` — every captured game reads `status: "Final"`; it is the offseason, so no in-progress game has been seen. | Adapter handling of a live game is untested. Resolve after 2026-09-30 by capturing a second fixture. |
-
----
-
-## 9. Open Questions
-
-1. **Dedup window: 8 hours or 48 hours?** The two source documents disagree. The 8-hour figure
-   appears tied to the delivery cadence, the 48-hour to the dedup lookback — they may not be
-   the same knob. Operator must decide, and the decision must be one named setting.
-2. **Delivery cadence.** Is every 8 hours actually wanted, or is once daily sufficient? Affects
-   volume, cost, and dedup window.
-3. **NBA scope.** News only, game data only, or both? The diagram shows both; v1 may not need both.
-4. ~~**Summarization: local model or hosted API?**~~ **RESOLVED 2026-08-05: local first.**
-   Operator: *"local always, open-source first."* Satisfies C2 fully and means anyone cloning
-   the repo can run it without buying anything.
-   - `[INFERRED]` Tension to keep in view: Ollama is not `pip install`-able — it needs a
-     separate installer and a multi-GB model pull, which is *harder* setup than pasting an
-     API key. That works against L13 (non-technical users), so **local-first, not
-     local-only**: build a `Summarizer` interface with an Ollama implementation as the
-     default and a hosted one as an optional alternative behind the same call site. Same
-     pattern as `DeliveryChannel` and `SourceAdapter` — the third use of it, which is itself
-     evidence the boundary is the right shape.
-   - `[INFERRED]` The task is easy enough for a small local model: roughly 2.4 KB of input
-     (16 short descriptions) producing ~1 KB of prose. This is not a reasoning-heavy job.
-   - **No training is involved.** Steering the summary ("prioritise on-court news, mention
-     off-court items briefly") is a sentence in the prompt, not a fine-tune. Recorded here
-     because the assumption came up twice and would waste real time.
-   - Still `[UNKNOWN]`: which model, and whether article *descriptions* alone are rich enough
-     versus full article text — full text would require fetching article pages, which is the
-     C3 scraping exposure ADR-009 exists to avoid.
-5. **Is the legacy repo's git history publishable?** Blocked on B2.
-6. ~~**Scraping legality.** Do ESPN or HoopsHype offer RSS or an official feed that avoids the
-   ToS problem entirely? Unresearched.~~ **RESOLVED 2026-08-04.** `[VERIFIED]` ESPN publishes
-   a public NBA RSS feed at `espn.com/espn/rss/nba/news` (HTTP 200, 15 items, `<ttl>30</ttl>`).
-   CBS Sports and Reddit r/nba also verified working. **No scraper is needed for ESPN.**
-   See `docs/decisions/ADR-009-nba-news-source.md`. HoopsHype remains unresearched, but is no
-   longer on the critical path.
-7. **`storage/` salvage.** Is any of it worth copying? Requires reading the files.
-8. **Phone port.** What does this mean concretely — Termux? A scheduled remote trigger? Undefined.
-9. ~~**Multi-user.** `delivery/router.py` implies a user directory. Is v1 single-user (the
-   operator) or multi-user?~~ **RESOLVED 2026-08-04.** v1 is **single-user per instance**.
-   Multi-user is "possibly later"; the near-term distribution model is open-source, i.e. many
-   people each running their own instance. See the 2026-08-04 amendment to ADR-004 in §5 for
-   why that distinction is what keeps SQLite viable.
-10. **Non-technical end users — explicitly deferred, not v1.** Operator stated 2026-08-03:
-    signing up for API keys and editing `.env` is acceptable setup friction for now, but the
-    longer-term generalization goal wants something usable by people without that technical
-    background. Not a trigger for any decision today (ADR-003's `balldontlie.io` API key
-    requirement stands) — recorded so v1's config/setup approach isn't assumed to be the
-    final shape. See `TASKS.md` L13 for the deferred task this becomes.
+`[INFERRED]` Every one of the eleven would have been a two-line test, and every one can
+silently return. This is the single highest-value work remaining.
 
 ---
 
-## 10. Exact First Prompt for the Next Claude Code Session
+## 9. Open questions
+
+1. ~~Dedup window~~ **168h** (PRD D2). Must exceed the feed's reach, not the poll interval.
+2. ~~Cadence~~ **8h**; the run defines the summary window (PRD D1).
+3. ~~NBA scope~~ **NBA only for v1.0.0**; other US leagues after (PRD D3).
+4. ~~Local vs hosted LLM~~ **Local first**; hosted built and dormant.
+5. ~~Legacy git history~~ Resolved — no secrets, published.
+6. ~~Scraping legality~~ Resolved — ESPN publishes RSS (ADR-009).
+7. ~~`storage/` salvage~~ Moot; rebuilt.
+8. ~~Phone port~~ **cron now, Termux wrapper later** (PRD D4).
+9. ~~Multi-user~~ **Single-user per instance.**
+10. **Non-technical setup** — deferred, issue #11.
+11. **`[UNKNOWN]` Is the brief actually read?** The PRD's real success criterion, and still
+    untested. The operator has called it *"better on the eyes, unsure if more useful."*
+
+---
+
+## 10. Exact first prompt for the next session
 
 Paste verbatim:
 
 ```
-Read CLAUDE.md, SESSION.md, TASKS.md and ARCHITECTURE.md in full before doing anything.
+Read CLAUDE.md, OPERATING_RULES.md, SESSION.md and TASKS.md before doing anything.
 
-Note especially the evidence rule in CLAUDE.md §0: tag every factual claim
-[VERIFIED], [INFERRED] or [UNKNOWN], and never fill a gap with plausible prose.
-The previous handoff document for this project was fabricated and cost weeks.
+Note especially:
+- OPERATING_RULES.md §0: you write the code, tests and documentation. Never set me
+  code to write, not as a task or a remedy. Explain as you go.
+- OPERATING_RULES.md §2: [VERIFIED] tags from previous sessions are [Likely], not
+  [Certain]. Re-test any external service before building on it.
+- CLAUDE.md §0: tag every factual claim. [UNKNOWN] is an acceptable answer.
 
-Do not write any code yet. First, run these commands against the current
-repository and report the raw output, then tell me where it contradicts the
-four documents:
+First, tell me the current state without changing anything:
 
-  find . -path ./.venv -prune -o -name "*.py" -print | xargs wc -l | sort -n
-  grep -rn "NotImplementedError\|TODO\|FIXME\|^\s*pass\s*$" --include="*.py" .
-  grep -rn "class NewsArticle" --include="*.py" .
-  git log --oneline | head -30
-  git log --all --name-only | grep -i "\.env\|\.pyc" | head -20
-  ls -la
+  tail -40 logs/sportwire.log      # did cron run, did the summary pass validation
+  make check                        # ruff + pytest
+  git log --oneline -10
 
-Then stop and wait. I want to resolve blocker B2 (possible secrets in git
-history) before anything else.
+Then ask me one question you cannot answer from the logs: the 08:00 brief on
+2026-08-13 passed validation, but the log records only that it passed, not its
+shape. Ask whether it arrived as 2-3 paragraphs and whether a reaction sat in the
+same paragraph as the event it reacts to. That resolves TASKS.md P2.
 
-After that, the next task is C1-C3 in TASKS.md: freeze the legacy repo on a
-`legacy` branch and initialise the clean repo.
+Two decisions are waiting for me, both in TASKS.md. Do not pick either silently:
+- P3: newsworthy.py Rule 2 dropped a Westbrook retirement report for citing his
+  2008 debut. Second false positive from that rule. Four options are written out.
+- P4: the summariser's pass rate is unknown. The old "84%" came from one sitting
+  of 3/5; the very next runs went 0/3 then pass. Count it, don't project it.
 
-Working agreement for this project, from CLAUDE.md §6, which I want you to
-follow literally: I write the function signatures, type hints, docstrings and
-the failing tests. You write only the function bodies that make my tests pass.
-Ask me before creating any file. One file or one function per turn. If a
-decision has more than one defensible answer, stop and ask rather than choosing
-silently.
+Then: issue #15 is the highest-value work remaining. Eleven real bugs were found
+by reading output, none by a test, and every one can silently return. The most
+recent one is the ninth returning in a new form.
 
-I can currently explain async/await and embeddings. I cannot yet explain the
-adapter pattern, dependency inversion, or database migrations. Teach those
-inline the first time they come up, before using them.
+Do not add features until #15 is addressed unless I ask.
 ```
+
+---
+
+## 11. What to resist
+
+`[INFERRED]` Patterns this project has repeatedly fallen into, worth naming:
+
+- **Concluding from one run.** Done twice, wrongly both times — a model declared clean on one
+  sample, then a validator blamed on the model when the bug was mine.
+- **Filtering by cleverer patterns.** Title-based classification of Reddit hit a hard limit;
+  a blacklist missed untagged chatter and a whitelist dropped the biggest story. Bounding
+  volume worked where classification could not.
+- **Adding a source without measuring freshness.** The Athletic looks like a news feed and is
+  an archive — 100 items, oldest 17 days, one within 48 hours.
+- **Believing a green run means a working feature.** Nine bugs say otherwise.

@@ -139,11 +139,14 @@ def main(argv: list[str] | None = None) -> int:
         # with an outlet is unaffected: those merged above, and the outlet leads them.
         story_groups = limit_per_source(story_groups)
 
-        # On by default since 2026-08-10. `[VERIFIED]` mistral:7b now passes validation
-        # on 3 of 5 attempts, so with retries the brief carries written prose roughly 84%
-        # of the time and the headline list otherwise. It was off while that rate was 0/3;
-        # what changed is the input, not the model — filtering retrospectives and capping
-        # per source leaves twelve coherent current stories.
+        # On by default since 2026-08-10. It was off while validation passed 0/3; what
+        # changed is the input, not the model — filtering retrospectives and capping per
+        # source leaves twelve coherent current stories.
+        #
+        # `[UNKNOWN]` The pass rate. An earlier comment here claimed ~84% from a single
+        # sitting of 3/5; `[VERIFIED]` 2026-08-13 the 00:00 run then failed all three
+        # attempts and the 08:00 run passed. Two runs is not a rate either. Do not quote a
+        # number until the soak has counted enough of them.
         #
         # The summarizer validates its own output and returns None when nothing passes, so
         # a fabrication can never reach a phone: the worst case is the headline list.

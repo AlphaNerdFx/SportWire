@@ -40,21 +40,24 @@ Goal 2 has direct consequences for how you work. See §6.
 
 ## 2. Repository Status — Read Before Writing Any Code
 
-There are two repositories.
+`[VERIFIED]` **One repository, two branches** — not two directories, as this section
+originally described. `main` is the clean rebuild; `legacy` is the frozen snapshot.
 
-### `legacy/` — the abandoned prototype (reference only, DO NOT EXTEND)
+### `legacy` branch — the abandoned prototype (reference only, DO NOT EXTEND)
 
 `[VERIFIED via directory listing, 2026-08-03]` 136 files, 28 directories. Contains at
 minimum **nine concerns implemented two or three times over in parallel**. It has never
 completed a single end-to-end run.
 
-**You may read it. You may copy individual files out of it, one at a time, after the human
-has read them. You may not build on it, run its test suite as evidence of health, or trust
+**You may read it (`git show legacy:<path>`). You may copy individual files out of it, one
+at a time, after the operator has read them. You may not build on it, run its test suite as evidence of health, or trust
 `HANDOFF.md` inside it.**
 
-### `sportwire/` — the clean rebuild (all new work happens here)
+### `main` branch — the clean rebuild (all new work happens here)
 
-Starts empty. Grows one vertical slice at a time. See `ARCHITECTURE.md` for the target
+`[VERIFIED]` **No longer empty and no longer a separate directory** — the clean rebuild is
+`main` at the repository root, and `legacy` is a branch holding the 97-file snapshot. It
+runs unattended on cron and delivers to Telegram. See `SESSION.md` for real state, the target
 shape and `TASKS.md` for the order.
 
 ---
@@ -90,7 +93,7 @@ These are researched and confirmed. Do not re-litigate them without new evidence
   original claim was never actually re-verified live in this session before being restated —
   it was carried forward from the prior session's research as fact. `ADR-003` is reopened;
   do not build on `cdn.nba.com` as the critical path until a working endpoint or alternative
-  source is found. See `TASKS.md` C4 and `SESSION.md` §9 for status.
+  source is found. **Resolved:** balldontlie, ADR-003. `cdn.nba.com` is not used anywhere.
 - `[INFERRED]` Because of C1 (residential IP), `stats.nba.com` will work for this operator
   today. **But building on it makes the project undeployable and unusable by anyone who
   clones the repo, which violates C3.**
@@ -152,16 +155,30 @@ See ADR-002.
 This is the part that makes this project different from ordinary agentic coding.
 **Follow it literally.**
 
-### The inversion
+### Who writes what — REVERSED 2026-08-05
 
-- **The human writes:** function and class signatures, type hints, docstrings stating intent,
-  and the failing test with its assertions.
-- **You write:** the function bodies that make those tests pass.
-- **The human then closes the file and explains the code aloud from memory.** If he cannot,
-  the code is deleted and you regenerate it with a different approach or more explanation.
+> **This section previously specified the inverse** — the human writing signatures, type
+> hints, docstrings and failing tests, the agent writing only bodies, and any file the human
+> could not explain being deleted and regenerated (ADR-006).
+>
+> `[VERIFIED]` **The operator reversed it explicitly:** *"You'll write the code not me."*
+> He reaffirmed it two days later when the old contract reappeared as a remedy: *"I'm not
+> writing anything just guide me through the code."* ADR-011 §7 records the reversal.
 
-Rationale: `[INFERRED]` If the agent writes the interfaces, the human learns nothing durable.
-Interface design *is* system design. The human must own it.
+- **You write the code, the tests and the documentation. The operator does not.**
+- **You never instruct the operator to write code.** Not as a task, not as a remedy, not as
+  an exercise. You may say once that writing something would aid understanding, as an option,
+  then drop it. `[VERIFIED]` This has already been violated once, three days after the
+  reversal, by proposing he rewrite `processing/dedup.py` after a failed knowledge check.
+- **You explain as you go**, at the point a concept first appears, grounded in this codebase.
+- **The operator reviews, questions and decides** — especially anything user-facing.
+- **Understanding is still required and still outranks shipping** (§1). It is demonstrated by
+  *explaining*, not by authoring.
+- **When an explanation does not land, the code is too clever.** Simplify it. Do not retest
+  the operator, and never delete working software over a failed explanation.
+
+`OPERATING_RULES.md` §0 and §10 hold the full version. This section and that one agree; if
+they ever drift, that is a bug in whichever was edited last, not a precedence question.
 
 ### Turn discipline
 
@@ -205,7 +222,8 @@ than the coding itself, and would go unread within days.
 
 `[VERIFIED]` Environment: WSL2 Ubuntu, Python 3.10, `.venv`, `pytest` 9.x installed in legacy repo.
 Everything below marked `[UNKNOWN]` has not yet been run in the clean repo because the clean
-repo does not yet exist.
+repo did not yet exist. `[VERIFIED]` **It exists and most of these now run** — `make run`,
+`make dry-run` and `make check` are the commands actually used; see `SESSION.md` §3.
 
 ### Environment
 ```bash
@@ -278,7 +296,8 @@ print(scoreboard.ScoreBoard().get_dict())
 - Network tests are marked `@pytest.mark.network` and excluded from the default run.
 - Fixtures live in `tests/fixtures/` as saved real JSON/HTML payloads, captured once from
   live sources. Adapters are tested against these, never against the live network.
-- The human writes the assertions. You make them pass.
+- **You write the tests.** `[VERIFIED]` This reversed on 2026-08-05 with the rest of §6.
+  The operator reviews what they assert and says whether it is the right behaviour.
 - A feature is "done" only when a test asserting its behaviour passes **and** the human can
   explain the implementation.
 
@@ -291,8 +310,9 @@ print(scoreboard.ScoreBoard().get_dict())
   names (`article` not `art`).
 - **Formatting:** `ruff format`, default settings, 88-column line length. Run before every commit.
 - **Type hints required** on every public function signature. This is partly for tooling and
-  partly because the human writes the signatures — it forces the design decision to happen
-  before the code.
+  partly because writing the signature first forces the design decision to happen before the
+  code. `[VERIFIED]` The original wording said "the human writes the signatures"; that is the
+  superseded §6 contract. The rule survives the reversal, the attribution does not.
 - **Docstrings:** one line stating *intent* on every public function. Longer only where the
   *why* is non-obvious.
 - **Commits:** `<type>: <imperative summary>` — `feat:`, `fix:`, `test:`, `docs:`, `refactor:`,

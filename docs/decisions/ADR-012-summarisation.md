@@ -168,8 +168,14 @@ clips and week-old articles. `[INFERRED]` **Less noise in, less invention out** 
 not something the earlier evaluation predicted or looked for.
 
 **Retry is now worth doing, and only because the check is mechanical.** At a 0/3 rate it
-merely burned time; at 3/5 a second attempt reaches roughly 84% and a third roughly 94%.
-Retrying *without* validation would only produce a different fabrication.
+merely burned time. Retrying *without* validation would only produce a different fabrication.
+
+> **Amended 2026-08-13.** This paragraph originally read "at 3/5 a second attempt reaches
+> roughly 84% and a third roughly 94%." `[VERIFIED]` That compounding does not hold. The
+> 00:00 run on 2026-08-13 failed all three attempts and invented **the same name** on each
+> one. The arithmetic assumes independent failures; a model completing a training prior fails
+> identically every time. `[UNKNOWN]` The real rate — count it over the soak (`TASKS.md` P4)
+> rather than projecting it from one sitting. The 84% figure should not be requoted.
 
 `[VERIFIED]` The safety property is unchanged and is what makes this defensible: the
 summarizer validates its own output and returns `None` when nothing passes, so the worst case

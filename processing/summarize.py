@@ -55,11 +55,20 @@ DEFAULT_SUMMARY_CHARS = 1024
 # How many times to ask the model before giving up and using the headline list.
 #
 # `[VERIFIED]` 2026-08-10: `mistral:7b` passed validation on 3 of 5 attempts over the same
-# twelve articles. Two attempts therefore reach roughly 84%, three roughly 94%, at about 20
-# seconds each once the model is warm. Beyond that the returns are small and the wait grows.
+# twelve articles, which suggested two attempts reach ~84% and three ~94%.
 #
-# `[VERIFIED]` The first call of a run pays a cold model load -- measured at 490-668 seconds
-# against 16-19 for subsequent calls -- so a retry is far cheaper than the attempt before it.
+# `[VERIFIED]` 2026-08-13 that compounding does **not** hold. The 00:00 run failed all three
+# attempts and invented the same name -- "Ayo Dosunmu" -- on every one. The arithmetic above
+# assumes attempts fail independently; a model pattern-completing from a training prior fails
+# the same way each time, so three attempts are not 1 - (1-p)^3, they are closer to one
+# attempt repeated. `[INFERRED]` Retry rescues the *variable* failures and does nothing for
+# the fixed ones, so the true benefit sits somewhere below the compounded figure and above
+# the single-attempt one. Do not quote a number until the soak has counted enough runs.
+#
+# Three is kept anyway: `[VERIFIED]` the first call of a run pays a cold model load -- 490-668
+# seconds against 16-19 for subsequent calls -- so retries are much cheaper than the first
+# attempt. `[VERIFIED]` The worst case is real though, and was measured: a failing run spent
+# 19 minutes before falling back to the headline list.
 DEFAULT_ATTEMPTS = 3
 
 # `[VERIFIED]` 2026-08-06, all four models run against the same 15-article fixture with the
@@ -179,10 +188,15 @@ class Summarizer(ABC):
         headline list", not "fail the run". A summarizer that is offline or unreliable must
         degrade the brief exactly as a dead source does, never crash it (`CLAUDE.md` §5.6).
 
-        **Retry only makes sense because the check is mechanical.** `[VERIFIED]` 2026-08-10
-        `mistral:7b` passed validation on 3 of 5 attempts over the same articles, so a second
-        attempt turns roughly 60% into roughly 84%. Retrying without a check would simply
-        produce a different fabrication.
+        **Retry only makes sense because the check is mechanical.** Retrying without a
+        check would simply produce a different fabrication.
+
+        **It also assumes attempts fail independently, and they do not always.** `[VERIFIED]`
+        2026-08-13 the 00:00 run invented "Ayo Dosunmu" on all three attempts; an earlier run
+        invented "Joe Dumars" three times over. `[INFERRED]` When the model is completing a
+        strong training prior rather than sampling noise, every attempt lands in the same
+        place and retry buys nothing but time. It still helps against the variable failures,
+        which is why it stays.
 
         `[VERIFIED]` An earlier measurement on noisier input scored 0 of 3, and retry was
         correctly rejected then — at a zero pass rate it only burns time. What changed is the

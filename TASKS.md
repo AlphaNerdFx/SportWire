@@ -102,7 +102,13 @@
     `CLAUDE.md` §4 and `ADR-003` corrected in place; do not treat the old claim as live.
   - Proof: no `tests/fixtures/nba_scoreboard.json` written — nothing to save from a 403.
 
-- [ ] **C4b. Find a working NBA data source before writing any adapter**
+- [x] **C4b. Find a working NBA data source before writing any adapter** — 2026-08-04
+  - Proof: `balldontlie.io` v1, free tier, API key by signup. `[VERIFIED]` Returns games
+    with per-period scores and team ids; rate-limited, and the free tier returned 429 from
+    the sixth request in one run, which is why head-to-head is computed locally instead.
+    `[VERIFIED]` The free tier does **not** include `/v1/stats` — that is what forced
+    ADR-010 (no individual player statistics). Full rationale in ADR-003.
+  - Original research notes retained below.
   - Candidates to research, cheapest/least-risky first: (1) other `cdn.nba.com` /
     `stats.nba.com` endpoint paths — maybe only this specific path is blocked; (2) the
     `nba_api` PyPI package, which has historically handled the header/cookie dance
@@ -180,36 +186,30 @@
 
 ## HIGH — Slice 1: one story, end to end
 
-> Target: `cdn.nba.com` → `NewsArticle` → hash dedup → formatted string → Telegram message
-> on the operator's phone. **No database. No embeddings. No async. No scrapers. No Apify.**
-> If it exceeds ~150 lines, it is over-built.
+> **H1-H10 were written under the superseded ADR-006 contract** (human writes signatures,
+> docstrings and test assertions; agent writes bodies). The operator reversed that on
+> 2026-08-05: *"You'll write the code not me."* They are recorded here as **[x] superseded**
+> rather than deleted, because the file rule says completed tasks are not removed and because
+> the reversal is the single most consequential process change this project has made.
+>
+> `[VERIFIED]` Every file H1-H10 named exists, works, and is agent-written. The target itself
+> also changed: `cdn.nba.com` returns 403, so games come from balldontlie (ADR-003), and the
+> slice grew past "no database" once dedup had to survive restarts.
 
-- [ ] **H1. Human writes `models/schemas.py`** — the canonical `NewsArticle` Pydantic model.
-  Fields, types, docstring. **Human writes this alone; it is the central design decision of
-  the project.**
-  - Proof:
-- [ ] **H2. Human writes `tests/test_schemas.py`** — assertions about valid and invalid articles.
-  - Proof:
-- [ ] **H3. Agent implements validators to make H2 pass.** One turn, one file.
-  - Proof:
-- [ ] **H4. Human writes the signature of `ingestion/nba_live.py::fetch_games() -> list[GameData]`.**
-  - Proof:
-- [ ] **H5. Agent implements `fetch_games()` against the saved fixture, then against live.**
-  - Proof:
-- [ ] **H6. Human writes `tests/test_dedup.py`** with three cases: identical titles, near-identical
-  titles, genuinely different titles.
-  - Proof:
-- [ ] **H7. Agent implements `dedup.py`** — hash pass plus `difflib.SequenceMatcher` pass.
-  In-memory `set`, no DB.
-  - Proof:
-- [ ] **H8. Human writes `delivery/base.py`** — the abstract `DeliveryChannel` interface.
-  **Agent teaches the adapter pattern and dependency inversion inline here (blocker B5) before
-  the human writes it.**
-  - Proof:
-- [ ] **H9. Agent implements `delivery/telegram.py` against that interface.**
-  - Proof:
-- [ ] **H10. Human writes `main.py`** wiring fetch → dedup → format → send. Single entrypoint.
-  - Proof:
+- [x] **H1-H3. `models/schemas.py` + its tests.** *Superseded contract; agent-written.*
+  `GameData`, `NewsArticle`, `GameHighlight`, `SeriesContext`, all frozen.
+- [x] **H4-H5. Games ingestion.** *Superseded contract; agent-written.* Landed as
+  `ingestion/nba_games.py` against balldontlie, not `nba_live.py` against `cdn.nba.com`.
+- [x] **H6-H7. `processing/dedup.py`.** *Superseded contract; agent-written.* Both passes
+  exist; the in-memory `set` became a SQLite-backed one in M1, as anticipated.
+- [x] **H8-H9. `delivery/base.py` + `delivery/telegram.py`.** *Superseded contract;
+  agent-written.* The adapter pattern was taught inline as B5 required. `[VERIFIED]` It was
+  **not** retained — H13 Q5 asked why there are two ABCs and the answer asserted a shared
+  superclass that does not exist. Teaching a pattern once at its first appearance is not
+  sufficient; it needs revisiting at each reuse.
+- [x] **H10. `main.py`.** *Superseded contract; agent-written.* Single entrypoint, and still
+  the only file naming a concrete adapter or channel.
+
 - [x] **H11. Run it. A real message arrives on the phone.** — 2026-08-05
   - Proof: `python main.py --date 2026-01-15` delivered three messages to the operator's
     Telegram at 19:46, confirmed by screenshot: **SCORES** (9 games), **NOTABLE**
@@ -258,37 +258,78 @@
 
 ---
 
-## MEDIUM — after slice 1 runs
+## MEDIUM — all complete, 2026-08-12
 
-- [ ] **M1. Add persistence: SQLite, one `articles` table, seen-hash lookup.** Dedup survives
-  restarts. `sqlite3` stdlib, no ORM.
+Every M-band task is done. Proof is in `git log` and in the ADRs; the summary below records
+what each turned into, since several changed shape on contact with real data.
+
+- [x] **M1. SQLite persistence.** `storage/db.py`. Rows kept indefinitely rather than pruned —
+  `[VERIFIED]` a window shorter than the feed's reach re-sends stories, and ESPN reaches back
+  ~4 days. Later extended with `game_results` for local head-to-head.
+- [x] **M2. `config/settings.py`.** `[VERIFIED]` No `os.getenv` remains anywhere else. Paths
+  anchor to `PROJECT_ROOT`, which fixed scheduled runs finding no `.env` at all.
+- [x] **M3. Dedup window and cadence separated.** 168h window, 8h cadence (PRD D1/D2). They are
+  different knobs; the original documents conflated them.
+- [x] **M4. Structured logging.** Level from settings. Every fetch, drop, cap and rejection is
+  logged — `[VERIFIED]` this is how nine bugs were actually found.
+- [x] **M5. More sources.** CBS Sports, Yahoo Sports, r/nba. `[VERIFIED]` The Athletic,
+  Sporting News and NYT were evaluated and rejected with recorded reasons.
+- [x] **M6. The adapter-boundary test.** Honest result: adding source 2 required **one line**
+  in `main.py` — the orchestrator had hardcoded a single source. It now iterates `FEEDS`, and
+  sources 3 and 4 needed no code at all. The boundary held; the caller had a gap.
+- [x] **M7. Summarisation.** ADR-012. Local Ollama, validated, with retry. See `SESSION.md` §6
+  for the nuanced state.
+- [x] **M8. Scheduling.** cron every 8h, `docs/SCHEDULING.md` covers both schedulers.
+  `[VERIFIED]` Running unattended for days, surviving terminal closes.
+- [x] **M9. Error resilience.** Enforced structurally in `ingestion/base.py` and
+  `delivery/base.py` rather than by convention. `[VERIFIED]` A dead source returns `[]`; three
+  separate rate limits (Reddit, balldontlie twice) degraded correctly in production.
+- [x] **M10. CI.** GitHub Actions running `make check`. Green.
+
+---
+
+## CURRENT — the only priority
+
+- [ ] **P1. Write tests for `processing/` (issue #15).**
+  `[VERIFIED]` 16 source modules, 3 tests, all three testing rendering. Nine real bugs were
+  found in six days **by reading live output, never by a test** — full list in `SESSION.md` §8.
+  Every one would have been a two-line test and every one can silently return.
+  **Do not add features before this unless the operator asks.**
   - Proof:
-- [ ] **M2. Add `config/settings.py`** — one module, `python-dotenv`, typed settings. Every other
-  module reads settings only from here.
+
+- [ ] **P2. Verify the paragraph and subject-grouping prompt.**
+  `[UNKNOWN]` Committed 2026-08-12, never seen against live output — a dry-run exceeded the
+  command timeout. Check the next scheduled brief: two or three paragraphs, and a reaction in
+  the same paragraph as the event it reacts to.
+  `[INFERRED]` If grouping is still poor, the cause is structural rather than prompt wording:
+  notes reach the writer in chunk order, and chunks are formed by priority rank, so related
+  items can arrive far apart. The fix would be ordering notes by subject before the reduce
+  step.
   - Proof:
-- [ ] **M3. Resolve open question 1** — decide the dedup window and the delivery cadence as two
-  distinct named settings. Record in an ADR.
+
+- [ ] **P3. Decide what to do about `newsworthy.py` Rule 2 (past-year outside quotes).**
+  `[VERIFIED]` 2026-08-13 it dropped r/nba's `[Charania] After 18 NBA seasons, Russell
+  Westbrook has retired…` because the title cited his 2008 debut. **Second false positive
+  from this rule**; the first was a current Ballmer story citing 2015, after which the rule
+  was narrowed rather than reconsidered.
+  `[VERIFIED]` The diagnosis is fixed — `drop_non_news` now logs which rule fired, the
+  offending text, and the untruncated title. **The rule is not**, deliberately: there are at
+  least four defensible fixes and `CLAUDE.md` §6 forbids picking silently.
+  - a. Delete Rule 2. Rules 0/1/1b already carry most of the load; measure what returns.
+  - b. Require two or more past years — one citation is context, several is a retrospective.
+  - c. Require the year in the first few words, where a retrospective announces itself.
+  - d. Exempt retirement, contract, draft and anniversary wording.
+  `[INFERRED]` (a) is the one to test first. This project's evidence is that narrow rules
+  keep producing invisible false positives, and Rule 2 is the only one that reads a number
+  rather than a phrase.
   - Proof:
-- [ ] **M4. Add structured logging** — `logging`, INFO to stdout, level from settings. Every
-  source logs what it fetched and what dedup discarded.
-  - Proof:
-- [ ] **M5. Add source 2: an NBA news source.** Research an official feed or RSS **before**
-  writing a scraper (constraint C3). Record what was found.
-  - Proof:
-- [ ] **M6. Confirm the orchestrator required zero changes to add source 2.** If it needed
-  changes, the adapter boundary is wrong — fix it. **This is the test of whether the adapter
-  pattern was understood.**
-  - Proof:
-- [ ] **M7. Add summarization** — resolve open question 4 (local vs hosted) in an ADR first.
-  - Proof:
-- [ ] **M8. Add scheduling** — cron or Windows Task Scheduler invoking `main.py`. Not an
-  in-process loop; the OS is a better scheduler than a `while True`.
-  - Proof:
-- [ ] **M9. Add error resilience** — every source wrapped so one failure degrades rather than
-  crashes. Test with a deliberately broken source.
-  - Proof:
-- [ ] **M10. Add CI** — GitHub Actions running `ruff check` and `pytest -m "not network"` on push.
-  First real DevOps artifact; explain what CI is and why network tests are excluded.
+
+- [ ] **P4. Establish the summariser's actual pass rate.**
+  `[VERIFIED]` The "~84%" figure came from 3/5 on one sitting and is repeated in several
+  places; two runs on 2026-08-13 went 0/3 then pass. `[UNKNOWN]` The real rate.
+  Count validation outcomes across the soak from `logs/sportwire.log` rather than quoting
+  a number from one sitting. `[VERIFIED]` Every occurrence in `main.py` and `SESSION.md`
+  has been corrected to `[UNKNOWN]`; check ADR-012 has not been missed.
   - Proof:
 
 ---
@@ -296,8 +337,14 @@
 ## LOW — deferred; each requires a trigger condition
 
 - [ ] **L1. NFL sources (`nflreadpy`).** Trigger: NBA path stable across several real runs.
+  `[INFERRED]` **This trigger has now fired** — the NBA path has run unattended on cron for
+  days. Held anyway behind P1: adding a second league doubles the surface of nine untested
+  processing modules. PRD D3 keeps v1.0.0 NBA-only.
 - [ ] **L2. Semantic dedup.** Trigger: a captured real near-duplicate pair that
-  `SequenceMatcher` missed, saved as a fixture (ADR-005).
+  `SequenceMatcher` missed, saved as a fixture (ADR-005). `[VERIFIED]` The trigger was
+  tested and did **not** fire: 612 real cross-source pairs, highest similarity 0.439.
+  `processing/cluster.py` solved the actual problem — same story, different words —
+  by shared rare names, with no model.
 - [ ] **L3. Postgres + `pgvector`.** Trigger: SQLite measurably too slow. `[INFERRED]` Unlikely.
 - [ ] **L4. Alembic migrations.** Trigger: L3, or a schema change against a table with real rows.
   Teach migrations properly at that point (blocker B5).
@@ -311,11 +358,30 @@
 - [ ] **L11. Docker.** Trigger: someone other than the operator needs to run it. `[INFERRED]`
   Premature under constraint C1; a `Dockerfile` and `docker-compose.yml` already exist in the
   legacy repo and have never been used.
-- [ ] **L12. Write the public README and a "what went wrong with v1" post-mortem.** The
-  post-mortem, backed by the ADR folder, is `[INFERRED]` the most valuable thing in the repo
-  for a portfolio.
+- [ ] **L12. Write a "what went wrong with v1" post-mortem.** `README.md` exists. The
+  post-mortem does not; it is `[INFERRED]` the most valuable thing in the repo for a
+  portfolio, and the material for it is already written — `docs/AUDIT.md`, ADR-011, and
+  `SESSION.md` §8/§11.
 - [ ] **L13. Lower setup friction for non-technical users** (hosted config UI, a managed
   key-proxy, one-click deploy — undecided, do not design yet). Trigger: v1 works for the
   operator and someone without his technical background wants to run it. Operator flagged
   2026-08-03 that `.env`/API-key setup (e.g. ADR-003's `balldontlie.io` key) is acceptable
   for now but not the intended final shape — see `SESSION.md` §9 Q10.
+
+---
+
+## Where tasks live now
+
+`[VERIFIED]` Fifteen issues, thirteen open (#6 and #14 closed), at
+https://github.com/AlphaNerdFx/SportWire/issues. **This file owns the plan; GitHub owns the
+queue.** When they disagree, check the issue — it is likelier to be current.
+
+Standing items not otherwise listed above:
+
+| # | Item | State |
+|---|---|---|
+| 1 | 14-day observation run | `[VERIFIED]` Running. **The clock resets on every behaviour change**, and 2026-08-12 changed the prompt. |
+| 5 | Capture a live/scheduled game fixture | Blocked until the season starts, **after 2026-09-30**. Every game ever captured reads `Final`. |
+| 11 | Non-technical setup | Deferred (L13). |
+| 15 | Tests for `processing/` | **P1 above. The priority.** |
+

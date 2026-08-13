@@ -144,10 +144,14 @@ def _current_season_year(now: datetime | None = None) -> int:
     return now.year - 1 if now.month < 10 else now.year
 
 
-def is_newsworthy(article: NewsArticle, now: datetime | None = None) -> bool:
-    """Whether an item is reporting rather than community content.
+def rejection_reason(article: NewsArticle, now: datetime | None = None) -> str | None:
+    """Why an item is not reporting, or None if it is. The reason names the rule that fired.
 
-    Three rules, all deliberately narrow. Anything ambiguous is kept — `[INFERRED]` a
+    `is_newsworthy` is this function asked as a yes/no question. They are one implementation
+    because two would drift, and a filter whose log disagreed with its behaviour would be
+    worse than one that logged nothing.
+
+    Four rules, all deliberately narrow. Anything ambiguous is kept — `[INFERRED]` a
     borderline item in the brief costs a line, while a wrongly rejected one is invisible, and
     invisible failures are the class this project keeps being bitten by.
     """
@@ -157,7 +161,7 @@ def is_newsworthy(article: NewsArticle, now: datetime | None = None) -> bool:
     # wording, so it catches a feed that has quietly turned into an archive.
     age_hours = (now - article.published_at).total_seconds() / 3600
     if age_hours > MAX_ARTICLE_AGE_HOURS:
-        return False
+        return f"older than {MAX_ARTICLE_AGE_HOURS}h ({age_hours:.0f}h)"
 
     # Invisible characters are stripped first, or a leading zero-width space defeats the
     # tag match entirely.
@@ -166,21 +170,33 @@ def is_newsworthy(article: NewsArticle, now: datetime | None = None) -> bool:
     # Rule 1 — a content-type tag.
     match = _LEADING_TAG.match(title)
     if match and match.group(1).strip().lower() in REJECTED_TAGS:
-        return False
+        return f"content-type tag [{match.group(1).strip()}]"
 
     # Rule 1b — a phrase announcing the piece is about the past. Checked anywhere in the
     # title, since "on this day" is unambiguous wherever it appears.
     lowered = title.lower()
-    if any(phrase in lowered for phrase in RETROSPECTIVE_PHRASES):
-        return False
+    for phrase in RETROSPECTIVE_PHRASES:
+        if phrase in lowered:
+            return f"retrospective phrase {phrase!r}"
 
     # Rule 2 — the title names a finished season *outside* any quotation, which marks the
     # post as being about that season rather than citing it.
+    #
+    # `[Likely]` This is the rule most prone to false positives, and the reason is reported
+    # with the year that tripped it because of that. It has already produced one live
+    # false positive (a current Ballmer story citing 2015) and been narrowed once.
     season = _current_season_year(now)
     unquoted = _strip_quoted(title)
-    is_about_a_past_season = any(int(year) < season for year in _YEAR.findall(unquoted))
+    past_years = [year for year in _YEAR.findall(unquoted) if int(year) < season]
+    if past_years:
+        return f"names past season {past_years[0]} outside quotes (current: {season})"
 
-    return not is_about_a_past_season
+    return None
+
+
+def is_newsworthy(article: NewsArticle, now: datetime | None = None) -> bool:
+    """Whether an item is reporting rather than community content."""
+    return rejection_reason(article, now) is None
 
 
 def drop_non_news(
@@ -195,9 +211,14 @@ def drop_non_news(
     kept: list[NewsArticle] = []
 
     for article in articles:
-        if is_newsworthy(article, now):
+        reason = rejection_reason(article, now)
+        if reason is None:
             kept.append(article)
         else:
-            logger.info("dropping non-news item: %r", article.title[:80])
+            # The full title, not a truncated one. `[VERIFIED]` 2026-08-13: an r/nba post
+            # reporting Russell Westbrook's retirement was dropped here, and neither the
+            # rule nor the offending text could be recovered from the log because the title
+            # was cut at 80 characters and no reason was recorded.
+            logger.info("dropping non-news item (%s): %r", reason, article.title)
 
     return kept
