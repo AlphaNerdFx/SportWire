@@ -1,0 +1,15 @@
+# Line endings.
+#
+# This repository lives on a Windows drive (/mnt/c) but is edited and run inside WSL2.
+# When a Windows-side tool touches a file it rewrites LF to CRLF, and because git stores
+# LF, every line of that file then reads as modified.
+#
+# `[VERIFIED]` 2026-08-13: 15 files showed as changed with 3176 insertions and 3176
+# deletions and **zero** content change -- `git diff --ignore-all-space --stat` was empty,
+# and `main.py` carried 325 CR terminators in the working tree against 0 in HEAD.
+# A diff that large hides real work, which is the actual cost.
+#
+# `text=auto` lets git decide which files are text. `eol=lf` checks those files out with
+# LF on every platform, so a Windows editor's rewrite is normalised away on `git add`
+# instead of becoming a diff.
+* text=auto eol=lf
