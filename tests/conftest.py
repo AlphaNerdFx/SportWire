@@ -91,8 +91,15 @@ def make_game() -> Callable[..., GameData]:
         status: str = "Final",
         period: int = 4,
         game_id: int | None = None,
+        home_periods: list[int] | None = None,
+        away_periods: list[int] | None = None,
     ) -> GameData:
         return GameData(
+            # Derived from the teams alone, never the score. A game reported at half time
+            # and again as final is the *same game* — that is precisely what
+            # `test_a_game_whose_score_changed_is_not_a_duplicate` relies on, and what
+            # `state_hash` exists to distinguish. Pass `game_id` explicitly if a test needs
+            # two distinct games between the same two teams.
             game_id=game_id
             if game_id is not None
             else abs(hash((home, away))) % 100_000,
@@ -103,6 +110,8 @@ def make_game() -> Callable[..., GameData]:
             home_score=home_score,
             away_score=away_score,
             period=period,
+            home_periods=home_periods or [],
+            away_periods=away_periods or [],
         )
 
     return build

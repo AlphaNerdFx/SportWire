@@ -386,7 +386,30 @@ what each turned into, since several changed shape on contact with real data.
     - `[INFERRED]` That is now **four** fake or missing tests caught this way across three
       modules. The pattern is consistent: a test written from the same reasoning as the code
       inherits the code's blind spots, and only trying to break it reveals that.
-  - [ ] `highlights.py`, `summarize.py`, `storage/db.py`, `settings.py`, both RSS parsers,
+  - [x] **`highlights.py`** — 2026-08-13, commit pending. 20 tests.
+    - Proof: `make check` → **106 passed, 1 xfailed**.
+    - Proof — `[VERIFIED]` mutation results, all six caught:
+
+      | Mutation | Result |
+      |---|---|
+      | blowout threshold removed | 3 failed |
+      | closest-finish threshold removed | 7 failed |
+      | one-slot rule removed | 4 failed |
+      | wire-to-wire band removed | 3 failed |
+      | comebacks never detected | 3 failed |
+      | only the first overtime game reported | 1 failed |
+
+    - `[VERIFIED]` **Three of my own tests were wrong on the first run, and the code was
+      right.** Each constructed game accidentally qualified for an *earlier* category that
+      claimed it — an "ordinary" 14-point win was inside the `wire_to_wire` band, and a
+      `second_half_takeover` case was also a 20-point comeback. `[INFERRED]` With eight
+      categories and a precedence order, constructing a game that exercises exactly one is
+      genuinely hard, which is itself an argument for the tests existing.
+    - `[VERIFIED]` One conftest error, caught by the full suite rather than the module's own:
+      adding scores to `make_game`'s derived `game_id` made one game at half time and at full
+      time read as two different games, breaking `test_a_game_whose_score_changed_is_not_a_duplicate`.
+      `game_id` identifies a game; `state_hash` distinguishes its states. Reverted.
+  - [ ] `summarize.py`, `storage/db.py`, `settings.py`, both RSS parsers,
     the Telegram message splitter.
   - Proof:
 
@@ -624,6 +647,33 @@ what each turned into, since several changed shape on contact with real data.
   - **What to watch:** whether this line ever appears in `logs/sportwire.log`. If it does, the
     threshold question (options a/b) becomes real and there will be data to settle it with.
     `[VERIFIED]` The dated log format from `ec7bc3c` makes that countable.
+
+- [ ] **P10. A superlative category can be silently emptied by an earlier one.** Found
+  2026-08-13 by testing. **User-facing, and it happens on the committed fixture.**
+  `[VERIFIED]` `_CATEGORY_ORDER` puts `biggest_period` before `largest_margin`, and a game is
+  reported once under its first matching category. On the real 2026-01-15 slate, Dallas beat
+  Utah by **22 — the widest margin of the night — with a 43-point quarter**, so
+  `biggest_period` claims it. `largest_margin` then has no candidate and is **not reassigned
+  to the second-widest game**, so the brief never mentions the biggest win at all.
+  `[VERIFIED]` `TASKS.md` H11 records the 2026-08-05 delivered brief as containing
+  *"Biggest win — Dallas Mavericks by 22"*. It no longer would. The category order changed
+  when `biggest_period`, `wire_to_wire` and `second_half_takeover` were added in the M band,
+  and nothing flagged that an existing line had been displaced.
+  `[INFERRED]` The same shadowing applies to `highest_scoring`, which the Dallas game also
+  tops (266 points) on that slate. Two of eight categories produce nothing because one game
+  holds three superlatives.
+  - a. After claiming, re-run each superlative over the *unclaimed* games. `[INFERRED]` Most
+    faithful to "the biggest win of the night", and makes the brief richer on exactly the
+    nights that have a standout game. Costs one more pass.
+  - b. Reorder `_CATEGORY_ORDER` so margin outranks period. `[INFERRED]` Cheap, but only
+    moves which category goes silent.
+  - c. Allow a game to hold more than one category. `[INFERRED]` Rejected by the existing
+    design on purpose — one game would occupy several slots in a short brief.
+  - d. Accept and document.
+  `[INFERRED]` (a). It is the only option that keeps every category meaningful, and the
+  "report once" rule it must respect is already expressed by the `claimed` set — the change
+  is where the superlatives are computed, not what they mean.
+  - Proof:
 
 ---
 
