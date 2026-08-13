@@ -74,6 +74,40 @@ def make_article() -> Callable[..., NewsArticle]:
     return build
 
 
+@pytest.fixture
+def make_game() -> Callable[..., GameData]:
+    """Build a real `GameData`. Same one-factory reasoning as `make_article`.
+
+    `start_time` is fixed rather than `now()` so `state_hash` is reproducible across runs —
+    the property's whole point is that it changes only when the *game* changes.
+    """
+
+    def build(
+        home: str = "Los Angeles Lakers",
+        away: str = "Golden State Warriors",
+        *,
+        home_score: int = 110,
+        away_score: int = 104,
+        status: str = "Final",
+        period: int = 4,
+        game_id: int | None = None,
+    ) -> GameData:
+        return GameData(
+            game_id=game_id
+            if game_id is not None
+            else abs(hash((home, away))) % 100_000,
+            start_time=NOW,
+            status=status,
+            home_team=home,
+            away_team=away,
+            home_score=home_score,
+            away_score=away_score,
+            period=period,
+        )
+
+    return build
+
+
 def pytest_addoption(parser: pytest.Parser) -> None:
     """Register --snapshot-update for re-approving intentionally changed output."""
     parser.addoption(
@@ -94,6 +128,18 @@ def snapshot_update(request: pytest.FixtureRequest) -> bool:
 def espn_rss_xml() -> str:
     """Raw ESPN RSS captured 2026-08-04: 15 items, 2 of them without an author."""
     return (FIXTURES / "espn_nba_rss.xml").read_text(encoding="utf-8")
+
+
+@pytest.fixture
+def cbs_rss_xml() -> str:
+    """Raw CBS Sports RSS, the second feed added and the one that made ADR-005 measurable."""
+    return (FIXTURES / "cbs_nba_rss.xml").read_text(encoding="utf-8")
+
+
+@pytest.fixture
+def cbs_articles(cbs_rss_xml: str) -> list[NewsArticle]:
+    """CBS articles as the pipeline sees them, for cross-source duplicate measurement."""
+    return RssNewsAdapter("CBS Sports").parse(cbs_rss_xml)
 
 
 @pytest.fixture

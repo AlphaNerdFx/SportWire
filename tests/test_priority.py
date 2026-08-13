@@ -19,7 +19,6 @@ test that only checked tokenising would have missed it completely.
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime, timezone
 
 import pytest
 
@@ -32,20 +31,7 @@ from processing.priority import (
 )
 
 ArticleFactory = Callable[..., NewsArticle]
-
-
-def _game(home: str, away: str) -> GameData:
-    """A finished game between two named teams. Only the names matter to this module."""
-    return GameData(
-        game_id=abs(hash((home, away))) % 100_000,
-        start_time=datetime(2026, 8, 13, 0, 0, tzinfo=timezone.utc),
-        status="Final",
-        home_team=home,
-        away_team=away,
-        home_score=110,
-        away_score=104,
-        period=4,
-    )
+GameFactory = Callable[..., GameData]
 
 
 # --- classification --------------------------------------------------------------------
@@ -126,10 +112,12 @@ def test_possessive_team_name_matches_the_team(make_article: ArticleFactory) -> 
     assert mentions_team_in_play(article, {"warriors"})
 
 
-def test_team_keywords_take_the_last_word_of_each_name() -> None:
+def test_team_keywords_take_the_last_word_of_each_name(
+    make_game: GameFactory,
+) -> None:
     """Every NBA `full_name` ends in a unique nickname; the city is shared and the full
     string is rarely spelled out in a headline."""
-    games = [_game("Los Angeles Lakers", "Golden State Warriors")]
+    games = [make_game("Los Angeles Lakers", "Golden State Warriors")]
 
     assert team_keywords(games) == {"lakers", "warriors"}
 
@@ -145,7 +133,7 @@ def test_no_games_means_nothing_is_promoted(make_article: ArticleFactory) -> Non
 
 
 def test_tonight_is_a_tiebreaker_within_a_tier_not_a_tier_of_its_own(
-    make_article: ArticleFactory,
+    make_article: ArticleFactory, make_game: GameFactory
 ) -> None:
     """`[VERIFIED]` 2026-08-07: this exact pairing put a child-support story first.
 
@@ -165,7 +153,7 @@ def test_tonight_is_a_tiebreaker_within_a_tier_not_a_tier_of_its_own(
         "Suns waive a forward to open a roster spot",
         summary="Phoenix creates space ahead of the season.",
     )
-    games = [_game("Los Angeles Lakers", "Golden State Warriors")]
+    games = [make_game("Los Angeles Lakers", "Golden State Warriors")]
 
     ordered = sort_by_priority([off_court_but_playing, roster_news_not_playing], games)
 
@@ -177,7 +165,7 @@ def test_tonight_is_a_tiebreaker_within_a_tier_not_a_tier_of_its_own(
 
 
 def test_tonight_does_break_ties_inside_one_tier(
-    make_article: ArticleFactory,
+    make_article: ArticleFactory, make_game: GameFactory
 ) -> None:
     """The other half: within a tier, a team that played wins.
 
@@ -186,7 +174,7 @@ def test_tonight_does_break_ties_inside_one_tier(
     """
     high_not_playing = make_article("Hornets sign a guard")
     high_playing = make_article("Lakers sign a centre")
-    games = [_game("Los Angeles Lakers", "Golden State Warriors")]
+    games = [make_game("Los Angeles Lakers", "Golden State Warriors")]
 
     ordered = sort_by_priority([high_not_playing, high_playing], games)
 

@@ -346,8 +346,26 @@ what each turned into, since several changed shape on contact with real data.
       its own broke nothing about tokenising, so every token-level test passes under it. Only
       an ordering assertion across two tiers catches it — which is why the fix is asserted in
       both directions (it must outrank, *and* it must still break ties within a tier).
-  - [ ] `dedup.py`, `cluster.py`, `highlights.py`, `storage/db.py`, `settings.py`,
-    both RSS parsers, the Telegram message splitter.
+  - [x] **`dedup.py`** — 2026-08-13, commit pending. Chosen fourth despite **no recorded
+    bugs**: it is load-bearing and quiet, and it is where three of H13's failed questions
+    live (Q1, Q3, Q7), so the tests double as the written form of those answers.
+    - Proof: `make check` → **70 passed, 1 xfailed**.
+    - Proof — `[VERIFIED]` mutation results:
+
+      | Mutation | Result |
+      |---|---|
+      | pass 1 (already-delivered) removed | 2 failed |
+      | pass 2 (near-identical) removed | 2 failed |
+      | games matched on `game_id` not `state_hash` | 1 failed — the unchanged-game test |
+      | `normalise_title` stops lowercasing | 1 failed |
+      | threshold lowered 0.85 → 0.40 | 2 failed — **including the real-data test** |
+
+    - `[INFERRED]` The last row is the useful one: `test_real_cross_source_pairs_do_not_collapse`
+      re-measures ADR-005's evidence from the committed fixtures on every run, so the
+      threshold is guarded by data rather than by a comment. Lowering it below what real
+      headlines actually score fails the suite.
+  - [ ] `cluster.py`, `highlights.py`, `storage/db.py`, `settings.py`, both RSS parsers,
+    the Telegram message splitter.
   - Proof:
 
 - [x] **P2. Verify the paragraph and subject-grouping prompt.** — 2026-08-13, **provisionally**
@@ -518,6 +536,31 @@ what each turned into, since several changed shape on contact with real data.
   `[INFERRED]` (a). The comment is wrong and should be corrected regardless; the ranking cost
   is one story ordered too high in a list nothing is dropped from, which is the cheapest
   possible error here.
+  - Proof:
+
+- [ ] **P8. ADR-005's headline measurement cannot be reproduced from this repository.**
+  Found 2026-08-13 while writing `tests/test_dedup.py`. **The decision is not in doubt; the
+  number is not checkable.**
+  `[VERIFIED]` `processing/dedup.py:38` and `SESSION.md` §5 both record **612 real
+  cross-source pairs (17 ESPN × 36 CBS), highest similarity 0.439.** Re-measured from the
+  committed fixtures: **540 pairs (15 ESPN × 36 CBS), highest similarity 0.425.** The ESPN
+  fixture holds 15 items — `conftest.py` says so and `TASKS.md` H11 already records that a
+  live fetch returned 16 against the fixture's 15 — so the 612 figure came from a **live**
+  fetch of 17 and no artefact in the repo reproduces it.
+  `[INFERRED]` The conclusion is unchanged and slightly **stronger**: 0.425 is further from
+  the 0.85 threshold than 0.439. Nothing about ADR-005 needs revisiting.
+  `[INFERRED]` What needs fixing is that a load-bearing measurement was recorded from data
+  that was never committed, so it could not be re-checked until something tried to. That is
+  the same shape as the `cdn.nba.com` failure in `OPERATING_RULES.md` §2 — a number carried
+  forward as fact — merely benign this time.
+  - a. Correct both figures in place to the reproducible ones, with a dated note that the
+    original was measured live. `[INFERRED]` Preferred: `OPERATING_RULES.md` §2 requires
+    correction in place with a strikethrough, never silent deletion.
+  - b. Re-capture a 17-item ESPN fixture so the original number reproduces. `[INFERRED]` Not
+    possible — the feed has moved on; those 17 items are gone.
+  `[VERIFIED]` `test_real_cross_source_pairs_do_not_collapse` now re-measures this on every
+  run, so whichever number the documents carry, the *threshold* is guarded by live
+  arithmetic rather than by prose.
   - Proof:
 
 ---
