@@ -307,7 +307,7 @@ what each turned into, since several changed shape on contact with real data.
   step.
   - Proof:
 
-- [ ] **P3. Decide what to do about `newsworthy.py` Rule 2 (past-year outside quotes).**
+- [ ] **P3. Decide what to do about `newsworthy.py` Rule 2 (past-year outside quotes).** (#16)
   `[VERIFIED]` 2026-08-13 it dropped r/nba's `[Charania] After 18 NBA seasons, Russell
   Westbrook has retired…` because the title cited his 2008 debut. **Second false positive
   from this rule**; the first was a current Ballmer story citing 2015, after which the rule
@@ -324,7 +324,7 @@ what each turned into, since several changed shape on contact with real data.
   rather than a phrase.
   - Proof:
 
-- [ ] **P4. Establish the summariser's actual pass rate.**
+- [ ] **P4. Establish the summariser's actual pass rate.** (#17)
   `[VERIFIED]` The "~84%" figure came from 3/5 on one sitting and is repeated in several
   places; two runs on 2026-08-13 went 0/3 then pass. `[UNKNOWN]` The real rate.
   Count validation outcomes across the soak from `logs/sportwire.log` rather than quoting
@@ -372,7 +372,7 @@ what each turned into, since several changed shape on contact with real data.
 
 ## Where tasks live now
 
-`[VERIFIED]` Fifteen issues, thirteen open (#6 and #14 closed), at
+`[VERIFIED]` Seventeen issues, fifteen open (#6 and #14 closed), at
 https://github.com/AlphaNerdFx/SportWire/issues. **This file owns the plan; GitHub owns the
 queue.** When they disagree, check the issue — it is likelier to be current.
 

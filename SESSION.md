@@ -20,7 +20,7 @@
 |---|---|
 | **Name** | SportWire — NBA news and game-data brief, delivered to Telegram |
 | **Stage** | **Working and running unattended.** Cron delivers every 8 hours. |
-| **Repo** | Public, MIT, CI green. `[VERIFIED]` 15 issues: 13 open, #6 and #14 closed |
+| **Repo** | Public, MIT, CI green. `[VERIFIED]` 17 issues: 15 open, #6 and #14 closed |
 | **Runtime** | `[VERIFIED]` WSL2 Ubuntu, Python 3.10.12, `.venv` (68 MB, 21 packages) |
 | **Sources** | ESPN, CBS Sports, Yahoo Sports, r/nba (news); balldontlie (games) |
 | **Delivery** | Telegram `@sportwire_news_bot`, three messages, one notification |
@@ -276,9 +276,9 @@ shape. Ask whether it arrived as 2-3 paragraphs and whether a reaction sat in th
 same paragraph as the event it reacts to. That resolves TASKS.md P2.
 
 Two decisions are waiting for me, both in TASKS.md. Do not pick either silently:
-- P3: newsworthy.py Rule 2 dropped a Westbrook retirement report for citing his
+- P3 (#16): newsworthy.py Rule 2 dropped a Westbrook retirement report for citing his
   2008 debut. Second false positive from that rule. Four options are written out.
-- P4: the summariser's pass rate is unknown. The old "84%" came from one sitting
+- P4 (#17): the summariser's pass rate is unknown. The old "84%" came from one sitting
   of 3/5; the very next runs went 0/3 then pass. Count it, don't project it.
 
 Then: issue #15 is the highest-value work remaining. Eleven real bugs were found
