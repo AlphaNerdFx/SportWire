@@ -329,8 +329,25 @@ what each turned into, since several changed shape on contact with real data.
       `[INFERRED]` A test written from the same reasoning as the code inherits the code's
       blind spots; only trying to break it exposes that.
     - Diagnosing the second one found a real defect, opened as **P6**.
-  - [ ] `dedup.py`, `cluster.py`, `priority.py`, `highlights.py`, `storage/db.py`,
-    `settings.py`, both RSS parsers, the Telegram message splitter.
+  - [x] **`priority.py`** — 2026-08-13, commit pending. Chosen third: three recorded bugs,
+    and one of them was structural rather than a tokenising slip.
+    - Proof: `make check` → **59 passed, 1 xfailed**.
+    - Proof — `[VERIFIED]` mutation results:
+
+      | Mutation | Result |
+      |---|---|
+      | tonight promoted to a top-level tier (the 2026-08-07 bug) | 1 failed — the tiebreaker test |
+      | hyphen splitting removed | 2 failed — `ex-fiancée`, `sign-and-trade` |
+      | possessive handling removed | 1 failed — `Warriors'` |
+      | `high` checked before `low` | 1 failed — wedding-plus-"deal" |
+      | team keyword takes the first word | 2 failed — keywords, and the within-tier tiebreak |
+
+    - `[INFERRED]` **The structural bug is the one worth noting.** Making "tonight" a tier of
+      its own broke nothing about tokenising, so every token-level test passes under it. Only
+      an ordering assertion across two tiers catches it — which is why the fix is asserted in
+      both directions (it must outrank, *and* it must still break ties within a tier).
+  - [ ] `dedup.py`, `cluster.py`, `highlights.py`, `storage/db.py`, `settings.py`,
+    both RSS parsers, the Telegram message splitter.
   - Proof:
 
 - [x] **P2. Verify the paragraph and subject-grouping prompt.** — 2026-08-13, **provisionally**
@@ -474,6 +491,33 @@ what each turned into, since several changed shape on contact with real data.
   `[INFERRED]` **The general lesson is the bigger one:** two mechanisms fixed the same
   symptom a day apart and the overlap was invisible until something tried to break each one
   individually. Reading the code did not reveal it; reading the code is what wrote it.
+  - Proof:
+
+- [ ] **P7. `priority.py`'s word-boundary comment claims a benefit it does not deliver.**
+  Found 2026-08-13 while writing `tests/test_priority.py`.
+  `[VERIFIED]` The comment at `processing/priority.py:100` reads: *"Substring matching would
+  classify 'signs of improvement' as a signing and 'designated' as containing 'sign'."* Only
+  the second half holds. `classify()` on the three real shapes:
+
+  | Title | Tier |
+  |---|---|
+  | `Curry shows signs of improvement in return` | **high** ← the comment says this is prevented |
+  | `Coach praises the designated starter` | medium ✓ |
+  | `Jokic signs a max extension` | high ✓ |
+
+  `[INFERRED]` Word-boundary matching cannot help here, because `signs` **is** a standalone
+  word in "shows signs of improvement". The comment describes a protection that does not
+  exist, which is the documentation failure `CLAUDE.md` §0 exists to prevent — in a comment
+  rather than a handoff document, but the same kind.
+  Two things to decide, and they are separable:
+  - a. Fix the comment only. The misclassification is one article ranked high that should be
+    medium; `[INFERRED]` cheap and low-risk.
+  - b. Also narrow the rule — drop bare `signs`/`signed` and require a roster context.
+    `[INFERRED]` Risky: this project's record is that narrowing keyword rules produces
+    invisible false negatives (P3, twice).
+  `[INFERRED]` (a). The comment is wrong and should be corrected regardless; the ranking cost
+  is one story ordered too high in a list nothing is dropped from, which is the cheapest
+  possible error here.
   - Proof:
 
 ---
