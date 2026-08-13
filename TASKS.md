@@ -295,17 +295,44 @@ what each turned into, since several changed shape on contact with real data.
   found in six days **by reading live output, never by a test** — full list in `SESSION.md` §8.
   Every one would have been a two-line test and every one can silently return.
   **Do not add features before this unless the operator asks.**
+
+  - [x] **`newsworthy.py`** — 2026-08-13, commit `19dabf3`. Chosen first: five of the eleven
+    recorded bugs are in it, and it is the only module permitted to delete an article, so its
+    failures are invisible by construction.
+    - Proof: `pytest -v` → **27 passed in 0.71s** (24 new + the 3 existing rendering tests).
+    - Proof — `[VERIFIED]` **the tests were mutation-tested, not trusted because they passed.**
+      Resurrecting Rule 2 in place: `5 failed, 19 passed`, the failures being all four
+      `test_year_in_title_no_longer_drops_current_reporting` cases plus
+      `test_removing_rule_2_did_not_weaken_the_other_rules`. Making `_strip_invisible` a
+      no-op: `1 failed, 23 passed`, the failure being exactly
+      `test_invisible_character_before_tag_does_not_defeat_the_match`. Source restored from
+      git after each; `git diff HEAD -- processing/newsworthy.py` empty.
+    - `[INFERRED]` This is the step the legacy repo skipped. `test_ingestion_setup.py` passed
+      in 3.32s while asserting only that imports resolve, and a suite that has never been
+      seen to fail is indistinguishable from that one.
+  - [ ] `validate.py`, `dedup.py`, `cluster.py`, `priority.py`, `highlights.py`,
+    `storage/db.py`, `settings.py`, both RSS parsers, the Telegram message splitter.
   - Proof:
 
-- [ ] **P2. Verify the paragraph and subject-grouping prompt.**
-  `[UNKNOWN]` Committed 2026-08-12, never seen against live output — a dry-run exceeded the
-  command timeout. Check the next scheduled brief: two or three paragraphs, and a reaction in
-  the same paragraph as the event it reacts to.
-  `[INFERRED]` If grouping is still poor, the cause is structural rather than prompt wording:
-  notes reach the writer in chunk order, and chunks are formed by priority rank, so related
-  items can arrive far apart. The fix would be ordering notes by subject before the reduce
-  step.
-  - Proof:
+- [x] **P2. Verify the paragraph and subject-grouping prompt.** — 2026-08-13, **provisionally**
+  `[VERIFIED]` The operator supplied both delivered briefs from 2026-08-13. The commit clock
+  is what makes them readable: `71b2fa9` landed **14:43**, so the 08:00 brief ran on the *old*
+  prompt and the 16:00 brief is the *first* run of the new one.
+  - Proof — **08:00, old prompt.** One unbroken block. Westbrook's retirement opens it, then
+    Jalen Duren, then Lakers ownership, then it **returns** to Westbrook for the Michael B.
+    Jordan narration and LeBron's "HELLUVA CAREER BRODIE!! HOF next!!" — the reactions
+    separated from the event by two unrelated subjects. This is the failure the prompt was
+    written to fix, and it is not a test of the fix.
+  - Proof — **16:00, new prompt.** Two paragraphs. ¶1 is Westbrook: retirement, the
+    LeBron/Giannis tributes, the triple-double record — **the reaction sits with the event it
+    reacts to.** ¶2 is everything else: Mavericks schedule, Suns waiving Highsmith, Clippers
+    investigation. Both criteria met.
+  - `[UNKNOWN]` **Whether it holds.** n=1, and `SESSION.md` §11 records concluding from one
+    run as a mistake this project has made twice. The 16:00 input was also *smaller* — 7
+    stories over 2 chunks against the 08:00 run's 12 over 3 — so the structural risk this task
+    predicted (notes arriving in chunk order, related items far apart) is **untested at 3
+    chunks under the new prompt.** The next 12-story run is the real test; if grouping breaks
+    there, order notes by subject before the reduce step.
 
 - [ ] **P3. Decide what to do about `newsworthy.py` Rule 2 (past-year outside quotes).** (#16)
   `[VERIFIED]` 2026-08-13 it dropped r/nba's `[Charania] After 18 NBA seasons, Russell
@@ -322,7 +349,29 @@ what each turned into, since several changed shape on contact with real data.
   `[INFERRED]` (a) is the one to test first. This project's evidence is that narrow rules
   keep producing invisible false positives, and Rule 2 is the only one that reads a number
   rather than a phrase.
-  - Proof:
+
+  **Operator chose (a) on 2026-08-13. Done — commit `06110ab`.**
+  - Proof — verified against the real titles from `logs/sportwire.log`, not invented ones:
+
+    | Title | Before | Now |
+    |---|---|---|
+    | `[Charania] After 18 NBA seasons… Westbrook has retired… 2017 MVP` | dropped | **kept** |
+    | Ballmer cap circumvention, `"In 2015…"` | dropped, then narrowed | **kept** |
+    | `[Highlight] Westbrook gets intentionally fouled…` | dropped | dropped (rule 1) |
+    | `On this day in Bucks history…` | dropped | dropped (rule 1b) |
+    | `During his NBA career, Bill Russell…` | dropped | dropped (rule 1b) |
+    | `[Highlight] Chris Mullin beats Durant (2017)` | dropped | dropped (rule 1) |
+    | `After Leonard signed with the Clippers in 2019, Masai Ujiri was asked…` | dropped | **kept** |
+
+  - `[VERIFIED]` **The accepted cost is the last row** — Rule 2's one documented true positive
+    now reaches the brief, capped by `cluster.py` and ranked low by `priority.py`, so it costs
+    a line rather than a slot. It is asserted explicitly in
+    `test_removing_rule_2_did_not_weaken_the_other_rules` so the trade stays visible in the
+    suite rather than only in a commit message.
+  - `[VERIFIED]` Removing the rule orphaned `_YEAR`, `_QUOTED`, `_strip_quoted` and
+    `_current_season_year`; all four deleted, recoverable from git history.
+  - **What to watch:** the drop log, for retrospectives returning. That is the measurement
+    option (a) was chosen to produce.
 
 - [ ] **P4. Establish the summariser's actual pass rate.** (#17)
   `[VERIFIED]` The "~84%" figure came from 3/5 on one sitting and is repeated in several
@@ -330,6 +379,55 @@ what each turned into, since several changed shape on contact with real data.
   Count validation outcomes across the soak from `logs/sportwire.log` rather than quoting
   a number from one sitting. `[VERIFIED]` Every occurrence in `main.py` and `SESSION.md`
   has been corrected to `[UNKNOWN]`; check ADR-012 has not been missed.
+
+  **2026-08-13: attempted, and blocked by a defect in the log itself.**
+  - `[VERIFIED]` **The log recorded no date** — `main.py:65` set `datefmt="%H:%M:%S"`. Runs
+    are 8h apart and cron skips whenever WSL sleeps, so two consecutive `08:00:17` lines
+    could be one day apart or four. The log cannot be segmented by code version, which is
+    exactly what this task needs: `7323396` (last-word grounding) changed rejection behaviour
+    mid-soak. **Fixed in `ec7bc3c`;** existing lines stay undated, so an honest count starts
+    from the next run.
+  - Proof — raw count over all 483 lines, offered as a **floor, not the rate**: 8 summarisation
+    runs. **2 delivered a validated summary, 5 fell back after 3 rejections each, 1 errored.**
+    Per attempt that is **2 accepted / 19 ≈ 11%**.
+  - `[VERIFIED]` The count mixes code versions and cannot be cleaned: at least one logged run
+    predates the current summariser, its traceback naming the pre-rename directory
+    `/mnt/c/DSC/.../NBA and NFL News and Games Assistant/` and its wording not matching
+    today's `summarize.py`.
+  - `[VERIFIED]` **What is safe to state: nothing in this log supports 84%.** The gap is not
+    marginal — 11% against 84% is a factor of eight, and even the intermediate "1/2" in
+    `SESSION.md` §6 was optimistic.
+  - `[UNKNOWN]` The real rate. Re-count after ~2 weeks of dated logs.
+  - Proof:
+
+- [ ] **P5. The validator grounds entities, not claims — a bug class not in `SESSION.md` §8.**
+  Found 2026-08-13 by reading the two delivered briefs the operator supplied. **This one
+  reached the phone**, which the eleven recorded bugs' whole point is to prevent.
+  `[VERIFIED]` The 08:00 brief passed validation **on attempt 1** and contains: *"His
+  retirement marked the end of playoff runs for basketball greats like Kobe Bryant, Tim
+  Duncan, Dirk Nowitzki, and Kawhi Leonard."* `[INFERRED]` Kawhi Leonard is active — the same
+  run's feed carries *"As the Kawhi Leonard investigation drags on… his trade to the
+  Raptors."*
+  `[VERIFIED]` The 16:00 run shows the same shape from the other side: attempt 2 was rejected
+  for `Los Angeles Clippers-approved`, and **attempt 3 was accepted saying "team-approved beat
+  writers"** — the model rephrased around the validator rather than becoming correct.
+  `[INFERRED]` **Every name in both sentences is real and appears in the sources, so
+  `validate.py` passes them.** It catches invented *entities* and is blind to false
+  *relationships* between real ones. This is a different failure class from the Joe
+  Dumars / Ayo Dosunmu one, which retry and grounding were both built for.
+  `[UNKNOWN]` How often it happens — nothing currently detects it, so it has never been
+  counted. **Do not assume it is rare because it was noticed twice in one day; it was noticed
+  because the operator read the output, which is how all eleven others were found.**
+  Options, none picked — `CLAUDE.md` §6:
+  - a. Accept and document. Claim-level verification is a research problem, not a validator.
+  - b. Constrain the prompt to one sentence per source note, so a sentence cannot fuse two.
+  - c. Add an entity-pair check: flag a sentence whose named entities never co-occur in any
+    single source article. Cheap, no model, catches exactly this fusion shape.
+  - d. Second-pass LLM check of each sentence against the source notes. Doubles an already
+    5–9-minute run.
+  `[INFERRED]` (c) is the one to cost first — it is the only option that is mechanical,
+  testable offline against the two captured briefs, and consistent with this project's
+  record that bounding structure beats classifying meaning (`SESSION.md` §11).
   - Proof:
 
 ---
