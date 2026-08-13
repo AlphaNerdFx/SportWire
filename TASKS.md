@@ -364,7 +364,29 @@ what each turned into, since several changed shape on contact with real data.
       re-measures ADR-005's evidence from the committed fixtures on every run, so the
       threshold is guarded by data rather than by a comment. Lowering it below what real
       headlines actually score fails the suite.
-  - [ ] `cluster.py`, `highlights.py`, `storage/db.py`, `settings.py`, both RSS parsers,
+  - [x] **`cluster.py`** — 2026-08-13, commit pending. 14 tests.
+    - Proof: `make check` → **84 passed, 1 xfailed**.
+    - Proof — `[VERIFIED]` mutation results, after two rounds:
+
+      | Mutation | Result |
+      |---|---|
+      | `MIN_SHARED_NAMES` 2 → 1 | 1 failed |
+      | frequency ceiling effectively removed | 2 failed *(caught only after a fix — see below)* |
+      | cap counts the last member, not the leader | 1 failed |
+      | r/nba's special cap removed | 1 failed |
+      | cap stops logging what it dropped | 1 failed |
+      | group fingerprint stops widening | 1 failed *(uncovered on the first round)* |
+
+    - `[VERIFIED]` **Two defects in the tests, both found by mutation, neither by review.**
+      `test_a_name_appearing_everywhere_does_not_group` shared only *one* common name, so it
+      was held up by `MIN_SHARED_NAMES` and passed with the frequency ceiling removed
+      entirely — it did not test the mechanism its name credits. And nothing at all covered
+      the fingerprint-widening line, so a story that develops vocabulary across posts could
+      fragment into two clusters with no test objecting.
+    - `[INFERRED]` That is now **four** fake or missing tests caught this way across three
+      modules. The pattern is consistent: a test written from the same reasoning as the code
+      inherits the code's blind spots, and only trying to break it reveals that.
+  - [ ] `highlights.py`, `summarize.py`, `storage/db.py`, `settings.py`, both RSS parsers,
     the Telegram message splitter.
   - Proof:
 
@@ -561,6 +583,33 @@ what each turned into, since several changed shape on contact with real data.
   `[VERIFIED]` `test_real_cross_source_pairs_do_not_collapse` now re-measures this on every
   run, so whichever number the documents carry, the *threshold* is guarded by live
   arithmetic rather than by prose.
+  - Proof:
+
+- [ ] **P9. `group_related` silently groups nothing in a batch under 25 articles.**
+  Found 2026-08-13 by testing. **The most consequential of the four findings this session,
+  because the degradation is invisible and the margin is thin.**
+  `[VERIFIED]` `ceiling = max(1, int(len(articles) * MAX_NAME_FREQUENCY))` with
+  `MAX_NAME_FREQUENCY = 0.08` evaluates to **1** for any batch below 25. A name shared by two
+  articles has document frequency 2, which exceeds that ceiling, so it is discarded as
+  non-distinctive — and `MIN_SHARED_NAMES = 2` then cannot be satisfied by anything.
+  `[VERIFIED]` Measured with the two real Kawhi/Daktronics titles from the module's own
+  docstring: **not merged at 24 articles, merged at 25.**
+  `[VERIFIED]` It has not bitten yet — `logs/sportwire.log` shows 27 and 64 articles past
+  dedup on 2026-08-13. `[INFERRED]` **27 is one quiet day away from 24.** When it happens the
+  brief carries duplicate coverage of one story, `limit_per_source` counts those duplicates
+  as separate stories and spends the cap on them, and **no log line says any of it** — the
+  "grouped N articles into M stories" line only fires when something merged.
+  - a. Floor the ceiling at 2: `max(2, ...)`. `[INFERRED]` Smallest change, restores grouping
+    at any batch size. Risk: in a 10-article batch a name in 2 articles is 20% frequency,
+    which is not rare, so small batches could over-merge.
+  - b. Make the ceiling absolute rather than proportional below some size.
+  - c. Log when grouping is skipped for this reason, and change nothing else. `[INFERRED]`
+    Turns an invisible failure into a visible one, which is this project's recurring remedy
+    (`SESSION.md` §8: nine of eleven bugs found by reading output).
+  - d. Accept and document.
+  `[INFERRED]` (c) first, then measure. This project's record is that making a failure
+  visible beats guessing at a threshold — and unlike (a) it cannot cause a false merge, which
+  is the expensive error here since a merged story is one the brief never reports separately.
   - Proof:
 
 ---
