@@ -15,8 +15,11 @@ Two properties are asserted that are easy to lose by accident:
     the merge is what corroborates it.
 
 `test_grouping_does_nothing_below_a_batch_of_25` records a real threshold artefact found
-while writing these tests, open as TASKS.md P9. It asserts current behaviour deliberately,
-with the reason stated, rather than quietly encoding it as correct.
+while writing these tests (TASKS.md P9): below 25 articles the rarity ceiling drops to 1 and
+no two articles can be grouped at all. The behaviour is deliberately unchanged — raising the
+ceiling risks a false merge, and a wrongly merged story is one the brief never reports
+separately. What changed is that it is no longer silent, asserted in
+`test_a_batch_too_small_to_group_says_so`.
 """
 
 from __future__ import annotations
@@ -188,8 +191,11 @@ def test_grouping_does_nothing_below_a_batch_of_25(
     carried 27 and 64 articles past dedup — but 27 is close, and the degradation is invisible:
     a quiet day produces a brief with duplicate coverage and no log line saying why.
 
-    This test asserts **current** behaviour with the reason stated, so P9 changes it
-    deliberately rather than silently.
+    **Resolved 2026-08-13 as P9 option (c): the behaviour stands, the silence does not.**
+    `group_related` now logs a warning when the ceiling makes grouping impossible, asserted
+    in `test_a_batch_too_small_to_group_says_so`. (c) was chosen over raising the ceiling
+    because it cannot cause a false merge, and a wrongly merged story is one the brief never
+    reports separately — the expensive error here.
     """
     pair = [make_article(KAWHI_ONE), make_article(KAWHI_TWO)]
 
@@ -199,6 +205,41 @@ def test_grouping_does_nothing_below_a_batch_of_25(
     assert len(just_under) == 24, "24 articles, 24 groups — nothing merged"
     assert all(len(g) == 1 for g in just_under)
     assert any(len(g) == 2 for g in just_over), "at 25 the same pair merges"
+
+
+def test_a_batch_too_small_to_group_says_so(
+    make_article: ArticleFactory, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The P9 remedy: a structurally impossible grouping pass must not be silent.
+
+    `[INFERRED]` Without this line the failure is undetectable from the log — duplicate
+    coverage reaches the brief, `limit_per_source` spends the source cap on the duplicates,
+    and the "grouped N into M" line never fires because nothing merged. An absent success
+    message is not a diagnosis.
+    """
+    batch = [make_article(KAWHI_ONE), make_article(KAWHI_TWO)] + _filler(
+        make_article, 22
+    )
+
+    with caplog.at_level(logging.WARNING, logger="processing.cluster"):
+        group_related(batch)
+
+    assert "grouping skipped" in caplog.text
+    assert "24 articles" in caplog.text, "the log must say how small the batch was"
+
+
+def test_a_batch_large_enough_to_group_stays_quiet(
+    make_article: ArticleFactory, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The complement: a warning that fires on every normal run is one nobody reads."""
+    batch = [make_article(KAWHI_ONE), make_article(KAWHI_TWO)] + _filler(
+        make_article, 30
+    )
+
+    with caplog.at_level(logging.WARNING, logger="processing.cluster"):
+        group_related(batch)
+
+    assert "grouping skipped" not in caplog.text
 
 
 # --- capping: stories, not articles ------------------------------------------------------

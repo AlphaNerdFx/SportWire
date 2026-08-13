@@ -215,6 +215,28 @@ def group_related(
         frequency.update(names)
 
     ceiling = max(1, int(len(articles) * max_name_frequency))
+
+    # `[VERIFIED]` 2026-08-13 (TASKS.md P9): below a ceiling of `min_shared_names`, grouping
+    # cannot happen at all. Two articles sharing a name give that name a document frequency
+    # of at least 2, so it fails `frequency[name] <= 1` and is discarded as non-distinctive —
+    # which leaves `min_shared_names` of 2 unreachable by construction. With the default 0.08
+    # that is every batch under 25 articles.
+    #
+    # Behaviour is deliberately unchanged; only the silence is fixed. The failure this guards
+    # against is invisible: duplicate coverage reaches the brief, `limit_per_source` spends
+    # the source cap on the duplicates, and the "grouped N into M" line below never fires
+    # because nothing merged. `[VERIFIED]` Nine of the eleven bugs in `SESSION.md` §8 were
+    # found by reading output, so making a failure visible is this project's cheapest remedy
+    # and the only one here that cannot cause a false merge.
+    if ceiling < min_shared_names and len(articles) >= 2:
+        logger.warning(
+            "grouping skipped: %d articles gives a rarity ceiling of %d, below the %d "
+            "shared names required, so no two articles can be grouped",
+            len(articles),
+            ceiling,
+            min_shared_names,
+        )
+
     distinctive = [
         {name for name in names if frequency[name] <= ceiling}
         for names in names_by_index

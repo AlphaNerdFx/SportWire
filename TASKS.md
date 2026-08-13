@@ -610,7 +610,20 @@ what each turned into, since several changed shape on contact with real data.
   `[INFERRED]` (c) first, then measure. This project's record is that making a failure
   visible beats guessing at a threshold — and unlike (a) it cannot cause a false merge, which
   is the expensive error here since a merged story is one the brief never reports separately.
-  - Proof:
+
+  **Operator chose (c) on 2026-08-13. Done — commit pending.**
+  - `[VERIFIED]` `group_related` now emits a `WARNING` when `ceiling < min_shared_names`,
+    naming the batch size, the ceiling and the requirement. **Behaviour is unchanged**; only
+    the silence is fixed.
+  - Proof: `make check` → **86 passed, 1 xfailed**.
+  - Proof — `[VERIFIED]` mutation: replacing the guard condition with `if False:` fails
+    `test_a_batch_too_small_to_group_says_so` and nothing else.
+  - Proof — the complement is asserted too: `test_a_batch_large_enough_to_group_stays_quiet`.
+    `[INFERRED]` A warning that fires on every normal run is one nobody reads, which would
+    reproduce the original problem in a louder form.
+  - **What to watch:** whether this line ever appears in `logs/sportwire.log`. If it does, the
+    threshold question (options a/b) becomes real and there will be data to settle it with.
+    `[VERIFIED]` The dated log format from `ec7bc3c` makes that countable.
 
 ---
 
