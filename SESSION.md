@@ -1,6 +1,6 @@
 # SESSION.md — Current Working State
 
-**Last updated:** 2026-08-13
+**Last updated:** 2026-08-13 (second session that day)
 **Repository:** https://github.com/AlphaNerdFx/SportWire (public)
 **Next session should begin with:** §10.
 
@@ -21,6 +21,7 @@
 | **Name** | SportWire — NBA news and game-data brief, delivered to Telegram |
 | **Stage** | **Working and running unattended.** Cron delivers every 8 hours. |
 | **Repo** | Public, MIT, CI green. `[VERIFIED]` 17 issues: 15 open, #6 and #14 closed |
+| **Tests** | `[VERIFIED]` **126 passed, 1 xfailed.** `processing/` covered; see §8 |
 | **Runtime** | `[VERIFIED]` WSL2 Ubuntu, Python 3.10.12, `.venv` (68 MB, 21 packages) |
 | **Sources** | ESPN, CBS Sports, Yahoo Sports, r/nba (news); balldontlie (games) |
 | **Delivery** | Telegram `@sportwire_news_bot`, three messages, one notification |
@@ -124,7 +125,15 @@ This consumed most of 2026-08-06 to 08-12 and the state is nuanced.
 
 **On, by default, using `mistral:7b` locally.** Every summary is checked by
 `processing/validate.py` before it can be delivered; a failed check falls back to the
-headline list. `[VERIFIED]` **No fabrication has ever reached the phone.**
+headline list.
+
+~~`[VERIFIED]` **No fabrication has ever reached the phone.**~~ **Corrected 2026-08-13.**
+`[VERIFIED]` **No invented _name_ has reached the phone. A false _claim_ has.** The 08:00
+brief that day passed validation on attempt 1 asserting that Westbrook's retirement "marked
+the end of playoff runs for basketball greats like Kobe Bryant, Tim Duncan, Dirk Nowitzki, and
+Kawhi Leonard" — and Kawhi Leonard is active. Every name in that sentence is grounded, which
+is exactly why it passed. See P5 below; the original claim was true of the failure class the
+validator was built for and false of the one nobody had looked for.
 
 **What made it work was cleaning the input, not changing the model.** `[VERIFIED]` The same
 `mistral:7b` went from 0/3 to 3/5 on validation after retrospectives were filtered, stale
@@ -144,18 +153,21 @@ three consecutive attempts from a Pistons story — pattern-completing from trai
 
 ### `[VERIFIED]` 2026-08-13, from `logs/sportwire.log` — read this before quoting a pass rate
 
-Two consecutive scheduled runs, and they disagree:
+Counted across the whole log: **8 summarisation runs. 2 delivered a validated summary, 5 fell
+back after 3 rejections each, 1 errored.** Per attempt that is **2 accepted / 19 ≈ 11%**.
 
-| Run | Result |
-|---|---|
-| **00:00** | **0 of 3.** `invented names: Ayo Dosunmu, Kofi Cockburn, Dallas` → `Ayo Dosunmu` → `Ayo Dosunmu, Trent Frazier, Dallas`. Fell back to headlines. |
-| **08:00** | **Passed.** No rejection logged, delivered. |
+**Treat that as a floor, not the rate.** `[VERIFIED]` The count mixes code versions and cannot
+be cleaned: at least one logged run predates the current summariser, its traceback naming the
+pre-rename directory `NBA and NFL News and Games Assistant`.
 
-Three things follow, and the third is the one that matters:
+`[VERIFIED]` **The reason it cannot be segmented was a defect in the log itself** — `main.py`
+recorded `%H:%M:%S` with **no date**, and with 8-hour runs plus cron gaps whenever WSL sleeps,
+two `08:00:17` lines could be one day apart or four. Fixed in `ec7bc3c`; an honest count starts
+from the next run.
 
-1. **The "~84%" figure quoted elsewhere is not supported.** It came from 3/5 on one sitting.
-   Two runs later the observed rate is 1/2 and the confidence interval on either number is
-   far too wide to quote. `[UNKNOWN]` The real rate. Count over the soak; do not restate 84%.
+1. **The "~84%" figure is not supported by any reading of this log.** It came from 3/5 on one
+   sitting. The measured floor is 11% — a factor of eight out. `[UNKNOWN]` The real rate.
+   Re-count after ~2 weeks of dated logs; do not restate 84%.
 2. `[VERIFIED]` **The identical-repeat failure mode is confirmed, not a one-off.** "Ayo
    Dosunmu" was invented on all three attempts. `[Likely]` Dosunmu, Cockburn and Frazier were
    Illinois teammates — the model is emitting a **co-occurrence cluster** from training, so
@@ -166,10 +178,43 @@ Three things follow, and the third is the one that matters:
    `[INFERRED]` This is why the interactive dry-run kept exceeding the command timeout — the
    timeout was not the bug, the runtime is simply longer than an interactive command allows.
 
-`[UNKNOWN]` Whether the paragraph/grouping prompt works. `[VERIFIED]` The 08:00 run on
-2026-08-13 produced a validated summary, so the change did not break delivery — **but the
-log records only that it passed, not its shape.** Judging paragraphs and subject grouping
-needs the delivered text, which lives on the operator's phone. **Ask him.**
+### `[VERIFIED]` 2026-08-13, resolved with the operator — the paragraph prompt works
+
+The operator supplied both delivered briefs. The commit clock is what makes them readable:
+`71b2fa9` landed at **14:43**, so the 08:00 brief ran on the *old* prompt and only the 16:00
+brief tests the change.
+
+- **08:00, old prompt.** One unbroken block. Westbrook's retirement, then Jalen Duren, then
+  Lakers ownership, then **back** to Westbrook for the Michael B. Jordan narration and
+  LeBron's "HELLUVA CAREER BRODIE!!" — the reactions separated from the event by two
+  unrelated subjects. The exact failure the prompt was written to fix.
+- **16:00, new prompt.** Two paragraphs. ¶1 is Westbrook: retirement, the LeBron/Giannis
+  tributes, the triple-double record — **the reaction sits with the event.** ¶2 is everything
+  else. Both criteria met.
+
+`[UNKNOWN]` **Whether it holds.** n=1, and §11 records concluding from one run as a mistake
+made twice already. The 16:00 input was also smaller — 7 stories over 2 chunks against the
+08:00 run's 12 over 3 — so the structural risk (notes arriving in chunk order, related items
+far apart) is **untested at 3 chunks under the new prompt.** The next 12-story run is the
+real test; if grouping breaks there, order notes by subject before the reduce step.
+
+### `[VERIFIED]` 2026-08-13 — the validator's blind spot, and it reached the phone
+
+The 08:00 brief passed validation **on attempt 1** carrying: *"His retirement marked the end
+of playoff runs for basketball greats like Kobe Bryant, Tim Duncan, Dirk Nowitzki, and Kawhi
+Leonard."* `[INFERRED]` Kawhi Leonard is active — the same run's feed carried his Raptors
+trade story.
+
+Every name is real and appears in the sources, so `validate.py` passes it. The 16:00 run shows
+the same shape from the other side: attempt 2 was rejected for `Los Angeles Clippers-approved`
+and attempt 3 was accepted saying *"team-approved beat writers"* — **the model rephrased
+around the validator rather than becoming correct.**
+
+`[INFERRED]` **The validator catches invented entities and is blind to false relationships
+between real ones.** A different failure class from Joe Dumars / Ayo Dosunmu, which grounding
+and retry were both built for. `[UNKNOWN]` How often it happens — nothing detects it, so it
+has never been counted. Open as **P5**, recorded as an xfail in `tests/test_validate.py` so it
+flips to XPASS when fixed.
 
 ---
 
@@ -185,14 +230,62 @@ needs the delivered text, which lives on the operator's phone. **Ask him.**
 
 ---
 
-## 8. The most important open problem
+## 8. Testing — issue #15, largely resolved 2026-08-13
 
-**`processing/` has almost no tests. Issue #15.**
+~~**`processing/` has almost no tests.**~~ **`processing/` is now covered.**
 
-`[VERIFIED]` **19 source modules. One test file. Three test functions, all three testing
-rendering** (`tests/test_brief_snapshot.py`). Nothing covers `dedup`, `cluster`,
-`newsworthy`, `priority`, `validate`, `highlights`, `storage/db`, `settings`, either RSS
-parser, or the Telegram message splitter.
+`[VERIFIED]` 2026-08-13, `make check`: **126 passed, 1 xfailed**, up from 3 tests at the
+start of that session. Seven of eight `processing/` modules have behaviour tests; the eighth,
+`openrouter.py`, is dormant until an API key exists.
+
+| Module | Tests | Recorded bugs locked in |
+|---|---|---|
+| `summarize.py` | 20 | 2 |
+| `highlights.py` | 17 | 0 |
+| `cluster.py` | 16 | 0 |
+| `priority.py` | 14 | 3 |
+| `newsworthy.py` | 13 | 5 |
+| `dedup.py` | 11 | 0 — H13 Q1/Q3/Q7 answers instead |
+| `validate.py` | 11 | 4, plus one xfail for P5 |
+
+**`[VERIFIED]` Still uncovered, all from this section's original list:** `storage/db.py`,
+`config/settings.py`, both RSS parsers, the Telegram message splitter.
+
+### The method matters more than the count — read this before adding tests
+
+`[VERIFIED]` **Every module was mutation-tested**: the bug was put back and the suite required
+to notice. This caught **five tests that asserted nothing**, none of which review had spotted:
+
+- `validate.py` — the sentence-splitting and stopword tests both passed with their mechanism
+  disabled; the generous last-word grounding rescued the broken cases.
+- `cluster.py` — the "a common name does not group" test shared only *one* common name, so
+  `MIN_SHARED_NAMES` held it up and it passed with the frequency ceiling removed entirely.
+  Nothing covered fingerprint-widening at all.
+- `summarize.py` — one mutation silently **failed to apply** (shell escaping) and reported
+  "20 passed", which looks identical to the suite surviving it.
+
+`[INFERRED]` **A test written from the same reasoning as the code inherits the code's blind
+spots.** Only trying to break it exposes that. Two of the five diagnoses turned into real
+defects (P6, P9). Always assert the mutation actually applied before trusting a green run.
+
+`[VERIFIED]` Three `highlights.py` tests were wrong on the first run while the *code* was
+right — each constructed game accidentally qualified for an earlier category that claimed it.
+`[INFERRED]` With eight categories and a precedence order, building a game that exercises
+exactly one is genuinely hard, which is an argument for the tests rather than against them.
+
+### What testing found — P5 to P10
+
+`[VERIFIED]` Six findings, **none of which any test or review had caught before**, and two of
+them user-facing. Full detail and options in `TASKS.md`.
+
+| # | Finding | State |
+|---|---|---|
+| P5 | `validate.py` grounds **entities, not claims** — a false relationship between real names passes, and one reached the phone | **open**, recorded as an xfail |
+| P6 | `_drop_leading_stopword` could not change any verdict; superseded a day after it landed | fixed (doc) |
+| P7 | `priority.py`'s word-boundary comment claimed a protection it does not deliver | fixed (doc) |
+| P8 | ADR-005's "612 pairs / 0.439" does not reproduce; the fixtures give 540 / 0.425 | fixed (doc) |
+| P9 | `group_related` **silently merged nothing below 25 articles** | fixed — now warns |
+| P10 | a claimed superlative left its category **empty**, losing brief lines | fixed — reassigns |
 
 `[VERIFIED]` **Nine real bugs were found in six days, every one by reading live output** —
 never by a test:
@@ -211,25 +304,27 @@ never by a test:
 | **A Westbrook retirement report dropped for citing his 2008 debut** | newsworthy |
 | **The drop log recorded no reason and truncated the title at 80 chars** | newsworthy |
 
-**Eleven now, and the tenth is the ninth returning.** `[VERIFIED]` 2026-08-13: r/nba's
+**Eleven, and the tenth was the ninth returning.** `[VERIFIED]` 2026-08-13: r/nba's
 `[Charania] After 18 NBA seasons, Russell Westbrook has retired…` was filtered out. Rule 2
-fires on any past year outside quotes, and a retirement report naturally cites the career
-start. **This is the same rule, the same class, and the second time** — it was already
-narrowed once after dropping a current Ballmer story for citing 2015.
+fired on any past year outside quotes, and a retirement report naturally cites the career
+start. **The same rule, the same class, the second time** — it had already been narrowed once
+after dropping a current Ballmer story for citing 2015.
 
 `[VERIFIED]` The brief still covered the retirement, because ESPN and CBS carried it under
-titles with no year. `[INFERRED]` **That is luck, not resilience** — a Reddit-only story
-would have vanished silently, which is precisely the failure class this filter's own
-docstring says it exists to prevent.
+titles with no year. `[INFERRED]` **That was luck, not resilience** — a Reddit-only story
+would have vanished silently.
 
-`[VERIFIED]` **Fixed the diagnosis, not the rule.** `drop_non_news` now logs which rule
-fired and the offending text, and the full title. The rule itself has more than one
-defensible fix — drop it, require two past years, require the year early in the title, or
-exempt retirement and contract contexts — so per `CLAUDE.md` §6 it is **not** picked
-silently. Decide it with the operator.
+`[VERIFIED]` **Resolved 2026-08-13 (P3, commit `06110ab`): Rule 2 was deleted**, not narrowed
+a second time. `[INFERRED]` The class was unfixable by narrowing because that rule read a
+*number* while the others read a *phrase* — a year is evidence of what a piece mentions, never
+of what it is about, and retirement, contract, draft and anniversary reporting all cite years.
+The accepted cost is one recorded true positive (an Ujiri/Leonard 2019 retrospective) now
+reaching the brief; it is asserted in the test suite so the trade stays visible.
 
-`[INFERRED]` Every one of the eleven would have been a two-line test, and every one can
-silently return. This is the single highest-value work remaining.
+`[VERIFIED]` **All eleven are now locked in by tests, and each was a two-line test as
+predicted.** `[INFERRED]` The list's real lesson held: every one was found by reading output,
+and P5–P10 above were found by writing tests — two different nets catching two different
+classes of bug. Neither replaces the other.
 
 ---
 
@@ -266,26 +361,44 @@ Note especially:
 
 First, tell me the current state without changing anything:
 
-  tail -40 logs/sportwire.log      # did cron run, did the summary pass validation
-  make check                        # ruff + pytest
-  git log --oneline -10
+  tail -40 logs/sportwire.log      # runs are DATED from 2026-08-13 onward
+  make check                        # expect 126 passed, 1 xfailed
+  git log --oneline -12
 
-Then ask me one question you cannot answer from the logs: the 08:00 brief on
-2026-08-13 passed validation, but the log records only that it passed, not its
-shape. Ask whether it arrived as 2-3 paragraphs and whether a reaction sat in the
-same paragraph as the event it reacts to. That resolves TASKS.md P2.
+Three things to check in that log specifically, all new since 2026-08-13:
 
-Two decisions are waiting for me, both in TASKS.md. Do not pick either silently:
-- P3 (#16): newsworthy.py Rule 2 dropped a Westbrook retirement report for citing his
-  2008 debut. Second false positive from that rule. Four options are written out.
-- P4 (#17): the summariser's pass rate is unknown. The old "84%" came from one sitting
-  of 3/5; the very next runs went 0/3 then pass. Count it, don't project it.
+1. Does "grouping skipped" appear? That is the P9 warning. If it fires in
+   production, the cluster threshold question becomes real and there is finally
+   data to settle it with. If it never fires, say so — that is also an answer.
+2. Count validation outcomes across the DATED runs only. That resolves P4. The
+   measured floor is 11% (2 of 19 attempts) but it mixes code versions. Do not
+   restate 84% under any circumstances.
+3. Did any run produce a 12-story summary? That is the untested case for P2 —
+   the paragraph prompt has only ever been observed on a 7-story, 2-chunk run.
 
-Then: issue #15 is the highest-value work remaining. Eleven real bugs were found
-by reading output, none by a test, and every one can silently return. The most
-recent one is the ninth returning in a new form.
+Ask me for the latest delivered brief. The log records that a summary passed,
+never its shape, and P2 and P5 both need the text that lands on my phone.
 
-Do not add features until #15 is addressed unless I ask.
+One decision is waiting, in TASKS.md. Do not pick it silently:
+- P5: validate.py grounds entities, not claims. A sentence built entirely from
+  real names can assert a false relationship and pass — one did, on attempt 1,
+  and reached my phone ("...end of playoff runs for ... Kawhi Leonard", who is
+  active). Four options written out; (c), an entity-pair co-occurrence check,
+  is the recommendation. It is recorded as an xfail in tests/test_validate.py,
+  so it flips to XPASS the moment it is fixed.
+
+Then, the remaining #15 work — everything left on SESSION.md §8's original list
+that is NOT in processing/: storage/db.py, config/settings.py, both RSS parsers,
+and the Telegram message splitter.
+
+**Mutation-test everything you write.** Put the bug back and confirm the suite
+notices. That caught five tests of mine that asserted nothing, and two of those
+diagnoses became real defects (P6, P9). Commit before mutating — a `git checkout`
+restore once wiped an uncommitted fix. And assert the mutation actually applied;
+one silently did not and reported "20 passed", which looks exactly like the
+suite surviving it.
+
+Do not add features unless I ask.
 ```
 
 ---
@@ -295,7 +408,19 @@ Do not add features until #15 is addressed unless I ask.
 `[INFERRED]` Patterns this project has repeatedly fallen into, worth naming:
 
 - **Concluding from one run.** Done twice, wrongly both times — a model declared clean on one
-  sample, then a validator blamed on the model when the bug was mine.
+  sample, then a validator blamed on the model when the bug was mine. `[VERIFIED]` The "84%"
+  pass rate is the same mistake a third time: one sitting of 3/5, restated as fact in several
+  places, against a measured floor of 11%.
+- **Trusting a green test.** `[VERIFIED]` 2026-08-13: five tests written that session asserted
+  nothing, and review caught none of them — only mutation did. A test written from the same
+  reasoning as the code inherits the code's blind spots. Worse, one *mutation* silently failed
+  to apply and reported a green run, which is indistinguishable from the suite surviving it.
+- **Fixing the same symptom twice from different directions.** `[VERIFIED]` Two commits a day
+  apart both fixed "a correct summary was rejected", and the second made the first dead code
+  (P6). Neither had reason to look at the other. Ask what already handles this.
+- **Adding a category without checking what it displaces.** `[VERIFIED]` Three highlight
+  categories added in the M band silently removed "Biggest win" from the brief, because the
+  new category claimed the game first and the old one was not reassigned (P10).
 - **Filtering by cleverer patterns.** Title-based classification of Reddit hit a hard limit;
   a blacklist missed untagged chatter and a whitelist dropped the biggest story. Bounding
   volume worked where classification could not.
