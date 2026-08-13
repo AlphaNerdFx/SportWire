@@ -673,7 +673,38 @@ what each turned into, since several changed shape on contact with real data.
   `[INFERRED]` (a). It is the only option that keeps every category meaningful, and the
   "report once" rule it must respect is already expressed by the `claimed` set — the change
   is where the superlatives are computed, not what they mean.
-  - Proof:
+
+  **Operator chose (a) on 2026-08-13. Done — commit pending.**
+  - `[VERIFIED]` `find_notable_games` now recomputes `available` before each category, so a
+    superlative is measured over the games still unclaimed. Every-instance and superlative
+    categories are separated into `_EVERY_INSTANCE` and `_SUPERLATIVES`, which the old code
+    expressed only in comments.
+  - **`[VERIFIED]` Implementing (a) exposed a second problem the option did not anticipate,
+    and it was NOT shipped silently.** Reassigning a ranked category makes its label false:
+    `_CATEGORY_LABELS` said *"Biggest win"*, so the brief would have read **"Biggest win —
+    Oklahoma City Thunder by 20"** on a slate containing Dallas's 22-point win, and
+    **"Highest scoring — 252"** against Dallas/Utah's 266. `[INFERRED]` That is strictly worse
+    than the bug being fixed: the old behaviour *omitted* a line, this would have *stated an
+    untruth*, which is the failure class `processing/validate.py` exists to prevent.
+  - **Resolved with the operator:** the four ranked labels drop their superlative claim —
+    `Closest finish → Close finish`, `Biggest quarter → Big quarter`,
+    `Biggest win → Big win`, `Highest scoring → High scoring`. The `_describe` clauses were
+    already factual ("Thunder by 20", "252 combined points") and are unchanged. `[INFERRED]`
+    A brief that understates is better than one that overstates.
+  - Proof — `[VERIFIED]` the real 2026-01-15 slate goes from **four** notable lines to
+    **six**; `largest_margin` and `highest_scoring` had both been produced-then-discarded
+    because Dallas held all three records.
+  - Proof — snapshot diff reviewed and **approved by the operator** before re-recording, per
+    `OPERATING_RULES.md` §4:
+
+    ```diff
+    - Closest finish — decided by 3          + Close finish — decided by 3
+    - Biggest quarter — a 43-point quarter   + Big quarter — a 43-point quarter
+    + Big win — Oklahoma City Thunder by 20
+    + High scoring — 252 combined points
+    ```
+
+  - Proof: `make check` → **106 passed, 1 xfailed**.
 
 ---
 

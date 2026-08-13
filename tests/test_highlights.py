@@ -225,20 +225,22 @@ def test_a_game_is_reported_once_under_its_first_matching_category(
     assert categories == ["comeback"], f"expected one slot, got {categories}"
 
 
-def test_a_superlative_can_be_emptied_by_an_earlier_category(
+def test_a_claimed_superlative_falls_through_to_the_best_unclaimed_game(
     make_game: GameFactory,
 ) -> None:
-    """`[VERIFIED]` 2026-08-13 — real, user-facing, and open as TASKS.md P10.
+    """`[VERIFIED]` 2026-08-13 — TASKS.md P10, fixed.
 
     When one game holds both the widest margin *and* the biggest quarter, `biggest_period`
-    comes first in `_CATEGORY_ORDER` and claims it. `largest_margin` then has no candidate
-    left — it is not reassigned to the second-widest game — so **the brief never mentions the
-    biggest win of the night at all.**
+    claims it first. `largest_margin` must then name the **best remaining** game rather than
+    going silent — measuring the superlative over the unclaimed pool, not the whole slate.
 
-    This happens on the committed 2026-01-15 fixture: Dallas won by 22, the widest margin of
-    the slate, and is reported as `biggest_period` instead.
+    Before the fix the brief simply lost its "biggest win" line, which is how the real
+    2026-01-15 slate behaved: Dallas held the widest margin, the biggest quarter *and* the
+    highest total, so two of eight categories produced nothing.
 
-    Asserts current behaviour with the reason stated, so P10 changes it deliberately.
+    `[VERIFIED]` The label is "Big win", not "Biggest win" — see `delivery/brief.py`. Houston
+    at 20 is not the biggest win on a slate containing a 22-point win, so the reassigned line
+    must state a fact rather than a ranking.
     """
     dual = make_game(
         "Dallas",
@@ -252,11 +254,12 @@ def test_a_superlative_can_be_emptied_by_an_earlier_category(
         "Team C", "Team D", home_score=125, away_score=104, home_periods=[31] * 4
     )
 
-    categories = _categories([dual, narrower_blowout])
+    highlights = find_notable_games([dual, narrower_blowout])
+    by_category = {h.category: h.game for h in highlights}
 
-    assert "biggest_period" in categories
-    assert "largest_margin" not in categories, (
-        "the widest-margin game was claimed by biggest_period and not reassigned"
+    assert by_category["biggest_period"] is dual
+    assert by_category["largest_margin"] is narrower_blowout, (
+        "the widest-margin game was claimed, so the category takes the best game still free"
     )
 
 
@@ -271,9 +274,14 @@ def test_the_real_2026_01_15_slate(games: list[GameData]) -> None:
     change to what the operator receives.
 
     `[VERIFIED]` 2026-08-13, measured: Orlando overcame 16 (comeback), Detroit won by 3
-    (closest finish), San Antonio led throughout and won by 18 (wire to wire), Dallas had a
-    43-point quarter (biggest period). Note that Dallas also had the night's widest margin at
-    22 — see `test_a_superlative_can_be_emptied_by_an_earlier_category` and P10.
+    (close finish), San Antonio led throughout and won by 18 (wire to wire), Dallas had a
+    43-point quarter (big quarter), Houston won by 20 (big win), the Lakers game totalled 252
+    (high scoring).
+
+    `[VERIFIED]` The last two exist only because of the P10 fix. Dallas holds the widest
+    margin (22) and the highest total (266) as well as the biggest quarter, so before
+    superlatives were measured over the unclaimed pool those two categories produced nothing
+    and the brief was four lines rather than six.
     """
     highlights = find_notable_games(games)
 
@@ -283,6 +291,8 @@ def test_the_real_2026_01_15_slate(games: list[GameData]) -> None:
         "closest_finish",
         "wire_to_wire",
         "biggest_period",
+        "largest_margin",
+        "highest_scoring",
     ]
 
     by_category = {h.category: h.game for h in highlights}
@@ -290,6 +300,8 @@ def test_the_real_2026_01_15_slate(games: list[GameData]) -> None:
     assert by_category["closest_finish"].margin == 3
     assert by_category["wire_to_wire"].margin == 18
     assert by_category["biggest_period"].biggest_period == 43
+    assert by_category["largest_margin"].margin == 20
+    assert by_category["highest_scoring"].total_points == 252
 
 
 def test_no_game_appears_twice_in_the_real_slate(games: list[GameData]) -> None:

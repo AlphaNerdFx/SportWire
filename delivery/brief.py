@@ -7,7 +7,7 @@ boundary means the brief's wording can change without touching ingestion or dedu
 Three messages rather than one, per the operator's spec:
 
   1. Scoreboard — every game with its score, a quick overview.
-  2. Notable events — comebacks, overtime, and the night's superlatives, with the reason.
+  2. Notable events — comebacks, overtime, and the night's standout games, with the reason.
   3. News — non-statistical updates from the feed.
 
 An empty section is omitted entirely rather than sent as a heading with nothing under it.
@@ -43,15 +43,27 @@ DEFAULT_MAX_ARTICLES = 12
 
 # Machine-readable category -> the wording used in the brief. Kept here, in presentation,
 # so `processing/highlights.py` never has to care how a category is phrased.
+#
+# **The four ranked categories are deliberately not worded as superlatives.** `[VERIFIED]`
+# 2026-08-13 (TASKS.md P10): a game is reported once, so when one game holds several records
+# the ranked categories are reassigned to the best *unclaimed* game. On the real 2026-01-15
+# slate Dallas held the widest margin (22), the biggest quarter (43) and the highest total
+# (266); it is reported as the quarter, and `largest_margin` then names Houston at 20.
+#
+# "Biggest win — Houston by 20" would be **false** with a 22-point win on the same slate.
+# "Big win" is true either way. `[INFERRED]` The alternative — leaving the category silent —
+# loses two real lines from the brief, and the alternative of labelling only the true holder
+# needs two labels per category and a rule the reader cannot see. A brief that overstates is
+# worse than one that understates; that is the same principle as `processing/validate.py`.
 _CATEGORY_LABELS = {
     "comeback": "Comeback",
     "overtime": "Overtime",
-    "closest_finish": "Closest finish",
+    "closest_finish": "Close finish",
     "wire_to_wire": "Wire to wire",
     "second_half_takeover": "Second-half takeover",
-    "biggest_period": "Biggest quarter",
-    "largest_margin": "Biggest win",
-    "highest_scoring": "Highest scoring",
+    "biggest_period": "Big quarter",
+    "largest_margin": "Big win",
+    "highest_scoring": "High scoring",
 }
 
 

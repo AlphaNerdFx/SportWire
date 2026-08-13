@@ -14,6 +14,8 @@ this logic.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from models.schemas import GameData, GameHighlight
 
 # Two conditions must both hold before a game is reported, which is what keeps "notable"
@@ -53,6 +55,72 @@ _CATEGORY_ORDER = (
     "highest_scoring",
 )
 
+# Categories where **every** qualifying game is reported. These are properties of a game
+# rather than rankings: overtime and comebacks are rare enough that each instance is worth
+# knowing, and "the most wire-to-wire" is meaningless.
+_EVERY_INSTANCE: dict[str, Callable[[GameData], bool]] = {
+    "comeback": lambda game: game.largest_deficit_overcome >= COMEBACK_DEFICIT,
+    "overtime": lambda game: game.went_to_overtime,
+    # Reported only in a band. `[VERIFIED]` 2026-08-08: leading at every break happened in
+    # 3 of 9 real games — common, not remarkable, and flagging all of them made this the
+    # dominant category. What is notable is the *combination*: a team that led throughout
+    # **and** never pulled clear held someone off all night, which no other category
+    # expresses. Above the blowout line it is redundant with `largest_margin`; below the
+    # close-game line the finish itself is the story.
+    "wire_to_wire": lambda game: (
+        game.led_wire_to_wire and CLOSE_GAME_MARGIN < game.margin < BLOWOUT_MARGIN
+    ),
+    "second_half_takeover": lambda game: game.second_half_swing >= SECOND_HALF_SWING,
+}
+
+# Categories where only the single most extreme game is reported, and only if it clears its
+# threshold. Each entry is (how to measure, which extreme, does it clear the bar).
+_SUPERLATIVES: dict[
+    str,
+    tuple[
+        Callable[[GameData], int], Callable[..., GameData], Callable[[GameData], bool]
+    ],
+] = {
+    "closest_finish": (
+        lambda game: game.margin,
+        min,
+        lambda game: game.margin <= CLOSE_GAME_MARGIN,
+    ),
+    "biggest_period": (
+        lambda game: game.biggest_period,
+        max,
+        lambda game: game.biggest_period >= BIG_PERIOD_POINTS,
+    ),
+    "largest_margin": (
+        lambda game: game.margin,
+        max,
+        lambda game: game.margin >= BLOWOUT_MARGIN,
+    ),
+    "highest_scoring": (
+        lambda game: game.total_points,
+        max,
+        lambda game: game.total_points >= HIGH_SCORING_TOTAL,
+    ),
+}
+
+
+def _candidates(category: str, available: list[GameData]) -> list[GameData]:
+    """Which of the still-unclaimed games qualify for this category.
+
+    Superlatives are measured over `available` rather than over the whole slate. `[VERIFIED]`
+    2026-08-13 (TASKS.md P10): measuring over the whole slate meant that when one game held
+    several superlatives, the categories it did not get reported under produced **nothing** —
+    they were not reassigned to the next-best game. On the real 2026-01-15 slate Dallas held
+    the widest margin, the biggest quarter and the highest total, so the brief silently lost
+    both "biggest win" and "highest scoring".
+    """
+    if category in _EVERY_INSTANCE:
+        return [game for game in available if _EVERY_INSTANCE[category](game)]
+
+    measure, extreme, clears = _SUPERLATIVES[category]
+    best = extreme(available, key=measure)
+    return [best] if clears(best) else []
+
 
 def find_notable_games(games: list[GameData]) -> list[GameHighlight]:
     """Return at most one highlight per game, at most one game per superlative category.
@@ -67,54 +135,17 @@ def find_notable_games(games: list[GameData]) -> list[GameHighlight]:
         return []
 
     claimed: set[int] = set()
-    by_category: dict[str, list[GameData]] = {}
-
-    # Every comeback and every overtime game, not just one of each. Both are rare enough
-    # that each instance is independently worth knowing about, unlike the superlatives
-    # below where "the biggest" is the whole point.
-    by_category["comeback"] = [
-        game for game in games if game.largest_deficit_overcome >= COMEBACK_DEFICIT
-    ]
-    by_category["overtime"] = [game for game in games if game.went_to_overtime]
-
-    # Also every-instance rather than superlative: a wire-to-wire win is a property of a
-    # game, not a ranking, and "the most wire-to-wire" is meaningless.
-    # Reported only in a band. `[VERIFIED]` 2026-08-08: leading at every break happened in
-    # 3 of 9 real games — it is common, not remarkable, and flagging all of them made this
-    # the dominant category. What is actually notable is the *combination*: a team that led
-    # throughout **and** never pulled clear held someone off all night, which no other
-    # category expresses. Above the blowout line it is redundant with `largest_margin`;
-    # below the close-game line the finish itself is the story.
-    by_category["wire_to_wire"] = [
-        game
-        for game in games
-        if game.led_wire_to_wire and CLOSE_GAME_MARGIN < game.margin < BLOWOUT_MARGIN
-    ]
-
-    by_category["second_half_takeover"] = [
-        game for game in games if game.second_half_swing >= SECOND_HALF_SWING
-    ]
-
-    # Superlatives: the single most extreme game, and only if it clears its threshold.
-    closest = min(games, key=lambda game: game.margin)
-    if closest.margin <= CLOSE_GAME_MARGIN:
-        by_category["closest_finish"] = [closest]
-
-    widest = max(games, key=lambda game: game.margin)
-    if widest.margin >= BLOWOUT_MARGIN:
-        by_category["largest_margin"] = [widest]
-
-    highest = max(games, key=lambda game: game.total_points)
-    if highest.total_points >= HIGH_SCORING_TOTAL:
-        by_category["highest_scoring"] = [highest]
-
-    biggest = max(games, key=lambda game: game.biggest_period)
-    if biggest.biggest_period >= BIG_PERIOD_POINTS:
-        by_category["biggest_period"] = [biggest]
-
     highlights: list[GameHighlight] = []
+
     for category in _CATEGORY_ORDER:
-        for game in by_category.get(category, []):
+        # Recomputed each time, so a superlative is measured over what is still free rather
+        # than over the whole slate. This is what stops a category going silent when the
+        # game it would have named was already claimed by an earlier one (P10).
+        available = [game for game in games if game.game_id not in claimed]
+        if not available:
+            break
+
+        for game in _candidates(category, available):
             if game.game_id in claimed:
                 continue
             claimed.add(game.game_id)
