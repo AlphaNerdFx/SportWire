@@ -40,6 +40,7 @@ deliberately excluded: they have their own message and are self-explanatory.
 from __future__ import annotations
 
 import logging
+import re
 from abc import ABC, abstractmethod
 
 import requests
@@ -110,14 +111,21 @@ SYSTEM_PROMPT = (
     "You write a short NBA news brief for one reader who wants to know what happened "
     "without opening a sports app.\n"
     "\n"
-    "Rules:\n"
-    "- Write flowing prose, not a list. No bullets, no headings, no markdown.\n"
+    "Structure:\n"
+    "- Write two or three paragraphs, separated by a blank line. Never one solid block.\n"
+    "- **Each paragraph covers one subject.** Every mention of a person or event belongs "
+    "in the same paragraph, however the notes are ordered. If one note says a player "
+    "retired and another says someone reacted to that retirement, both go together — "
+    "never in separate paragraphs.\n"
+    "- Order the paragraphs by importance: the biggest story first.\n"
+    "\n"
+    "Content:\n"
+    "- Flowing prose, not a list. No bullets, no headings, no markdown.\n"
     "- Lead with roster and on-court news: trades, signings, injuries, returns.\n"
-    "- Mention off-court and celebrity items only in passing, at the end, if at all.\n"
-    "- Group related items into one sentence rather than repeating a story.\n"
-    "- State only what the provided items say. Never add scores, statistics, dates or "
-    "outcomes that are not present in them.\n"
-    "- If the items are thin or routine, say so briefly rather than inflating them.\n"
+    "- Off-court and celebrity items get a clause at most, in the final paragraph.\n"
+    "- State only what the notes say. Never add scores, statistics, dates or outcomes "
+    "that are not present in them.\n"
+    "- If the notes are thin or routine, say so briefly rather than inflating them.\n"
     "- No preamble. Start with the news itself."
 )
 
@@ -203,7 +211,7 @@ class Summarizer(ABC):
                 )
                 continue
 
-            cleaned = " ".join(text.split())
+            cleaned = _tidy(text)
             if not cleaned:
                 logger.warning("%s returned empty text", self.summarizer_name)
                 continue
@@ -301,6 +309,22 @@ class OllamaSummarizer(Summarizer):
         )
         response.raise_for_status()
         return response.json().get("response", "")
+
+
+def _tidy(text: str) -> str:
+    """Normalise whitespace **without** destroying paragraph breaks.
+
+    `[VERIFIED]` 2026-08-12: the previous `" ".join(text.split())` collapsed every run of
+    whitespace, newlines included, so a multi-paragraph summary arrived as one solid block.
+    The prompt asking for paragraphs would have appeared to be ignored when in fact the
+    model obeyed it and this step undid the work.
+
+    Blank lines are preserved as paragraph separators; everything inside a paragraph is
+    collapsed to single spaces.
+    """
+    blocks = re.split(r"\n\s*\n", text.strip())
+    paragraphs = [" ".join(block.split()) for block in blocks]
+    return "\n\n".join(block for block in paragraphs if block)
 
 
 def build_prompt(
