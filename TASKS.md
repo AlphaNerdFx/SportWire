@@ -310,8 +310,27 @@ what each turned into, since several changed shape on contact with real data.
     - `[INFERRED]` This is the step the legacy repo skipped. `test_ingestion_setup.py` passed
       in 3.32s while asserting only that imports resolve, and a suite that has never been
       seen to fail is indistinguishable from that one.
-  - [ ] `validate.py`, `dedup.py`, `cluster.py`, `priority.py`, `highlights.py`,
-    `storage/db.py`, `settings.py`, both RSS parsers, the Telegram message splitter.
+  - [x] **`validate.py`** — 2026-08-13, commit `19bd2a0`. Chosen second: it is the last check
+    before the phone, and two of the eleven recorded bugs are in it.
+    - Proof: `make check` → **40 passed, 1 xfailed**. The xfail is P5, asserted rather than
+      omitted so it flips to XPASS when fixed.
+    - Proof — `[VERIFIED]` mutation results, one failing test per mechanism:
+
+      | Mutation | Result |
+      |---|---|
+      | sentence splitting disabled | 1 failed — names matched across a boundary |
+      | leading-stopword strip disabled | 1 failed — reported-name text |
+      | last-word grounding removed | 2 failed — `New York Knicks`, `Oklahoma City Thunder` |
+      | possessive stripping disabled | 1 failed — `Kawhi Leonard's` |
+
+    - `[VERIFIED]` **Two of these four guards were fake on the first attempt** — the sentence
+      and stopword tests passed with their mechanism disabled, because the generous last-word
+      grounding rescued the broken cases. Both were rewritten against discriminating data.
+      `[INFERRED]` A test written from the same reasoning as the code inherits the code's
+      blind spots; only trying to break it exposes that.
+    - Diagnosing the second one found a real defect, opened as **P6**.
+  - [ ] `dedup.py`, `cluster.py`, `priority.py`, `highlights.py`, `storage/db.py`,
+    `settings.py`, both RSS parsers, the Telegram message splitter.
   - Proof:
 
 - [x] **P2. Verify the paragraph and subject-grouping prompt.** — 2026-08-13, **provisionally**
@@ -428,6 +447,33 @@ what each turned into, since several changed shape on contact with real data.
   `[INFERRED]` (c) is the one to cost first — it is the only option that is mechanical,
   testable offline against the two captured briefs, and consistent with this project's
   record that bounding structure beats classifying meaning (`SESSION.md` §11).
+  - Proof:
+
+- [ ] **P6. `_drop_leading_stopword` no longer affects any verdict.** Found 2026-08-13 while
+  writing `tests/test_validate.py`, **by mutation testing rather than by reading code**.
+  `[VERIFIED]` Disabling it changes no pass/fail outcome in the suite.
+  `[INFERRED]` It cannot, by construction. It strips only the **first** word of a name, and
+  `_grounded` returns True whenever the **last** word appears in the sources. Stripping the
+  first word never changes the last, so a grounded name stays grounded and an ungrounded one
+  stays ungrounded.
+  `[VERIFIED]` The cause is a dated overlap: `c522d8e` added the strip on 2026-08-11 07:50,
+  and `7323396` added last-word grounding on 2026-08-12 01:54. **The second made the first
+  redundant one day later.** Both were fixing the same live symptom — a correct summary
+  rejected over a name the sources did contain — so neither commit had reason to look at the
+  other.
+  `[VERIFIED]` What survives is diagnostic: the *reported* name. A log reading
+  `invented names: Portland` points at the real problem; `In Portland` sends the reader after
+  a preposition. `test_sentence_initial_preposition_is_stripped_from_the_reported_name`
+  asserts exactly that and nothing more.
+  - a. Keep it, as log-quality only. Rename it and say so in its docstring.
+  - b. Delete it and accept prepositions in the drop log.
+  `[INFERRED]` (a). It is nine lines and the log is the only diagnosis available after an
+  unattended run — `SESSION.md` §8 records eleven bugs found by reading output. But the
+  docstring currently claims a correctness role it does not have, and that is the part worth
+  fixing either way.
+  `[INFERRED]` **The general lesson is the bigger one:** two mechanisms fixed the same
+  symptom a day apart and the overlap was invisible until something tried to break each one
+  individually. Reading the code did not reveal it; reading the code is what wrote it.
   - Proof:
 
 ---
