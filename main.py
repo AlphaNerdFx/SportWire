@@ -62,7 +62,14 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(
         level=args.log_level or settings.log_level,
         format="%(asctime)s %(levelname)-7s %(name)s | %(message)s",
-        datefmt="%H:%M:%S",
+        # The date is here because the log is the only record of the soak, and a
+        # time alone cannot be attributed to a run or a code version. `[VERIFIED]`
+        # 2026-08-13: counting the summariser's pass rate (TASKS.md P4) over 483
+        # lines was impossible for exactly this reason -- runs are 8h apart, cron
+        # skips whenever WSL sleeps, so consecutive `08:00:17` lines could be one
+        # day apart or four, and at least one logged run predated the current
+        # summariser entirely (its traceback names the pre-rename directory).
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
 
     target_date = _parse_date(args.date)
