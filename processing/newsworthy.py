@@ -65,25 +65,6 @@ _INVISIBLE_CODEPOINTS = frozenset(
     {0x200B, 0x200C, 0x200D, 0x200E, 0x200F, 0x2060, 0xFEFF}
 )
 
-# Any four-digit year that could name a past season.
-_YEAR = re.compile(r"\b(19[5-9]\d|20[0-4]\d)\b")
-
-# Quoted spans, in every quote character these feeds actually use.
-#
-# A year inside quotation marks is somebody *citing* the past; a year outside is what the
-# piece is *about*. `[VERIFIED]` 2026-08-10 this distinction is what separates two real
-# items that a position-based rule could not tell apart:
-#
-#   kept    Pablo Torre on Ballmer's cap circumvention: "This is not a first-time
-#           offense. In 2015, Ballmer & the Clippers get fined $250k..."
-#           -- current reporting; the year is inside the quote
-#   dropped After Leonard signed with the Clippers in 2019, Masai Ujiri was asked...
-#           -- a 2019 story; the year frames the sentence, outside any quote
-#
-# An earlier version only searched the first 30 characters, which kept the first correctly
-# and the second wrongly.
-_QUOTED = re.compile(r"[\"“‘'][^\"”’]{0,400}?[\"”’']")
-
 # Oldest an item may be and still count as news.
 #
 # `[VERIFIED]` 2026-08-09 this is not hypothetical. The Athletic's NBA feed carries 100
@@ -124,24 +105,9 @@ RETROSPECTIVE_PHRASES = (
 )
 
 
-def _strip_quoted(text: str) -> str:
-    """Remove quoted spans, so only the piece's own words are searched."""
-    return _QUOTED.sub(" ", text)
-
-
 def _strip_invisible(text: str) -> str:
     """Remove zero-width and directional marks that break prefix matching."""
     return "".join(ch for ch in text if ord(ch) not in _INVISIBLE_CODEPOINTS)
-
-
-def _current_season_year(now: datetime | None = None) -> int:
-    """The starting year of the season in progress.
-
-    An NBA season spans two calendar years and is named by the first, so anything before
-    October belongs to the previous year's season.
-    """
-    now = now or datetime.now(timezone.utc)
-    return now.year - 1 if now.month < 10 else now.year
 
 
 def rejection_reason(article: NewsArticle, now: datetime | None = None) -> str | None:
@@ -151,9 +117,20 @@ def rejection_reason(article: NewsArticle, now: datetime | None = None) -> str |
     because two would drift, and a filter whose log disagreed with its behaviour would be
     worse than one that logged nothing.
 
-    Four rules, all deliberately narrow. Anything ambiguous is kept — `[INFERRED]` a
+    Three rules, all deliberately narrow. Anything ambiguous is kept — `[INFERRED]` a
     borderline item in the brief costs a line, while a wrongly rejected one is invisible, and
     invisible failures are the class this project keeps being bitten by.
+
+    **There was a fourth.** Rule 2 rejected a title naming a finished season outside any
+    quotation. `[VERIFIED]` It produced two live false positives and no recorded true
+    positive: a current Ballmer story citing 2015, after which it was narrowed rather than
+    reconsidered, and then r/nba's `[Charania] After 18 NBA seasons, Russell Westbrook has
+    retired…`, dropped for citing his 2017 MVP. `[INFERRED]` The class is not fixable by
+    narrowing, because the rule reads a *number* while the other three read a *phrase*: a
+    year is evidence of what a piece mentions, never of what it is about, and retirement,
+    contract, draft and anniversary reporting all cite years as a matter of course. Removed
+    2026-08-13 under TASKS.md P3 option (a); recover it from git history if the drop log
+    shows retrospectives returning.
     """
     now = now or datetime.now(timezone.utc)
 
@@ -178,18 +155,6 @@ def rejection_reason(article: NewsArticle, now: datetime | None = None) -> str |
     for phrase in RETROSPECTIVE_PHRASES:
         if phrase in lowered:
             return f"retrospective phrase {phrase!r}"
-
-    # Rule 2 — the title names a finished season *outside* any quotation, which marks the
-    # post as being about that season rather than citing it.
-    #
-    # `[Likely]` This is the rule most prone to false positives, and the reason is reported
-    # with the year that tripped it because of that. It has already produced one live
-    # false positive (a current Ballmer story citing 2015) and been narrowed once.
-    season = _current_season_year(now)
-    unquoted = _strip_quoted(title)
-    past_years = [year for year in _YEAR.findall(unquoted) if int(year) < season]
-    if past_years:
-        return f"names past season {past_years[0]} outside quotes (current: {season})"
 
     return None
 
