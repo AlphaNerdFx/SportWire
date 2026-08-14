@@ -845,6 +845,51 @@ what each turned into, since several changed shape on contact with real data.
   before choosing**, the same way P12 was measured; a change to the extractor moves every
   verdict in the module, not just the camelCase ones.
 
+  **Operator rejected all three on 2026-08-14** — *"it needs to be a solution that isn't
+  hard coded"* — and was right: (a), (b) and the (a+) variant recommended here are all
+  enumerated character ranges that go stale. **Done — `fca4298`, using neither.**
+  - `[VERIFIED]` The measurement that settled it. (a), (a+) and (b) are **verdict-identical**
+    — 0 differences across 5,530–5,600 shared cases — so the choice was never about
+    detection. What separated them was which names they can see at all:
+
+    | probe | current | (a) `A-Za-z` | (a+) `+Ā-ſ` | (b) `[^\W\d_]` | **shipped** |
+    |---|---|---|---|---|---|
+    | `LeBron James` | — | ✓ | ✓ | ✓ | ✓ |
+    | `Luka Dončić` | `Luka Don` | `Luka Don` | ✓ | ✓ | ✓ |
+    | `Kristaps Porziņģis` | `Kristaps Porzi` | `Kristaps Porzi` | ✓ | ✓ | ✓ |
+    | `Alperen Şengün` | ✗ | ✗ | ✗ | ✗ | ✓ |
+
+  - `[VERIFIED]` **`Ş` is what killed the range approach.** It is an uppercase letter outside
+    `A-Z`, so every candidate — including the one recommended in this file — required
+    `[A-Z]` to start a word and dropped him. `[INFERRED]` The next range fails on the next
+    alphabet; `str.isupper` and `str.isalpha` read the Unicode database, which is maintained
+    by someone else and updated without editing this repository.
+  - Proof — `[VERIFIED]` fixtures: titles wrongly flagged **0/76** (unchanged), camelCase
+    blends caught **0 → 4 of 4**, committed suite **181 passed, 1 xfailed** (unchanged).
+  - `[VERIFIED]` **Trailing punctuation only, never leading**, and the same line caused both
+    a false accusation and a missed fabrication: stripping the leading quote turned
+    `a Sixer: "I'm still processing it"` into the invented name `Sixer I'm`, and the same
+    erased boundary welded a run large enough to acquit the invented "LeBron Tatum" by
+    superset. `[INFERRED]` Opening punctuation *is* the boundary evidence.
+  - Proof — mutation, six mutations each asserted to have applied, **all killed**:
+    strip-both, isalpha-for-isupper (22 tests), single-word-is-a-name (7),
+    any-character-inside-a-word, apostrophe-not-in-a-name, no-end-of-text-flush.
+  - `[VERIFIED]` Two of the six survived the first pass, both because a lowercase word broke
+    the run before the mechanism under test was reached — the same diagnosis as P12's two
+    survivors, in the same session.
+
+- [ ] **P14. A blend whose surname is elsewhere a first name still passes.** Found 2026-08-14
+  while measuring P13. **Open — not yet measured.**
+  `[VERIFIED]` `"Luka Donovan posted a triple-double."` validates as **safe** against the
+  committed fixtures, while `"Luka Donaldson"` is correctly rejected.
+  `[INFERRED]` The cause is that P12's refutation only fires when a source name shares the
+  candidate's **last** word. "Donovan" appears in the sources as a *first* name (Donovan
+  Mitchell), so nothing in the index ends in "Donovan", nothing refutes it, and the
+  every-word rule then grounds it because both words appear somewhere.
+  `[UNKNOWN]` How large the class is. **Measure before proposing options** — count blends of
+  the form (first name of X, first name of Y) against the fixtures, the way P12 was counted.
+  `[INFERRED]` Not a regression: this class passed before P12 as well.
+
 ---
 
 ## LOW — deferred; each requires a trigger condition

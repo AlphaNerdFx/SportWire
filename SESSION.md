@@ -23,7 +23,7 @@
 | **Version** | `[VERIFIED]` **v0.1.0**, tagged 2026-08-14, published as a pre-release |
 | **Repo** | Public, MIT, CI green. `[VERIFIED]` 17 issues: 15 open, #6 and #14 closed |
 | **Wiki** | `[VERIFIED]` 6 pages. Its links are checked by `make check`; it had drifted for 4 days before that existed |
-| **Tests** | `[VERIFIED]` **181 passed, 1 xfailed** (2026-08-14 `make check`). See §8 |
+| **Tests** | `[VERIFIED]` **192 passed, 1 xfailed** (2026-08-14 `make check`). See §8 |
 | **Runtime** | `[VERIFIED]` WSL2 Ubuntu, Python 3.10.12, `.venv` (68 MB, 21 packages) |
 | **Sources** | ESPN, CBS Sports, Yahoo Sports, r/nba (news); balldontlie (games) |
 | **Delivery** | Telegram `@sportwire_news_bot`, three messages, one notification |
