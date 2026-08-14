@@ -890,6 +890,74 @@ what each turned into, since several changed shape on contact with real data.
   the form (first name of X, first name of Y) against the fixtures, the way P12 was counted.
   `[INFERRED]` Not a regression: this class passed before P12 as well.
 
+- [x] **P15. The subreddit's own weekly thread reached the brief as a news story.** Found
+  2026-08-15 by the operator reading the delivered 00:00 brief. **User-facing.**
+  `[VERIFIED]` The brief ended with *"the r/nba community thread for content creators to
+  share NBA-related work continues every Friday"*. From a live fetch of
+  `reddit.com/r/nba/.rss` this session, that is `Weekly Friday Self-Promotion and Fan Art
+  Thread`, posted by `/u/NBA_MOD`.
+  `[VERIFIED]` **Why nothing already caught it:** it carries no content-type tag, no
+  retrospective phrase, and it is 5h old — so rules 0, 1 and 1b all pass it. And because the
+  moderators post a **new** thread every Friday with a new `article_id`, cross-run dedup
+  never suppresses it and the 168h age rule never reaches it. It recurs weekly, forever.
+  - a. **Drop posts authored by a moderator account** — an *identity* signal, not a text
+    pattern. **Chosen by the operator 2026-08-15. Done — `b38c80d`.**
+  - b. Title patterns (`Thread`, `Self-Promotion`, `Fan Art`). `[VERIFIED]` Rejected — this
+    is the approach `SESSION.md` §11 records failing twice on this exact feed.
+  - c. (a) plus a rule for subreddit-meta posts by **ordinary** accounts. Deferred; see P16,
+    which is the measurement the operator asked for before building it.
+  - Proof — `[VERIFIED]` end to end over the live 25-item feed, through `RssNewsAdapter.parse`
+    and `rejection_reason`: **23 kept, 2 dropped** — the moderator thread by rule 3, one
+    `[Highlights]` post by the pre-existing tag rule. No other verdict changed.
+  - Proof — mutation, five mutations each asserted to have applied, **four killed**:
+    never-fire (4 tests), rule-3-unwired-from-`rejection_reason` (4), substring-for-suffix
+    (1), missing-author-reads-as-moderator (1).
+  - `[VERIFIED]` **The fifth survived, and it was dead code, not a weak test.** Replacing
+    `author.strip().lstrip("/").removeprefix("u/").lower()` with `author.strip().lower()`
+    killed nothing, because removing characters from the **front** of a string cannot change
+    its **end** and the rule is a suffix test. Measured verdict-identical across 149 author
+    shapes (36 real, the rest adversarial). Removed in `31a2eb8`. **This is P6's shape a
+    second time** — code implying a protection it does not provide — and mutation caught it
+    again where review did not.
+
+- [ ] **P16. A subreddit-meta post from an ordinary account is not caught, and every
+  mechanism measured costs more than it saves.** Opened 2026-08-15 as option (c) of P15.
+  **Measured; recommendation is to hold. Needs a decision.**
+  `[VERIFIED]` The live case: `/u/twistedlogicx`, *"Looking for old.reddit users interested
+  in giving feedback and beta testing a redesign of the old subreddit theme"*, stickied and
+  currently passing all four rules.
+  `[VERIFIED]` **Its blast radius is one brief, not many.** It is in `seen_articles` as
+  `r/nba:t3_1vjy1d3` seen `2026-08-10T00:00`, so cross-run exact-id dedup has suppressed it
+  on every run since, and at 118h old rule 0 drops it outright in ~50h. Unlike P15's weekly
+  thread, this class does not recur under a new id.
+  Mechanisms measured this session, all rejected:
+  - a. **Self-post vs link-post** (structural: does the entry's `[link]` anchor point back at
+    its own comments page). `[VERIFIED]` **Inverted on this feed.** Live: 12 of 25 are
+    self-posts, and they include the `[Charania]` Beal signing, the PTFO Kawhi scoop and the
+    O'Connor contract report, while the *link* posts are 9 streamable.com and 3 YouTube clips.
+    Dropping self-posts would delete the news and keep the highlights.
+  - b. **Require the item to name a proper noun.** `[VERIFIED]` Drops **5 of 25 live** and 4
+    of 25 fixture items to catch one meta post — including `[Jaylen Brown]`'s quote,
+    `[Pablo Torre]`'s Clippers scoreboard scoop and the Westbrook/Zubac item. It is a
+    whitelist, and `SESSION.md` §11 records a whitelist dropping the biggest story of the day.
+  - c. **Fetch the subreddit's live moderator list** — the honest version of P15's handle
+    heuristic. `[VERIFIED]` Not available: `reddit.com/r/nba/about/moderators.json` and
+    `about.json` both returned **HTTP 403 Blocked** this session. The legitimate route is
+    OAuth with a registered reddit app, which means operator signup and credentials in
+    `.env`; a browser User-Agent was **not** tried, because working around a block is exactly
+    what C3 forbids.
+  - d. **Hold.** `[INFERRED]` **The recommendation.** The cost is bounded at one appearance
+    per post by dedup, no available mechanism is cheaper than that, and every candidate above
+    repeats a failure this project has already recorded.
+  `[INFERRED]` **This may not be a separate class at all.** An account that redesigns the
+  subreddit's theme and posts a stickied thread about it is almost certainly an r/nba
+  moderator whose handle simply does not advertise it — in which case (c) is not a new rule,
+  it is P15's rule with a real identity source instead of a suffix guess. `[UNKNOWN]`
+  Unverifiable while the moderator endpoint returns 403.
+  **Trigger to revisit:** a meta post from an ordinary account reaching a brief a *second*
+  time. Revisit (c) first, and the decision it needs is whether reddit OAuth credentials are
+  acceptable — not which pattern to match.
+
 ---
 
 ## LOW — deferred; each requires a trigger condition
