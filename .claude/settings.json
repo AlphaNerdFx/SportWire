@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cmd=$(jq -r \".tool_input.command // \\\"\\\"\"); if printf \"%s\" \"$cmd\" | grep -qE \"(^|[;&|[:space:]])git[[:space:]]+(checkout[[:space:]]+--([[:space:]]|$)|restore([[:space:]]|$)|reset[[:space:]]+--hard|clean[[:space:]]+-[a-zA-Z]*f)\"; then echo \"Blocked: that discards work irrecoverably. Use: git stash push -m \\\"<reason>\\\"  and tell the user the stash name.\" >&2; exit 2; fi; if printf \"%s\" \"$cmd\" | grep -qE \"(^|[;&|[:space:]])git[[:space:]]+commit\"; then [ -f Makefile ] || exit 0; if ! make check > /tmp/claude-precommit-check.log 2>&1; then { echo \"Blocked: make check is failing, so this commit would land on red.\"; tail -20 /tmp/claude-precommit-check.log; } >&2; exit 2; fi; fi",
+            "timeout": 180,
+            "statusMessage": "Guarding git (destructive verbs, red commits)"
+          }
+        ]
+      }
+    ]
+  }
+}
