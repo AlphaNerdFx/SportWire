@@ -958,6 +958,53 @@ what each turned into, since several changed shape on contact with real data.
   time. Revisit (c) first, and the decision it needs is whether reddit OAuth credentials are
   acceptable — not which pattern to match.
 
+- [ ] **P17. `cluster.py` is blind to the same camelCase names P13 fixed in `validate.py`,
+  and the obvious fix is wrong.** Found 2026-08-15 while costing the cross-run dedup work.
+  **Measured — needs a decision, and it blocks the Beal fix.**
+  `[VERIFIED]` `processing/cluster.py:46` is `\b[A-Z][a-zà-ÿ']+(?:\s+[A-Z][a-zà-ÿ']+)*` —
+  the same enumerated-range pattern `fca4298` removed from `validate.py`:
+
+  | title | `cluster._names` sees | `validate` sees |
+  |---|---|---|
+  | `LeBron James passes Kareem…` | `James`, `Kareem` | `LeBron James` |
+  | `DeMar DeRozan scored 30 points` | **nothing at all** | `DeMar DeRozan` |
+  | `Luka Dončić posted a triple-double` | `Luka Don` | `Luka Dončić` |
+  | `Shai Gilgeous-Alexander wins MVP` | `Shai Gilgeous`, `Alexander` | `Shai Gilgeous-Alexander` |
+  | `Alperen Şengün leads the Rockets` | `Alperen` | `Alperen Şengün` |
+
+  `[INFERRED]` **Consequence:** an article whose only names are camelCase carries *no*
+  fingerprint, so it cannot group with anything and each outlet's version of that story
+  reaches the brief separately. `[VERIFIED]` This is not theoretical — `LeBron` appeared 9
+  times in a single dated run's drop log (P13).
+  `[VERIFIED]` **The obvious fix — reuse `validate.py`'s extractor — is wrong, measured.**
+  Across 101 fixture + live articles the two disagree on **52 titles**, because the shipped
+  Unicode extractor is deliberately greedy across punctuation: it yields `Cavs Celtics`,
+  `Kawhi Leonard Daktronic`, `Anthony Davis Don't`. `[INFERRED]` That is correct for
+  grounding — the question there is *"is this string backed by the sources"*, and a welded
+  run is checked as a whole and by subset. It is wrong for clustering, where the question is
+  *"which entity does this title name"* and a welded run matches nothing.
+  `[VERIFIED]` **A conservative hand-written replacement is also not free.** The first attempt
+  this session, preserving cluster's punctuation-bounded runs, gained 21 names (`LeBron`,
+  `LeBron James`, `Luka Dončić's`, `LA Clippers`) but **lost 23**, including bare `Clippers`,
+  `Ballmer`, `Luka`, `James` and `Russell Westbrook`. Losing `Russell Westbrook` from the
+  fingerprint would be a worse regression than the bug.
+  **Correction to the previous session's claim.** It was recorded there as a `CLAUDE.md` §5
+  duplication — "two modules with their own name extractor". `[INFERRED]` The measurement
+  says otherwise: they are two *policies* over one *mechanism*. The duplicated part is the
+  scanner (what counts as an uppercase letter, in any alphabet); the part that must differ is
+  how far a name is allowed to run. Merging them wholesale would break clustering.
+  - a. One shared scanner, per-caller run policy. `[INFERRED]` The honest shape, but it needs
+    a new module — **operator approval required first** (`CLAUDE.md` §6).
+  - b. Fix `cluster.py` in place with its own `str.isupper`-based scan, duplicating ~15 lines
+    of scanning to keep the policies independent.
+  - c. Leave it; document that clustering is blind to camelCase names.
+  `[UNKNOWN]` What either fix does to grouping on real data. **Measure the way P13 was
+  measured** — grouping today is 76 articles → 68 stories, 6 multi-article, and that number
+  must be compared before and after, not assumed.
+  **Dependency:** the cross-run "already delivered this story" fix for the repeated Bradley
+  Beal item is built on this fingerprint. `[INFERRED]` Fixing it on top of an extractor that
+  cannot see `LeBron` or `DeMar DeRozan` would bake the blindness into a second module.
+
 ---
 
 ## LOW — deferred; each requires a trigger condition
