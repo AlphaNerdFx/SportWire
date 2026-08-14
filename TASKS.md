@@ -41,6 +41,35 @@
 
 ---
 
+## RELEASES
+
+Tags are `vMAJOR.MINOR.PATCH`. A tag is annotated (`git tag -a -F <file>`), and **its message
+becomes the GitHub Release notes** — there is one source of truth, not two. Pushing a `v*` tag
+runs `make check` first and publishes only if it passes; `[INFERRED]` a tag on a red commit is
+a claim, published under a version number, that something works.
+
+Before tagging: bump `version` in `pyproject.toml` to match. `release.yml` refuses to publish
+when the two disagree.
+
+- [x] **v0.1.0** — 2026-08-14, first tagged pre-release.
+  - Proof: <https://github.com/AlphaNerdFx/SportWire/releases/tag/v0.1.0>, marked
+    **pre-release**. `[VERIFIED]` Both workflows green on the tag: `CI` and `Release`.
+  - Proof: `make check` → **126 passed, 1 xfailed**, links resolving across repo *and* wiki.
+  - The notes state what works, what is unproven (`[UNKNOWN]` in-season payloads L-3, and the
+    summariser's pass rate) and what is known-broken (P5, with the delivered example). `[INFERRED]`
+    A pre-release that hides its limits is the failure this repository was founded on.
+  - `[VERIFIED]` **The first publish shipped the wrong notes, and the guard did not catch it.**
+    `actions/checkout` materialises a tag as a **lightweight** pointer, so the annotated object
+    was absent and `git tag --format='%(contents)'` fell back to the *commit* message. The
+    guard only rejected *empty* notes, so it passed while validating the wrong thing.
+    **Fixed:** the workflow re-fetches the tag and asserts `git cat-file -t` returns `tag`,
+    which only an annotated tag does. The v0.1.0 notes were corrected in place.
+  - `[INFERRED]` Worth naming: that is the same shape as the legacy suite passing in 3.32s —
+    a check that reports success it has not earned. It is now the third instance this week,
+    after the hollow tests and the mutation that silently failed to apply.
+
+---
+
 ## CRITICAL — do these before writing any application code
 
 - [x] **C0. Resolve blocker B2: check git history for secrets and bytecode** — 2026-08-03

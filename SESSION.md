@@ -1,6 +1,6 @@
 # SESSION.md — Current Working State
 
-**Last updated:** 2026-08-13 (second session that day)
+**Last updated:** 2026-08-14
 **Repository:** https://github.com/AlphaNerdFx/SportWire (public)
 **Next session should begin with:** §10.
 
@@ -20,7 +20,9 @@
 |---|---|
 | **Name** | SportWire — NBA news and game-data brief, delivered to Telegram |
 | **Stage** | **Working and running unattended.** Cron delivers every 8 hours. |
+| **Version** | `[VERIFIED]` **v0.1.0**, tagged 2026-08-14, published as a pre-release |
 | **Repo** | Public, MIT, CI green. `[VERIFIED]` 17 issues: 15 open, #6 and #14 closed |
+| **Wiki** | `[VERIFIED]` 6 pages. Its links are checked by `make check`; it had drifted for 4 days before that existed |
 | **Tests** | `[VERIFIED]` **126 passed, 1 xfailed.** `processing/` covered; see §8 |
 | **Runtime** | `[VERIFIED]` WSL2 Ubuntu, Python 3.10.12, `.venv` (68 MB, 21 packages) |
 | **Sources** | ESPN, CBS Sports, Yahoo Sports, r/nba (news); balldontlie (games) |
@@ -66,7 +68,7 @@ Logs live in `logs/` (gitignored) rather than `/tmp`, which WSL clears on restar
 ```bash
 make dry-run   # fetch and print, send nothing, record nothing
 make run       # fetch and send now
-make check     # ruff + pytest, exactly what CI runs
+make check     # ruff + pytest + documentation links, exactly what CI runs
 ```
 
 `[Likely]` The one fragility: WSL cron stops if the WSL instance shuts down. If briefs stop

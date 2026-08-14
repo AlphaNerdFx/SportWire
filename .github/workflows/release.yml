@@ -24,12 +24,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # `fetch-depth: 0` and the explicit tag fetch are both needed: a shallow checkout does
-      # not carry the annotated tag *object*, so its message -- the release notes -- would
-      # come back empty.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      # `[VERIFIED]` 2026-08-14, on the very first release this workflow published:
+      # `actions/checkout` materialises the tag as a **lightweight** pointer, so the
+      # annotated tag object is absent and `git tag --format='%(contents)'` silently falls
+      # back to the *commit* message. v0.1.0 shipped with its commit message as the release
+      # notes. Re-fetching restores the real object.
+      #
+      # `[INFERRED]` The original guard here only rejected *empty* notes, so it passed while
+      # validating the wrong thing -- a check that reports success it has not earned, which
+      # is the exact shape this repository keeps rediscovering. The object-type assertion
+      # below is the fix: only an annotated tag is of type `tag`.
+      - name: Restore the annotated tag object
+        run: git fetch --force --tags --no-recurse-submodules origin "+refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -65,11 +75,21 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # Only an annotated tag is a `tag` object; a lightweight one resolves straight to
+          # `commit`, and reading its "contents" hands back the commit message instead. That
+          # is what happened to v0.1.0, so this is asserted rather than assumed.
+          kind="$(git cat-file -t "$GITHUB_REF_NAME")"
+          if [ "$kind" != "tag" ]; then
+            echo "$GITHUB_REF_NAME is a $kind, not an annotated tag." >&2
+            echo "Release notes come from the tag message, so publishing now would use the" >&2
+            echo "commit message instead. Create it with: git tag -a $GITHUB_REF_NAME -F <file>" >&2
+            exit 1
+          fi
+
           # The annotated tag's message becomes the notes, so there is one source of truth.
           notes="$(git tag -l --format='%(contents)' "$GITHUB_REF_NAME")"
           if [ -z "$notes" ]; then
-            echo "Tag $GITHUB_REF_NAME has no annotated message to use as release notes." >&2
-            echo "Create it with: git tag -a $GITHUB_REF_NAME -m '...'" >&2
+            echo "Tag $GITHUB_REF_NAME has an empty message." >&2
             exit 1
           fi
           prerelease=""
