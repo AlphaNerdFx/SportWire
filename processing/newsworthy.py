@@ -182,11 +182,20 @@ def _posted_by_a_moderator(author: str | None) -> bool:
     `Moderator` suffix on the subreddit's name and every league this project might add later
     brings its own. `[UNKNOWN]` Whether any other moderator account posts to a feed this
     project reads — resolve by watching the drop log for this reason.
+
+    Reddit's `/u/` prefix is deliberately **not** stripped. `[VERIFIED]` It cannot affect a
+    suffix test — removing characters from the front never changes the end of a string — and
+    a normalising version was measured verdict-identical across 149 author shapes (36 real,
+    the rest adversarial: doubled slashes, `u/` without the slash, padding, mixed case). It
+    was written, it survived mutation because nothing could kill it, and it was removed. That
+    is P6 exactly: code that implies a protection it does not provide. **Anything stricter
+    than a suffix test — an exact match, an allowlist — has to strip the prefix again.**
     """
     if not author:
         return False
-    handle = author.strip().lstrip("/").removeprefix("u/").lower()
-    return handle.endswith(("_mod", "moderator"))
+    # `.strip()` and `.lower()` are load-bearing: a padded or upper-case handle fails the
+    # match without them, and feed authors are whatever the source chose to write.
+    return author.strip().lower().endswith(("_mod", "moderator"))
 
 
 def is_newsworthy(article: NewsArticle, now: datetime | None = None) -> bool:
