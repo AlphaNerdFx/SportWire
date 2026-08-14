@@ -192,6 +192,120 @@ def test_possessive_does_not_break_grounding(make_article: ArticleFactory) -> No
     assert result.is_safe, f"wrongly flagged: {result.invented_names}"
 
 
+# --- the extractor: which names the checks above ever get to see ------------------------
+#
+# `[VERIFIED]` 2026-08-14. Everything above only works on names the extractor produces, and
+# for the whole life of this module it produced nothing at all for "LeBron James". The
+# pattern was `\b[A-Z][a-zà-ÿ'’.-]*`, and there is no word boundary inside "LeBron" — "e"
+# and "B" are both word characters — so no match could start at the capital. `[VERIFIED]`
+# The 2026-08-14 16:00 run carried 9 lines naming LeBron.
+#
+# The replacement enumerates no characters: `str.isupper` and `str.isalpha` read the Unicode
+# database. `[VERIFIED]` A widened range was measured first and rejected — Latin Extended-A
+# rescued Dončić and Porziņģis but still failed Şengün, whose "Ş" is an uppercase letter
+# outside `A-Z`.
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "LeBron James",  # camelCase — extracted nothing at all before 2026-08-14
+        "DeMar DeRozan",
+        "Luka Dončić",  # was truncated to "Luka Don"
+        "Nikola Jokić",  # was truncated to "Nikola Joki"
+        "Alperen Şengün",  # uppercase Ş: defeats every A-Z range, including Latin Ext-A
+        "Kristaps Porziņģis",
+        "De'Aaron Fox",  # was truncated to "Aaron Fox"
+        "Shai Gilgeous-Alexander",  # was truncated to "Shai Gilgeous-"
+    ],
+)
+def test_a_name_is_seen_whole_whatever_alphabet_it_uses(
+    name: str, make_article: ArticleFactory
+) -> None:
+    """A name the extractor cannot see is a name the validator never checks.
+
+    Asserted through `validate_summary` rather than the extractor directly, because the
+    behaviour that matters is the verdict: an unseen name is not "allowed", it is *unexamined*
+    — the model could attach any claim to it and nothing would look.
+    """
+    articles = [make_article("Nets host a workout", summary="Nothing else happened.")]
+
+    result = validate_summary(f"{name} scored 30 points.", articles)
+
+    assert not result.is_safe, f"{name} was never examined"
+    assert name in result.invented_names, (
+        f"expected {name!r}, got {result.invented_names}"
+    )
+
+
+def test_a_camelcase_name_is_grounded_like_any_other(
+    make_article: ArticleFactory,
+) -> None:
+    """The other direction: seeing the name must not mean flagging it."""
+    articles = [
+        make_article(
+            "LeBron James picks the 76ers",
+            summary="DeMar DeRozan and Luka Dončić were also linked.",
+        )
+    ]
+
+    result = validate_summary(
+        "LeBron James joined the 76ers. DeMar DeRozan and Luka Dončić were linked.",
+        articles,
+    )
+
+    assert result.is_safe, f"wrongly flagged: {result.invented_names}"
+
+
+def test_a_quoted_contraction_does_not_weld_itself_to_the_previous_word(
+    make_article: ArticleFactory,
+) -> None:
+    """Opening punctuation is a boundary, so only *trailing* punctuation is stripped.
+
+    `[VERIFIED]` 2026-08-14 this exact fixture title was flagged for the invented name
+    `Sixer I'm` while the extractor stripped punctuation from both ends: the quote is the
+    only thing separating `Sixer:` from `"I'm`, and removing it made them consecutive
+    capitalised words. `[VERIFIED]` The same erased boundary welded longer runs together
+    elsewhere, and one of those runs was large enough to acquit an invented "LeBron Tatum"
+    by superset — so one character of over-eager stripping produced a false accusation and
+    a missed fabrication at the same time.
+
+    `[VERIFIED]` 2026-08-14, second time: the first version of this test put the quote in
+    mid-sentence, where the lowercase "said" before it broke the run anyway — so it passed
+    under both readings and the mutation survived. The colon-then-quote below is what makes
+    `Sixer` and `I'm` *adjacent*, which is the only arrangement that can weld them.
+    """
+    headline = 'Jaylen Brown on being a Sixer: "I\'m still processing it"'
+    articles = [
+        make_article(headline, summary="The forward spoke at his introduction.")
+    ]
+
+    result = validate_summary(headline, articles)
+
+    assert result.is_safe, f"wrongly flagged: {result.invented_names}"
+
+
+def test_a_token_carrying_a_digit_is_not_part_of_a_name(
+    make_article: ArticleFactory,
+) -> None:
+    """`[INFERRED]` "76ers" and "2026-27" survive only because they do not start with an
+    uppercase letter — the rule that excludes them is the same one that admits Şengün.
+
+    `NBA2K` is the case that needs the letters-only rule as well as the capital rule: it
+    *does* start with a capital, and it sat next to another capitalised word in the
+    2026-08-14 brief ("his NBA2K player rating of 87"). Admitting it would manufacture a
+    name out of a product and a common noun, and then flag it as invented.
+    """
+    articles = [make_article("Sixers news", summary="Nothing else happened.")]
+
+    result = validate_summary(
+        "The 76ers open the 2026-27 season at home. Bam responded to his NBA2K Rating.",
+        articles,
+    )
+
+    assert result.is_safe, f"wrongly flagged: {result.invented_names}"
+
+
 # --- blended names: the generosity above, refuted ---------------------------------------
 #
 # `[VERIFIED]` 2026-08-14. The three tests above bought their generosity at a price nobody

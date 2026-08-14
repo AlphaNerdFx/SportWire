@@ -25,10 +25,76 @@ from models.schemas import NewsArticle
 
 logger = logging.getLogger(__name__)
 
-# Sequences of capitalised words: person and organisation names. `[VERIFIED]` This is what
-# would have caught "Devin Booker", "Leon Rose", "Steve Nash", "Gabe Vincent" and "Romeo
-# Langford" — every fabricated name measured during the model evaluation.
-_PROPER_NAME = re.compile(r"\b[A-Z][a-zà-ÿ'’.-]*(?:\s+[A-Z][a-zà-ÿ'’.-]*)+")
+# Punctuation that belongs inside a name — "De'Aaron", "Karl-Anthony", "Jr." — as opposed to
+# punctuation that merely follows one.
+_INSIDE_A_NAME = "'’.-"
+_TRAILING_PUNCTUATION = ',;:!?()[]{}"“”«»…'
+
+
+def _is_name_word(word: str) -> bool:
+    """Whether a word could be part of a name: a capital, then letters.
+
+    **This asks Python, and enumerates nothing.** `str.isupper` and `str.isalpha` read the
+    Unicode character database, so every alphabet is covered without this module holding a
+    table that goes stale.
+
+    `[VERIFIED]` 2026-08-14 that matters, and a character range cannot substitute for it.
+    The extractor was previously `[A-Z][a-zà-ÿ'’.-]*`, which produced:
+
+        "Luka Dončić"           -> "Luka Don"
+        "Nikola Jokić"          -> "Nikola Joki"
+        "Kristaps Porziņģis"    -> "Kristaps Porzi"
+        "LeBron James"          -> nothing at all
+        "DeMar DeRozan"         -> nothing at all
+
+    Widening the range to Latin Extended-A fixed the first three and still failed
+    "Alperen Şengün", because `Ş` is an uppercase letter outside `A-Z` and the pattern
+    required `[A-Z]` to start a word. `[INFERRED]` Every enumerated range fails on the next
+    name from the next alphabet; the NBA acquires those faster than this file is edited.
+
+    Digits keep "76ers" and "2026-27" out, since neither starts with an uppercase letter.
+    """
+    return (
+        bool(word)
+        and word[0].isupper()
+        and all(ch.isalpha() or ch in _INSIDE_A_NAME for ch in word)
+    )
+
+
+class _ProperNames:
+    """Runs of two or more consecutive capitalised words: people and organisations.
+
+    `[VERIFIED]` This is what caught "Devin Booker", "Leon Rose", "Steve Nash", "Gabe
+    Vincent" and "Romeo Langford" — every fabricated name measured during the model
+    evaluation. Exposes `findall` because that is the one method the rest of this module
+    ever called on the compiled pattern it replaces.
+    """
+
+    def findall(self, text: str) -> list[str]:
+        names: list[str] = []
+        run: list[str] = []
+        for token in text.split():
+            # `[VERIFIED]` 2026-08-14 **trailing only, never leading**, and both bugs that
+            # proved it came from one line. Stripping a leading quote turned
+            # `a Sixer: "I'm still processing it"` into the name `Sixer I'm` — a false
+            # accusation on a real fixture title — because the quote is the only thing
+            # separating the two words. The same erased boundary welded longer runs
+            # together elsewhere, and one of those runs was a set large enough to acquit
+            # the invented "LeBron Tatum" by superset. Opening punctuation *is* the
+            # boundary; removing it removes the evidence.
+            word = token.rstrip(_TRAILING_PUNCTUATION)
+            if _is_name_word(word):
+                run.append(word)
+                continue
+            if len(run) >= 2:
+                names.append(" ".join(run))
+            run = []
+        if len(run) >= 2:
+            names.append(" ".join(run))
+        return names
+
+
+_PROPER_NAME = _ProperNames()
 
 # Names are matched per sentence, never across one. `[VERIFIED]` 2026-08-08: matching over
 # the whole summary treated "...with the Mavericks. LeBron James chose Philadelphia" as a
