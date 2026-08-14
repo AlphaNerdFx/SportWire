@@ -13,8 +13,15 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
     branches: [main]
+  # The wiki is a separate repository and can be edited in the browser, so a wiki-only
+  # change never triggers a push event here. A daily run is what catches a wiki edit that
+  # points at a file this repository does not have.
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
 
 jobs:
   check:
@@ -33,5 +40,16 @@ jobs:
       - name: Install dependencies
         run: make install
 
+      # Cloned so `make check` can verify the wiki's links into this repository.
+      # `[VERIFIED]` 2026-08-14: the wiki pointed at a renamed ADR for four days, and
+      # README.md and SECURITY.md had the same broken link. Failure is tolerated here
+      # because a fork has no wiki -- `scripts/check_links.py` then skips that portion
+      # loudly rather than reporting a success it has not earned.
+      - name: Clone the wiki
+        continue-on-error: true
+        run: git clone --depth 1 "${{ github.server_url }}/${{ github.repository }}.wiki.git" ../wiki
+
       - name: Run checks
+        env:
+          SPORTWIRE_WIKI: ../wiki
         run: make check

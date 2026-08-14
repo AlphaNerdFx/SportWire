@@ -28,12 +28,17 @@ token from [@BotFather](https://t.me/botfather). See `.env.example`.
 To run it unattended every 8 hours, see [`docs/SCHEDULING.md`](docs/SCHEDULING.md) — cron and
 Windows Task Scheduler are both documented.
 
-### Optional: local summarisation
+### Local summarisation
 
-`[VERIFIED]` **Disabled by default, and you probably want to leave it that way.** Every local
-model tested fabricated player names and contract figures on real data — see
-[ADR-012](docs/decisions/ADR-012-summarisation-off-by-default.md). The headline list is never
-wrong; a generated paragraph is not. To experiment anyway:
+> ~~`[VERIFIED]` **Disabled by default, and you probably want to leave it that way.**~~
+> **Corrected 2026-08-14.** This described the decision as it stood before 2026-08-10, when
+> [ADR-012](docs/decisions/ADR-012-summarisation.md) reversed it. The ADR and the code were
+> updated; this file, `SECURITY.md` and the wiki were not, and the stale link to the ADR's old
+> filename is what eventually exposed it. `make check` now fails on a broken documentation
+> link so the same drift cannot repeat silently.
+
+`[VERIFIED]` **Enabled by default**, using a local Ollama model. Requires Ollama installed and
+a model pulled; without it the run degrades to the headline list rather than failing.
 
 ```bash
 # On a clean Ubuntu, Ollama's install script needs zstd first — it fails without it
@@ -42,8 +47,26 @@ sudo apt install zstd
 curl -fsSL https://ollama.com/install.sh | sh
 ollama pull mistral:7b
 
-python main.py --dry-run --summary
+python main.py --dry-run              # summarised
+python main.py --dry-run --no-summary # headline list only
 ```
+
+**Every summary is checked against its sources before it can be sent.**
+`processing/validate.py` rejects any proper name or figure that appears nowhere in the source
+articles, retries, and falls back to the plain headline list if nothing passes — it fails
+closed. `[VERIFIED]` No invented *name* has ever reached a phone.
+
+Two limits you should know before relying on it:
+
+- `[UNKNOWN]` **The pass rate.** A measured floor over one soak is **2 accepted of 19
+  attempts**, and that count mixes code versions. An earlier "~84%" figure came from a single
+  sitting of 3/5 and is not supported — see `TASKS.md` P4.
+- `[VERIFIED]` **The validator grounds entities, not claims.** A sentence built entirely from
+  real names can still assert a false relationship between them and pass. One has reached a
+  phone. See `TASKS.md` P5; this is open.
+
+`[INFERRED]` The headline list is never wrong; a generated paragraph can be. If that trade is
+not one you want, run with `--no-summary`.
 
 ## Project documents
 

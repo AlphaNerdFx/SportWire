@@ -9,7 +9,7 @@ PYTHON := .venv/bin/python
 PIP    := .venv/bin/pip
 RUFF   := .venv/bin/ruff
 
-.PHONY: help venv install lint format test check run dry-run clean
+.PHONY: help venv install lint format test links check run dry-run clean
 
 help:  ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -33,7 +33,10 @@ format:  ## Apply formatting and safe lint fixes
 test:  ## Run the test suite (network tests excluded by default)
 	$(PYTHON) -m pytest -v
 
-check: lint test  ## Everything CI runs. Green here means green there.
+links:  ## Verify every documentation link resolves (wiki included when cloned)
+	$(PYTHON) scripts/check_links.py
+
+check: lint test links  ## Everything CI runs. Green here means green there.
 
 run:  ## Fetch and send a brief
 	$(PYTHON) main.py

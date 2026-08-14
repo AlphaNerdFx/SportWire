@@ -40,12 +40,25 @@ sources and are inserted into messages. They are sent as **plain text** rather t
 Markdown, which removes the injection surface that formatted messages would create. If you
 add a channel that renders markup, escape the content.
 
-**LLM summarisation, if you enable it, is not trustworthy.** It ships disabled. `[VERIFIED]`
-every local model tested fabricated player names and contract figures on real data — see
-[ADR-012](docs/decisions/ADR-012-summarisation-off-by-default.md). Enabling `--summary` means
-accepting that the brief may state things no source said. This is a correctness risk rather
-than a security one, but it is the most likely way this project will tell you something
-false.
+**LLM summarisation ships enabled, and is the most likely way this project will tell you
+something false.** ~~It ships disabled.~~ **Corrected 2026-08-14:** that described the
+position before [ADR-012](docs/decisions/ADR-012-summarisation.md) reversed it on 2026-08-10.
+Disable it with `--no-summary`.
+
+`[VERIFIED]` Every local model tested fabricated player names and contract figures on real
+data. What makes it shippable is that the output is **checked before it is sent**:
+`processing/validate.py` rejects any proper name or figure absent from the source articles,
+retries, and falls back to the plain headline list when nothing passes. It fails closed, and
+no invented *name* has reached a phone.
+
+`[VERIFIED]` **The check has a known hole, and it is not theoretical.** It grounds *entities*,
+not *claims*: a sentence composed entirely of real, sourced names can assert a relationship
+between them that no source states, and it will pass. One such sentence was delivered on
+2026-08-13. Tracked as `TASKS.md` P5 and recorded as a failing test.
+
+`[INFERRED]` Treat a generated paragraph as unverified. This is a correctness risk rather than
+a security one, but if you forward a brief onward, that is the sentence that will embarrass
+you.
 
 **External orchestrators are your responsibility.** SportWire can print a brief to stdout for
 another tool to relay. Tools that reach WhatsApp typically do so through unofficial bridges

@@ -1,0 +1,82 @@
+# Publishes a GitHub Release when a version tag is pushed.
+#
+# The suite runs FIRST and the release is only created if it passes. A tag that points at a
+# red commit is worse than no tag: it is a claim, published under a version number, that
+# something works. `[VERIFIED]` This repository exists because a document made exactly that
+# kind of unearned claim and was believed for weeks.
+#
+# The release notes are the annotated tag's own message, so the tag and the release cannot
+# disagree. Writing the notes twice would be the same duplication `make check` exists to
+# avoid.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+# Required to create a release. Nothing else is granted.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      # `fetch-depth: 0` and the explicit tag fetch are both needed: a shallow checkout does
+      # not carry the annotated tag *object*, so its message -- the release notes -- would
+      # come back empty.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: make install
+
+      - name: Clone the wiki
+        continue-on-error: true
+        run: git clone --depth 1 "${{ github.server_url }}/${{ github.repository }}.wiki.git" ../wiki
+
+      # The gate. Everything below only runs if this passes.
+      - name: Run checks
+        env:
+          SPORTWIRE_WIKI: ../wiki
+        run: make check
+
+      - name: Confirm the tag matches the packaged version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          packaged="$(grep -m1 '^version' pyproject.toml | cut -d'"' -f2)"
+          if [ "$tag" != "$packaged" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match pyproject version $packaged." >&2
+            echo "One of them is wrong, and a release that misreports its own version" >&2
+            echo "is the kind of claim this project does not publish." >&2
+            exit 1
+          fi
+          echo "Tag and pyproject agree on $packaged."
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The annotated tag's message becomes the notes, so there is one source of truth.
+          notes="$(git tag -l --format='%(contents)' "$GITHUB_REF_NAME")"
+          if [ -z "$notes" ]; then
+            echo "Tag $GITHUB_REF_NAME has no annotated message to use as release notes." >&2
+            echo "Create it with: git tag -a $GITHUB_REF_NAME -m '...'" >&2
+            exit 1
+          fi
+          prerelease=""
+          case "$GITHUB_REF_NAME" in
+            v0.*|*-alpha*|*-beta*|*-rc*) prerelease="--prerelease" ;;
+          esac
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes "$notes" \
+            $prerelease
