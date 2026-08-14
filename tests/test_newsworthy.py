@@ -302,3 +302,63 @@ def test_drop_log_records_the_rule_and_the_untruncated_title(
 def test_nothing_is_dropped_from_an_empty_list(now: datetime) -> None:
     """The offseason case: no articles is normal, not an error."""
     assert drop_non_news([], now) == []
+
+
+# --- rule 3: the subreddit's own housekeeping -------------------------------------------
+#
+# `[VERIFIED]` 2026-08-15 the operator's 00:00 brief ended with "the r/nba community thread
+# for content creators to share NBA-related work continues every Friday". `[VERIFIED]` From
+# a live fetch of reddit.com/r/nba/.rss the same day, that is `Weekly Friday Self-Promotion
+# and Fan Art Thread`, posted by `/u/NBA_MOD`.
+#
+# The rule reads the **author**, never the title. `SESSION.md` §11 records title-based
+# classification of r/nba failing twice — a blacklist missed untagged chatter, a whitelist
+# dropped the day's biggest story. An account is not a pattern that can be outwitted.
+
+
+@pytest.mark.parametrize(
+    "author",
+    [
+        "/u/NBA_MOD",  # `[VERIFIED]` the live account, exactly as the feed writes it
+        "NBA_MOD",  # without reddit's prefix, in case an adapter strips it
+        "/u/AutoModerator",  # reddit-wide, posts recurring threads on many subreddits
+        "/u/nfl_mod",  # `[INFERRED]` the convention travels when NFL is added (L1)
+    ],
+)
+def test_a_post_from_the_subreddit_itself_is_not_news(
+    author: str, make_article: ArticleFactory, now: datetime
+) -> None:
+    """Housekeeping is addressed to the community, not reporting about the league."""
+    article = make_article(
+        "Weekly Friday Self-Promotion and Fan Art Thread", author=author
+    )
+
+    assert rejection_reason(article, now) is not None
+    assert "subreddit business" in rejection_reason(article, now)
+    assert drop_non_news([article], now) == []
+
+
+def test_a_reader_whose_handle_merely_contains_mod_is_kept(
+    make_article: ArticleFactory, now: datetime
+) -> None:
+    """The rule matches the *end* of a handle, so ordinary readers survive it.
+
+    `[INFERRED]` A substring test would drop `/u/modern_warfare` and `/u/ModestMouse`, and
+    the cost of that is invisible — the story simply never appears. This is the failure
+    direction that has bitten this filter three times (`SESSION.md` §8).
+    """
+    for handle in ("/u/modern_warfare", "/u/ModestMouse", "/u/Moderate_Take"):
+        article = make_article(
+            "[Charania] Bradley Beal has agreed to a two-year deal", author=handle
+        )
+        assert rejection_reason(article, now) is None, f"{handle} was wrongly dropped"
+
+
+def test_an_article_with_no_author_is_kept(
+    make_article: ArticleFactory, now: datetime
+) -> None:
+    """`[VERIFIED]` `author` is optional on `NewsArticle` and absent on 2 of 15 items in the
+    captured ESPN fixture, so a missing author must never read as a moderator."""
+    article = make_article("Clippers sign Bradley Beal", author=None)
+
+    assert rejection_reason(article, now) is None

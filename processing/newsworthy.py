@@ -156,7 +156,37 @@ def rejection_reason(article: NewsArticle, now: datetime | None = None) -> str |
         if phrase in lowered:
             return f"retrospective phrase {phrase!r}"
 
+    # Rule 3 — posted by the subreddit itself rather than by a reader.
+    if _posted_by_a_moderator(article.author):
+        return f"subreddit business, posted by {article.author}"
+
     return None
+
+
+def _posted_by_a_moderator(author: str | None) -> bool:
+    """Whether an item was posted by the subreddit rather than by a reader.
+
+    `[VERIFIED]` 2026-08-15, from a live fetch of `reddit.com/r/nba/.rss`: the operator's
+    brief carried *"the r/nba community thread for content creators to share NBA-related
+    work continues every Friday"*, which is `Weekly Friday Self-Promotion and Fan Art
+    Thread`, posted by `/u/NBA_MOD`. It is housekeeping for the subreddit, not reporting.
+
+    **This matches on identity, not on language, and that distinction is the whole point.**
+    `[VERIFIED]` `SESSION.md` §11 records title-based classification of r/nba failing twice
+    — a blacklist missed untagged chatter and a whitelist dropped the biggest story of the
+    day. A moderator account is not a pattern to be outwitted: it is a small, stable,
+    observable set, and the accounts in it never post news, so this rule cannot cost a story
+    the way a keyword can.
+
+    Suffix-matched rather than compared exactly, because the convention is a `_MOD` or
+    `Moderator` suffix on the subreddit's name and every league this project might add later
+    brings its own. `[UNKNOWN]` Whether any other moderator account posts to a feed this
+    project reads — resolve by watching the drop log for this reason.
+    """
+    if not author:
+        return False
+    handle = author.strip().lstrip("/").removeprefix("u/").lower()
+    return handle.endswith(("_mod", "moderator"))
 
 
 def is_newsworthy(article: NewsArticle, now: datetime | None = None) -> bool:

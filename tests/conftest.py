@@ -61,6 +61,7 @@ def make_article() -> Callable[..., NewsArticle]:
         summary: str = "",
         hours_old: float = 2.0,
         source: str = "r/nba",
+        author: str | None = None,
     ) -> NewsArticle:
         return NewsArticle(
             article_id=f"id-{abs(hash((title, summary)))}",
@@ -69,6 +70,7 @@ def make_article() -> Callable[..., NewsArticle]:
             summary=summary,
             published_at=NOW - timedelta(hours=hours_old),
             source=source,
+            author=author,
         )
 
     return build
