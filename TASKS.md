@@ -763,6 +763,88 @@ what each turned into, since several changed shape on contact with real data.
 
   - Proof: `make check` → **106 passed, 1 xfailed**.
 
+- [x] **P11. A summary accepted on the first attempt logged nothing.** Found 2026-08-14 by
+  reading the log of a live run. `[VERIFIED]` `summarize.py` guarded the acceptance line
+  behind `if attempt > 1`, so the 16:00 run read `summarising 12 stories` then, 36 seconds
+  later, `delivered 1/1 messages` — with no verdict between. That is indistinguishable from
+  a summariser that was never called.
+  `[INFERRED]` It corrupts P4 in the direction that flatters the model: the measured floor of
+  **2 accepted / 19 attempts** could not have counted a single attempt-1 success, because
+  none was ever written down. Rejections logged, fallbacks logged, only the cheapest success
+  was silent.
+  **Fixed in `4c7c4ed`** — every acceptance now logs `accepted on attempt N of M`.
+  - Proof — mutation: restoring the `if attempt > 1` guard fails
+    `test_a_valid_summary_is_returned_on_the_first_attempt`, and the diff was asserted to
+    have applied before the run was trusted.
+  - **What to watch:** P4 is now countable for the first time. Do not quote a pass rate until
+    ~2 weeks of runs have accumulated under this commit, and do not restate 84%.
+
+- [x] **P12. A name blended from two real players passed validation and reached the phone.**
+  Found 2026-08-14 in the delivered 16:00 brief. **User-facing.**
+  `[VERIFIED]` The brief said *"January will see Giannis Antetokounmpo and Jayson Brown
+  reunions."* There is no Jayson Brown — the model fused **Jayson Tatum** and **Jaylen
+  Brown**, who share the feed because they were teammates. Last-word grounding accepted it on
+  "Brown". It passed on **attempt 1**.
+  `[VERIFIED]` `validate.py`'s own docstring predicted this and dismissed it: *"The failure
+  mode it would miss is a wrong first name beside a right surname, which is a smaller error
+  than inventing a person."* `[INFERRED]` It is not smaller — it **is** inventing a person,
+  and unlike "Joe Dumars" it inherits the credibility of two real ones.
+  `[VERIFIED]` Measured on the committed fixtures: the old rule caught **0 of 5,442**
+  synthetic blends. Not an edge case — every blend was a guaranteed pass.
+  - a. Require the whole phrase. `[VERIFIED]` Rejected — this is the every-word rule that
+    threw away three correct summaries on 2026-08-11.
+  - b. Subset-or-superset of a single source name, applied as a **refutation** on top of the
+    existing ladder. `[INFERRED]` Separates the classes exactly: every legitimate case is one
+    source name expanded or contracted, while a blend is drawn from two and is a subset of
+    neither.
+  - c. A first-name check only. `[INFERRED]` Narrower, and the third one-case-at-a-time
+    narrowing of this module — the pattern `SESSION.md` §11 warns about.
+  - d. Accept and document.
+  `[INFERRED]` (b).
+
+  **Operator chose (b) on 2026-08-14. Done — `f1a38a6`.**
+  - Proof — `[VERIFIED]` against the committed fixtures (76 articles, 88 two-word source
+    names): real source names newly rejected **0 of 88**; blends caught **0 → 5,402 of
+    5,442 (99.3%)**. The 40 escapes are tokenizer fragments (`chris p`, `kawhi le`), not
+    plausible names.
+  - Proof — mutation, five mutations each asserted to have applied: never-refute (killed, 2
+    tests), `any` for `all` (killed), refute-before-verbatim (killed), index-the-joined-blob
+    (killed, 89 verdicts differ), superset-only (killed).
+  - **`[VERIFIED]` Three of the five survived the first pass and two of my tests asserted
+    nothing** — both were acquitted by the verbatim rule before ever reaching the code under
+    test. `SESSION.md` §11 names this pattern; it recurred unprompted, in a session that
+    began by reading the warning about it.
+  - `[VERIFIED]` Hyphen splitting was written into `_name_words` and **removed before it
+    shipped**: it changed 0 of 5,530 verdicts and cannot, because `_PROPER_NAME` truncates
+    "Karl-Anthony" to "Anthony" before `_name_words` sees it. `[INFERRED]` This re-diagnoses
+    the 2026-08-11 "Anthony Towns" bug — the model was not shortening a hyphenated first
+    name, the **validator** was truncating it and then failing to ground its own truncation.
+
+- [ ] **P13. `_PROPER_NAME` cannot see a camelCase name, so LeBron James has never been
+  validated.** Found 2026-08-14 while probing the tokenizer for P12. **Open — needs a
+  decision.**
+  `[VERIFIED]` `_PROPER_NAME.findall("LeBron James attended the game.")` returns `[]`, and so
+  does `"DeMar DeRozan scored 30 points."` The pattern is anchored with `\b`, and there is no
+  word boundary inside `LeBron` — "e" and "B" are both word characters — so no match can
+  start at the capital.
+  `[VERIFIED]` All 5 camelCase tokens in the committed fixtures are unmatchable: `DeMar`,
+  `DeRozan`, `LeBron`, plus two junk tokens. `[VERIFIED]` The 2026-08-14 16:00 run's drop log
+  alone carried **9** lines naming LeBron (`grep -c` on the dated run), so this is
+  live, not theoretical.
+  `[INFERRED]` **Consequence: any sentence whose only proper names are camelCase is delivered
+  unexamined.** The model can assert anything about LeBron James, DeMar DeRozan, LaMelo Ball,
+  De'Aaron Fox or Shai Gilgeous-Alexander and the validator has no opinion. This is a
+  *coverage* hole, not a grounding hole — different from P12, which was a wrong verdict.
+  `[VERIFIED]` A related truncation: `"Shai Gilgeous-Alexander"` matches as `"Shai
+  Gilgeous-"`, dropping the surname that identifies him.
+  - a. Allow an internal capital in the token: extend the character class so `LeBron` matches
+    as one word. `[INFERRED]` Smallest change, targets exactly the observed cause.
+  - b. Match on Unicode title-case runs instead of `\b`-anchored ASCII.
+  - c. Accept and document — record that camelCase names are unvalidated.
+  `[UNKNOWN]` What (a) does to the false-accusation rate. **Measure against the fixtures
+  before choosing**, the same way P12 was measured; a change to the extractor moves every
+  verdict in the module, not just the camelCase ones.
+
 ---
 
 ## LOW — deferred; each requires a trigger condition

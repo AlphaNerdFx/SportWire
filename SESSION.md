@@ -23,7 +23,7 @@
 | **Version** | `[VERIFIED]` **v0.1.0**, tagged 2026-08-14, published as a pre-release |
 | **Repo** | Public, MIT, CI green. `[VERIFIED]` 17 issues: 15 open, #6 and #14 closed |
 | **Wiki** | `[VERIFIED]` 6 pages. Its links are checked by `make check`; it had drifted for 4 days before that existed |
-| **Tests** | `[VERIFIED]` **126 passed, 1 xfailed.** `processing/` covered; see §8 |
+| **Tests** | `[VERIFIED]` **181 passed, 1 xfailed** (2026-08-14 `make check`). See §8 |
 | **Runtime** | `[VERIFIED]` WSL2 Ubuntu, Python 3.10.12, `.venv` (68 MB, 21 packages) |
 | **Sources** | ESPN, CBS Sports, Yahoo Sports, r/nba (news); balldontlie (games) |
 | **Delivery** | Telegram `@sportwire_news_bot`, three messages, one notification |
@@ -130,7 +130,22 @@ This consumed most of 2026-08-06 to 08-12 and the state is nuanced.
 headline list.
 
 ~~`[VERIFIED]` **No fabrication has ever reached the phone.**~~ **Corrected 2026-08-13.**
-`[VERIFIED]` **No invented _name_ has reached the phone. A false _claim_ has.** The 08:00
+~~`[VERIFIED]` **No invented _name_ has reached the phone. A false _claim_ has.**~~
+**Corrected again 2026-08-14 — this claim has now been wrong twice, each time narrowed
+rather than abandoned.** `[VERIFIED]` **An invented name has reached the phone.** The 16:00
+brief that day delivered *"January will see Giannis Antetokounmpo and Jayson Brown
+reunions"*, on attempt 1. There is no Jayson Brown: the model fused Jayson Tatum and Jaylen
+Brown, and last-word grounding accepted the result on "Brown". `[VERIFIED]` The old rule
+caught **0 of 5,442** such blends measured on the committed fixtures — the claim was never
+true, it was merely never tested. Fixed in `f1a38a6`; see TASKS.md P12.
+
+`[INFERRED]` **The pattern worth keeping is the retraction itself.** Both corrections took
+the form "the strong claim was wrong, here is a narrower one" — and the narrower one failed
+within a day. A third narrowing is available ("no invented name reaches the phone *when the
+name is not camelCase*", per P13) and should be resisted; the honest statement is that the
+validator's coverage is **measured**, not complete.
+
+The 08:00
 brief that day passed validation on attempt 1 asserting that Westbrook's retirement "marked
 the end of playoff runs for basketball greats like Kobe Bryant, Tim Duncan, Dirk Nowitzki, and
 Kawhi Leonard" — and Kawhi Leonard is active. Every name in that sentence is grounded, which
