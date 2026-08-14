@@ -192,6 +192,178 @@ def test_possessive_does_not_break_grounding(make_article: ArticleFactory) -> No
     assert result.is_safe, f"wrongly flagged: {result.invented_names}"
 
 
+# --- blended names: the generosity above, refuted ---------------------------------------
+#
+# `[VERIFIED]` 2026-08-14. The three tests above bought their generosity at a price nobody
+# had measured, and the bill arrived on the operator's phone: *"January will see Giannis
+# Antetokounmpo and Jayson Brown reunions."* No such player. The model fused Jayson Tatum
+# and Jaylen Brown — two names in the same feed because they were teammates — and the
+# last-word rule grounded the result on "Brown". It passed on attempt 1.
+#
+# These four assert both directions at once, which is the whole difficulty: the fix must
+# refuse the blend without taking the expansions and contractions back down with it.
+
+
+def test_a_name_blended_from_two_real_players_is_caught(
+    make_article: ArticleFactory,
+) -> None:
+    """The live 2026-08-14 failure. Both halves are grounded; the person is not.
+
+    `[INFERRED]` This is the hardest fabrication class to catch by counting words, because
+    every word is genuinely present in the sources. What refutes it is that the sources'
+    own "... Brown" is a *different* Brown.
+    """
+    articles = [
+        make_article(
+            "Jaylen Brown details bumpy Celtics exit in 76ers introduction",
+            summary="Jaylen Brown spoke about his relationship with Jayson Tatum.",
+        ),
+        make_article(
+            "NBA releases 2026-27 schedule",
+            summary="January features a Jayson Tatum reunion game in Boston.",
+        ),
+    ]
+
+    result = validate_summary(
+        "January will see Giannis Antetokounmpo and Jayson Brown reunions.", articles
+    )
+
+    assert not result.is_safe
+    assert "Jayson Brown" in result.invented_names
+
+
+def test_an_unrelated_first_name_on_a_real_surname_is_caught(
+    make_article: ArticleFactory,
+) -> None:
+    """`[VERIFIED]` Before the refutation rule, "Marcus Brown" passed as readily as the
+    blend did — the last-word rule accepted *any* first name bolted to a grounded surname,
+    which is inventing a person, not misspelling one."""
+    articles = [
+        make_article(
+            "Jaylen Brown details bumpy Celtics exit",
+            summary="Brown spoke at his introduction.",
+        )
+    ]
+
+    result = validate_summary("Marcus Brown will play in January.", articles)
+
+    assert not result.is_safe
+    assert "Marcus Brown" in result.invented_names
+
+
+def test_one_agreeing_source_name_acquits_despite_a_disagreeing_one(
+    make_article: ArticleFactory,
+) -> None:
+    """`_contradicted` requires *every* same-surname source name to disagree, not any one.
+
+    `[VERIFIED]` 2026-08-14, measured on the committed fixtures: the two readings disagree
+    on 5 of 5,530 names, and every one of the five is a case where "all" is right and "any"
+    is wrong — `new knicks` and `los clippers` are fragments of "New York Knicks" and "Los
+    Angeles Clippers", which the sources also carry under a second, differing name
+    ("Champion Knicks"). Under "any" the second entry would convict the first.
+
+    Contracting a team's city is the exact class this module already threw away three live
+    summaries over, so the stricter reading would reintroduce that bug through a new door.
+    """
+    articles = [
+        make_article(
+            "Oklahoma City Thunder win again",
+            summary="A strong night in the west.",
+        ),
+        make_article(
+            "Reigning Champion Thunder open the season at home",
+            summary="The banner goes up first.",
+        ),
+    ]
+
+    result = validate_summary("Oklahoma Thunder won on Tuesday night.", articles)
+
+    assert result.is_safe, f"wrongly flagged: {result.invented_names}"
+
+
+def test_a_name_is_judged_against_the_sources_not_against_a_field_boundary(
+    make_article: ArticleFactory,
+) -> None:
+    """The index is built per field, so a title running into a summary cannot invent an entry.
+
+    `[VERIFIED]` 2026-08-14, measured on the committed fixtures: indexing the joined text
+    changes **89** verdicts and manufactures 11 names that exist in neither field — among
+    them `Golden State Green`, `Knicks Philly` and `Free Agency Source`, each one a title's
+    tail welded to the next field's head. The shape below is that last one, taken from the
+    Yahoo item verbatim in structure: joined, "Free Agency" is swallowed into "Free Agency
+    Source" and nothing is left under "agency" to refuse a fabricated one.
+    """
+    articles = [
+        make_article(
+            "Hornets named a landing spot for Russell Westbrook in Free Agency",
+            summary="Source: Charlotte has registered interest.",
+        )
+    ]
+
+    result = validate_summary("Wasserman Agency confirmed the deal.", articles)
+
+    assert not result.is_safe, (
+        "an agency the sources never name must not ground on 'Agency'"
+    )
+    assert "Wasserman Agency" in result.invented_names
+
+
+def test_two_real_players_sharing_a_feed_both_still_ground(
+    make_article: ArticleFactory,
+) -> None:
+    """The false-accusation direction, and the reason `_contradicted` requires *every*
+    same-surname source name to disagree rather than any one of them.
+
+    `[INFERRED]` A feed carrying both players is the normal case, not the exception — it is
+    exactly what made the blend possible. If it also rejected the true sentence, the fix
+    would cost more correct summaries than the bug it closes.
+    """
+    articles = [
+        make_article(
+            "Jaylen Brown details bumpy Celtics exit",
+            summary="He discussed his relationship with Jayson Tatum.",
+        )
+    ]
+
+    result = validate_summary(
+        "Jayson Tatum and Jaylen Brown will meet in January.", articles
+    )
+
+    assert result.is_safe, f"wrongly flagged: {result.invented_names}"
+
+
+def test_a_namesake_does_not_refute_a_name_the_sources_state_in_full(
+    make_article: ArticleFactory,
+) -> None:
+    """Why the verbatim check must stay unconditional and run first.
+
+    Kawhi Leonard and Meyers Leonard are both real, and disagree on every word but the last,
+    so one would refute the other if the refutation ran before the phrase check.
+
+    `[VERIFIED]` 2026-08-14: the first version of this test used a source that named Kawhi
+    in sentence case, which put "Kawhi Leonard" in the index as its own agreeing entry and
+    acquitted him twice over — so reordering the checks changed nothing and the mutation
+    survived. The title-case headline here is what makes the ordering load-bearing:
+    `_PROPER_NAME` swallows a title-case headline as one long name ending in "Play", so it
+    contributes **nothing** under "leonard", and the verbatim substring is the only thing
+    standing between a correct name and a rejection.
+    """
+    articles = [
+        make_article(
+            "Meyers Leonard signs with a new team",
+            summary="The veteran big man is back in the league.",
+        ),
+        make_article(
+            "Clippers Star Kawhi Leonard Cleared To Play",
+            summary="He is available for the opener.",
+        ),
+    ]
+
+    result = validate_summary("Kawhi Leonard returned on Tuesday.", articles)
+
+    assert result.is_safe, f"wrongly flagged: {result.invented_names}"
+
+
 def test_names_are_not_matched_across_a_sentence_boundary(
     make_article: ArticleFactory,
 ) -> None:

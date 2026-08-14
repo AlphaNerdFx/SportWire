@@ -98,6 +98,7 @@ def validate_summary(summary: str, articles: list[NewsArticle]) -> ValidationRes
     """
     source = " ".join(f"{a.title} {a.summary}" for a in articles)
     source_lower = source.lower()
+    source_names = _index_source_names(articles)
 
     candidates: list[str] = []
     for sentence in _SENTENCE_BREAK.split(summary):
@@ -107,7 +108,7 @@ def validate_summary(summary: str, articles: list[NewsArticle]) -> ValidationRes
     invented_names = [
         name
         for name in dict.fromkeys(candidates)
-        if name and not _grounded(name, source, source_lower)
+        if name and not _grounded(name, source, source_lower, source_names)
     ]
 
     invented_figures = [
@@ -201,7 +202,12 @@ def _depossess(word: str) -> str:
     return re.sub(r"['’]s?$", "", word.strip(" .,;:"))
 
 
-def _grounded(name: str, source: str, source_lower: str) -> bool:
+def _grounded(
+    name: str,
+    source: str,
+    source_lower: str,
+    source_names: dict[str, list[frozenset[str]]],
+) -> bool:
     """Whether a proper name is traceable to the sources.
 
     Three ways to be grounded, in increasing generosity: the whole phrase appears, every
@@ -213,24 +219,96 @@ def _grounded(name: str, source: str, source_lower: str) -> bool:
     and "Anthony Towns" where it said "Karl-Anthony Towns". Expanding a team's city or
     shortening a hyphenated first name is good writing, not invention.
 
-    `[INFERRED]` The last word carries the identity — surname or team nickname — so it is
-    also what a fabrication gets wrong. Every measured fabrication fails this test: "Devin
-    Booker" against a source saying Brooks, "Joe Dumars" against one naming no Dumars, "Leon
-    Rose" against one naming Rosas. The failure mode it *would* miss is a wrong first name
-    beside a right surname, which is a smaller error than inventing a person.
+    ~~`[INFERRED]` The failure mode it *would* miss is a wrong first name beside a right
+    surname, which is a smaller error than inventing a person.~~ **Corrected 2026-08-14.**
+    `[VERIFIED]` That failure mode shipped, and it is not a smaller error. The 16:00 brief
+    reached the operator's phone saying *"January will see Giannis Antetokounmpo and Jayson
+    Brown reunions"*. There is no Jayson Brown; the model fused Jayson Tatum and Jaylen
+    Brown, who appear in the same feed because they were teammates. Blending two real
+    players invents a person just as surely as "Joe Dumars" did, and it passed on attempt 1.
+
+    So the two generous rules are now **refutable**. A summary name is refused when some
+    name *in the sources* shares its identifying last word and disagrees with it about the
+    rest — see `_contradicted`. `[INFERRED]` This separates the two classes exactly, because
+    every legitimate case above is one source name expanded or contracted, while a blend is
+    by construction drawn from two and is a subset of neither.
+
+    The verbatim rule stays unconditional and must come first: sources containing both
+    "Bronny James" and "LeBron James" would otherwise refute each other.
     """
     if name.lower() in source_lower:
         return True
 
-    normalised_source = _depossess_text(source_lower)
-    words = [_depossess(word.lower()) for word in name.split() if word]
+    words = _name_words(name)
     if not words:
         return False
 
+    if _contradicted(words, source_names):
+        return False
+
+    normalised_source = _depossess_text(source_lower)
     if all(word in normalised_source for word in words):
         return True
 
     return words[-1] in normalised_source
+
+
+def _name_words(name: str) -> list[str]:
+    """A name's comparable words: lowercased, de-possessed.
+
+    ~~Hyphens are split too, so "Anthony Towns" stays recognisable as a contraction of
+    "Karl-Anthony Towns".~~ **Removed 2026-08-14 before it ever shipped.** `[VERIFIED]`
+    Splitting on hyphens changed **0 of 5,530** verdicts measured across the committed
+    fixtures, and it cannot: `_PROPER_NAME`'s character class does not cross an internal
+    capital, so "Karl-Anthony Towns" is already truncated to "Anthony Towns" by the time
+    this function sees it. The only hyphenated tokens the pattern really emits are trailing
+    artifacts — `Way-`, `Ballmer-linked`.
+
+    `[INFERRED]` Kept out for the reason P6 was recorded: a mechanism that cannot change a
+    verdict reads as protection, survives review, and costs a mutation campaign to disprove.
+    This is also a re-diagnosis of the 2026-08-11 "Anthony Towns" bug — the model was not
+    shortening a hyphenated first name, the **validator** was truncating it and then failing
+    to ground its own truncation.
+    """
+    return [cleaned for word in name.split() if (cleaned := _depossess(word.lower()))]
+
+
+def _index_source_names(articles: list[NewsArticle]) -> dict[str, list[frozenset[str]]]:
+    """The sources' own proper names, keyed by the last word that identifies them.
+
+    Built per field rather than from the joined blob so that a title running into the next
+    article's summary cannot manufacture a name that spans them.
+    """
+    index: dict[str, list[frozenset[str]]] = {}
+    for article in articles:
+        for field in (article.title, article.summary):
+            for sentence in _SENTENCE_BREAK.split(field):
+                for name in _PROPER_NAME.findall(sentence):
+                    words = _name_words(name.strip(" .,;:"))
+                    if words:
+                        index.setdefault(words[-1], []).append(frozenset(words))
+    return index
+
+
+def _contradicted(
+    words: list[str], source_names: dict[str, list[frozenset[str]]]
+) -> bool:
+    """Whether every source name sharing this last word disagrees about the rest.
+
+    "Every" and not "any": a feed carrying both "Jaylen Brown" and "Jayson Tatum" must still
+    ground "Jaylen Brown", so one agreeing source name is enough to acquit.
+
+    `[UNKNOWN]` How well this holds on a title-case source. The index reads a name's last
+    word, and a headline styled "Jaylen Brown Details Bumpy Celtics Exit" is captured as one
+    long name ending in "exit", so it contributes nothing under "brown". The captured feeds
+    are sentence case, so this is a latent weakness rather than a current one.
+    """
+    others = source_names.get(words[-1])
+    if not others:
+        return False
+
+    mine = frozenset(words)
+    return all(not (mine <= other or other <= mine) for other in others)
 
 
 def _depossess_text(text: str) -> str:
