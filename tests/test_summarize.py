@@ -77,13 +77,24 @@ class StubSummarizer(Summarizer):
 
 
 def test_a_valid_summary_is_returned_on_the_first_attempt(
-    make_article: ArticleFactory,
+    make_article: ArticleFactory, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """The happy path costs exactly one model call."""
+    """The happy path costs exactly one model call, and says so.
+
+    `[VERIFIED]` 2026-08-14 the acceptance log was guarded by `if attempt > 1`, so this
+    path — the common one — was silent. The 16:00 run read as "summarising 12 stories"
+    then "delivered" with nothing between, which is indistinguishable from a summariser
+    that was never called. Every acceptance must be countable, or the pass rate cannot be
+    measured at all.
+    """
     summarizer = StubSummarizer(GROUNDED)
 
-    assert summarizer.summarise(_sources(make_article)) == GROUNDED
+    with caplog.at_level(logging.INFO, logger="processing.summarize"):
+        result = summarizer.summarise(_sources(make_article))
+
+    assert result == GROUNDED
     assert summarizer.calls == 1
+    assert "accepted on attempt 1" in caplog.text
 
 
 def test_a_fabricated_summary_is_retried_then_accepted(

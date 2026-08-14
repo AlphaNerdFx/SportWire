@@ -232,8 +232,13 @@ class Summarizer(ABC):
 
             result = validate_summary(cleaned, articles)
             if result.is_safe:
-                if attempt > 1:
-                    logger.info("summary accepted on attempt %d", attempt)
+                # `[VERIFIED]` 2026-08-14: this was guarded by `if attempt > 1`, so a summary
+                # accepted first try logged nothing at all and the run read as
+                # "summarising 12 stories" followed straight by "delivered". Success on the
+                # cheapest path was the one outcome that left no trace, which makes the
+                # pass rate uncountable in the direction that flatters it — P4's measured
+                # floor of 2/19 could not have included a single attempt-1 acceptance.
+                logger.info("summary accepted on attempt %d of %d", attempt, attempts)
                 return cleaned
 
             logger.warning("attempt %d rejected (%s)", attempt, result.describe())
