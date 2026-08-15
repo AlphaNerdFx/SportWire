@@ -1005,6 +1005,79 @@ what each turned into, since several changed shape on contact with real data.
   Beal item is built on this fingerprint. `[INFERRED]` Fixing it on top of an extractor that
   cannot see `LeBron` or `DeMar DeRozan` would bake the blindness into a second module.
 
+  **Progress 2026-08-15 — `processing/names.py` exists, wired into nothing** (`cd73f45`).
+  Operator asked for it "for testing for now", and that is exactly what it is.
+  - `[VERIFIED]` `GROUNDING` is output-identical to the shipped `validate._PROPER_NAME`
+    across **215 texts** — every title and summary in all three committed fixtures plus P13's
+    edge cases — asserted by `test_grounding_preset_matches_the_shipped_extractor_exactly`.
+    **Adopting it in `validate.py` is therefore a no-op**, and that is the only part of P17
+    that is currently safe to do.
+  - `[VERIFIED]` `CLUSTERING` is **not** adoptable, with numbers in the module: 25 names
+    gained, 28 lost. Three further causes were found and closing all three still leaves
+    9 gained / 16 lost while introducing new mismatches. `[INFERRED]` cluster's tokenizer is
+    an accumulated pile of specifics rather than a policy; converging on it by adding flags
+    trades one silent grouping change for another.
+  - Proof — mutation: 7 of 8 killed. The survivor is a **provably equivalent** mutant, which
+    exposed a false claim in the docstring (`8678c8f`). `[VERIFIED]` `validate.py:55` still
+    carries the same wrong sentence — *"Digits keep 76ers and 2026-27 out, since neither
+    starts with an uppercase letter"* — and is untouched pending the operator's call.
+  - `[VERIFIED]` `tests/conftest.py` gained `reddit_articles`. **No test had ever loaded the
+    r/nba capture**, so the only community feed in the pipeline was covered entirely by
+    hand-written titles.
+
+- [ ] **P18. The brief's paragraph order is fetch order, because every story is the same
+  tier.** Found 2026-08-15 from the operator reading the 08:00 brief — *"a bit weird that
+  Demar is at the end with transactions… I would like the ordering to be less random."*
+  **Open — measured, needs a decision.**
+  `[VERIFIED]` Reproduced against today's live feeds through the real pipeline functions:
+  **all 15 stories classify `high`.** `sort_by_priority` sorts on
+  `(_TIER_ORDER[classify(article)], not mentions_team_in_play(...))`, and with 0 games in the
+  offseason the second key is inert for every article. A stable sort with two constant keys
+  is the identity, so the surviving order is exactly fetch order — every ESPN story, then
+  every CBS story, then Yahoo, then r/nba:
+
+  | # | tier | source | story |
+  |---|---|---|---|
+  | 1 | high | ESPN | Cavs deal Schröder for Hornets' Mann |
+  | 2 | high | ESPN | Beal stays with Clippers |
+  | 5 | high | CBS Sports | Schröder trade grades |
+  | 6 | high | CBS Sports | Timberwolves retire Garnett's No. 21 |
+  | 9 | high | Yahoo Sports | Schröder traded 9 times — a record? |
+  | 14 | high | r/nba | Schröder one team from tying Ish Smith |
+
+  `[INFERRED]` This is not randomness and it is not the model: the summariser is handed the
+  stories in this order and `main.py:129` already records that it will not reliably reorder
+  on instruction. DeRozan reads as stranded because his signing arrived from a later feed
+  than the Schröder trade, not because it ranked lower.
+  `[VERIFIED]` **`classify` has no resolving power on a real batch.** It is a 3-value tier and
+  the offseason puts everything in one. P7 already recorded one misclassification; this is the
+  larger finding — the ranking is not wrong, it is *absent*.
+  `[UNKNOWN]` Whether the tie should break on recency, on topic (transactions together), or
+  on outlet agreement (a story three outlets carry outranks one only r/nba has). **Do not
+  pick silently** — this is the most user-visible ordering in the product.
+
+- [ ] **P19. One story occupies four slots in the same brief, and the Yahoo feed is
+  mojibake.** Found 2026-08-15 while measuring P18. **Open — two separate causes.**
+  `[VERIFIED]` The Schröder trade appears as stories 1, 5, 9 and 14 in the same ranking, and
+  the Beal signing as 2 and 7. `group_related` merged none of them.
+  `[INFERRED]` Cause one is `MIN_SHARED_NAMES = 2`: `Clippers` is above the 8% frequency cap
+  so it is not distinctive, leaving `Beal` as the single shared rare name — one short of the
+  threshold. This is the same complaint the operator raised as "the Beal repeat", and it is
+  **within** one run, not across runs, so the planned cross-run fingerprint would not have
+  caught it.
+  `[VERIFIED]` Cause two is an encoding bug, and it is one line. Yahoo serves
+  `Content-Type: application/xml` with **no charset**, so `requests` falls back to
+  `apparent_encoding` — chardet guesses **Windows-1254 (Turkish)** — and `response.text`
+  yields `SchrÃ¶der` from the bytes `Schr\xc3\xb6der`. The feed's own XML declaration says
+  `encoding="UTF-8"` and is ignored. `[VERIFIED]` `response.content.decode("utf-8")` gives
+  `Schröder` correctly.
+  `[INFERRED]` The two compound: `Schröder` and `SchrÃ¶der` can never share a name, so the
+  encoding bug actively prevents grouping of exactly the story that repeated four times. It
+  also means **every non-ASCII name from Yahoo reaches the brief mangled**.
+  `[INFERRED]` Fix the encoding first and re-measure grouping before touching
+  `MIN_SHARED_NAMES` — one of these is a defect with a single right answer and the other is a
+  threshold whose change is silent and hard to review.
+
 ---
 
 ## LOW — deferred; each requires a trigger condition
