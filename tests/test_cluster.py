@@ -205,6 +205,42 @@ def test_a_small_batch_still_groups_a_widely_covered_story(
         )
 
 
+def test_the_floor_admits_a_name_carried_by_five_outlets(
+    make_article: ArticleFactory,
+) -> None:
+    """Why the floor is 5 and not 4, pinned with the real cluster that motivated it.
+
+    `[VERIFIED]` These are the five live titles for the Dennis Schröder trade, lightly
+    shortened. `Dennis Schroder` has a document frequency of exactly **5** across them, so
+    the two candidate floors fall either side of it: at 4 the story's own name is discarded
+    as non-distinctive and only two articles merge; at 5 it survives and four do.
+
+    Without this test a floor of 4 passes the whole suite — `[VERIFIED]` it did, as a
+    surviving mutation — because every other grouping test uses a two-article story, and any
+    ceiling of 2 or more admits those equally.
+
+    `[VERIFIED]` The fifth article does **not** join, and that is a separate known defect
+    rather than a tolerance here: `_NAME` greedily takes `Cleveland Cavaliers` and
+    `Charlotte Hornets` as single names, so it shares only `Dennis Schroder` with the rest.
+    That is TASKS.md P17, and this test will show it as a group of 5 when P17 lands.
+    """
+    trade = [
+        make_article("Dennis Schroder traded to Hornets as Cavaliers continue retool"),
+        make_article("Cavs trade Dennis Schroder to Hornets for Tre Mann"),
+        make_article("Cleveland to trade Dennis Schroder to Charlotte for Tre Mann"),
+        make_article("Dennis Schroder traded for ninth time as Cavaliers send guard"),
+        make_article("The Cleveland Cavaliers are trading Dennis Schroder and cash"),
+    ]
+    batch = trade + _filler(make_article, 20)
+
+    largest = max(len(group) for group in group_related(batch))
+
+    assert largest >= 4, (
+        "a name carried by five outlets must stay distinctive; at a ceiling of 4 it is "
+        "discarded and the story fragments, which is the four-slot brief of 2026-08-15"
+    )
+
+
 def test_the_floor_is_inert_once_the_batch_is_large(
     make_article: ArticleFactory,
 ) -> None:
