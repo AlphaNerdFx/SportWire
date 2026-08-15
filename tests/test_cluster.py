@@ -14,12 +14,13 @@ Two properties are asserted that are easy to lose by accident:
     An article merged into another outlet's coverage does not count against the cap, because
     the merge is what corroborates it.
 
-`test_grouping_does_nothing_below_a_batch_of_25` records a real threshold artefact found
-while writing these tests (TASKS.md P9): below 25 articles the rarity ceiling drops to 1 and
-no two articles can be grouped at all. The behaviour is deliberately unchanged — raising the
-ceiling risks a false merge, and a wrongly merged story is one the brief never reports
-separately. What changed is that it is no longer silent, asserted in
-`test_a_batch_too_small_to_group_says_so`.
+A threshold artefact found while writing these tests (TASKS.md P9) was recorded here for two
+days as `test_grouping_does_nothing_below_a_batch_of_25`: below 25 articles the rarity ceiling
+dropped to 1 and no two articles could be grouped at all. That test asserted the defect, on
+the reasoning that raising the ceiling risked a false merge. `[VERIFIED]` 2026-08-15 the
+reasoning was measured and did not hold (P19), the floor `MIN_RARITY_CEILING` was added, and
+the test is replaced by `test_a_small_batch_still_groups_a_widely_covered_story` and
+`test_the_floor_is_inert_once_the_batch_is_large`.
 """
 
 from __future__ import annotations
@@ -175,54 +176,74 @@ def test_a_single_article_is_its_own_group(make_article: ArticleFactory) -> None
     assert group_related([]) == []
 
 
-def test_grouping_does_nothing_below_a_batch_of_25(
+def test_a_small_batch_still_groups_a_widely_covered_story(
     make_article: ArticleFactory,
 ) -> None:
-    """`[VERIFIED]` 2026-08-13 — a threshold artefact found by testing, open as TASKS.md P9.
+    """`[VERIFIED]` 2026-08-15 (TASKS.md P19) — this **reverses** the P9 behaviour.
 
-    `ceiling = max(1, int(len(articles) * 0.08))` is **1** for any batch under 25 articles.
-    A name shared by two articles has frequency 2, which exceeds that ceiling, so it is
-    discarded as non-distinctive — and `MIN_SHARED_NAMES` of 2 then becomes unreachable.
-    **Below 25 articles this module silently groups nothing at all.**
+    A previous test here, `test_grouping_does_nothing_below_a_batch_of_25`, asserted the
+    opposite and was right about the code: `ceiling = max(1, int(n * 0.08))` is 1 below 25
+    articles, so no name survives as distinctive and nothing can merge. P9 chose to log that
+    rather than fix it, reasoning that raising the ceiling might cause a false merge.
 
-    Measured with the two real Kawhi titles above: not merged at 24, merged at 25.
+    **That reasoning was never measured, and when it was, it did not hold.** Sweeping the
+    ceiling over a live capture of 109 articles: a floor of 5 is inert at 80 articles and
+    above, and every merge it newly creates at smaller sizes was read by hand — all of them
+    the same Dennis Schröder trade, no false merges at any size. The cost of the old
+    behaviour was real and had reached a phone: that story took four slots in one brief.
 
-    `[INFERRED]` It has not bitten in production — the two runs in `logs/sportwire.log`
-    carried 27 and 64 articles past dedup — but 27 is close, and the degradation is invisible:
-    a quiet day produces a brief with duplicate coverage and no log line saying why.
-
-    **Resolved 2026-08-13 as P9 option (c): the behaviour stands, the silence does not.**
-    `group_related` now logs a warning when the ceiling makes grouping impossible, asserted
-    in `test_a_batch_too_small_to_group_says_so`. (c) was chosen over raising the ceiling
-    because it cannot cause a false merge, and a wrongly merged story is one the brief never
-    reports separately — the expensive error here.
+    So the old test asserted a defect rather than a decision, and is replaced rather than
+    weakened. `MIN_RARITY_CEILING` carries the measurement.
     """
     pair = [make_article(KAWHI_ONE), make_article(KAWHI_TWO)]
 
-    just_under = group_related(pair + _filler(make_article, 22))
-    just_over = group_related(pair + _filler(make_article, 23))
+    for filler_count in (10, 22, 30):
+        groups = group_related(pair + _filler(make_article, filler_count))
+        assert any(len(group) == 2 for group in groups), (
+            f"the Kawhi pair must merge in a batch of {filler_count + 2}; "
+            "the floor exists so batch size cannot hide a story"
+        )
 
-    assert len(just_under) == 24, "24 articles, 24 groups — nothing merged"
-    assert all(len(g) == 1 for g in just_under)
-    assert any(len(g) == 2 for g in just_over), "at 25 the same pair merges"
+
+def test_the_floor_is_inert_once_the_batch_is_large(
+    make_article: ArticleFactory,
+) -> None:
+    """The floor must not quietly loosen grouping on the batches the pipeline usually sees.
+
+    `[VERIFIED]` At 80 articles the proportional ceiling is already 6, so `max(5, 6)` is 6 and
+    the floor changes nothing. Asserted by comparing against the floor switched off.
+    """
+    batch = [make_article(KAWHI_ONE), make_article(KAWHI_TWO)] + _filler(
+        make_article, 78
+    )
+
+    with_floor = group_related(batch)
+    without_floor = group_related(batch, min_rarity_ceiling=1)
+
+    assert [len(g) for g in with_floor] == [len(g) for g in without_floor]
 
 
 def test_a_batch_too_small_to_group_says_so(
     make_article: ArticleFactory, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """The P9 remedy: a structurally impossible grouping pass must not be silent.
+    """The P9 remedy, still guarding the parameters it can still reach.
 
-    `[INFERRED]` Without this line the failure is undetectable from the log — duplicate
-    coverage reaches the brief, `limit_per_source` spends the source cap on the duplicates,
-    and the "grouped N into M" line never fires because nothing merged. An absent success
-    message is not a diagnosis.
+    `[VERIFIED]` 2026-08-15: at *default* settings this warning can no longer fire, because
+    the P19 floor puts the ceiling at 5 and `min_shared_names` is 2. The guard is kept for
+    callers that tune either value, and this test now reaches it the only way left — by
+    asking for more shared names than the ceiling can supply.
+
+    `[INFERRED]` Without the line the failure is undetectable from the log: duplicate coverage
+    reaches the brief, `limit_per_source` spends the source cap on the duplicates, and the
+    "grouped N into M" line never fires because nothing merged. An absent success message is
+    not a diagnosis.
     """
     batch = [make_article(KAWHI_ONE), make_article(KAWHI_TWO)] + _filler(
         make_article, 22
     )
 
     with caplog.at_level(logging.WARNING, logger="processing.cluster"):
-        group_related(batch)
+        group_related(batch, min_shared_names=6)
 
     assert "grouping skipped" in caplog.text
     assert "24 articles" in caplog.text, "the log must say how small the batch was"

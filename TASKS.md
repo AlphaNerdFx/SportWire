@@ -1071,12 +1071,92 @@ what each turned into, since several changed shape on contact with real data.
   yields `SchrÃ¶der` from the bytes `Schr\xc3\xb6der`. The feed's own XML declaration says
   `encoding="UTF-8"` and is ignored. `[VERIFIED]` `response.content.decode("utf-8")` gives
   `Schröder` correctly.
-  `[INFERRED]` The two compound: `Schröder` and `SchrÃ¶der` can never share a name, so the
-  encoding bug actively prevents grouping of exactly the story that repeated four times. It
-  also means **every non-ASCII name from Yahoo reaches the brief mangled**.
-  `[INFERRED]` Fix the encoding first and re-measure grouping before touching
-  `MIN_SHARED_NAMES` — one of these is a defect with a single right answer and the other is a
-  threshold whose change is silent and hard to review.
+
+  **Cause two is FIXED** in `91a056b`, `fix: let the XML declaration decide the encoding, not
+  a guess`. `[VERIFIED]` 2026-08-15, mutation-tested after the fact: restoring the guess as
+  `response.content.decode("windows-1254", errors="replace")` fails
+  `test_a_name_survives_a_feed_served_without_a_charset` and
+  `test_the_body_is_decoded_too_not_only_the_title`, and fails with the mojibake itself
+  (`'Dennis SchrÃ¶der traded to the Hornets'`, `'Luka DonÄ\x8diÄ‡ reacts'`) rather than with an
+  incidental error, so the tests are load-bearing. Reverted; `make check` → 219 passed,
+  1 xfailed, exit 0.
+
+  ~~`[INFERRED]` The two compound: `Schröder` and `SchrÃ¶der` can never share a name, so the
+  encoding bug actively prevents grouping of exactly the story that repeated four times.~~
+  **REFUTED 2026-08-15** by the re-measurement this task asked for. `[VERIFIED]` Parsing one
+  live capture twice — once forcing the Windows-1254 guess the 08:00 run actually got, once
+  from raw bytes — gives **identical group membership**: 0 differences across 99 groups, and
+  again across 78 on a second capture. The Schröder story grouped into 5 *either way*,
+  because it groups on `Cavaliers`/`Hornets`/`Tre Mann`, not on the surname — and Yahoo's own
+  titles spell it `Schroder` without the umlaut in three of ten cases, so the mangled surname
+  was never the shared mark. The claim was plausible and wrong, which is why it was measured.
+
+  `[VERIFIED]` The fix is still not cosmetic, but its real effect is narrower and different
+  from the one claimed: **10 of 101 articles have a different extracted name set**, and the
+  dominant mechanism is the **curly apostrophe**, not the umlaut. `’` (U+2019) mangles to
+  `â€™`, and `cluster.py`'s `[A-Z][a-zà-ÿ']+` matches `â` (U+00E2, inside `à-ÿ`), so it welds
+  junk onto the end of a clean name: `Lakers` → `Lakersâ`, `Kevin Garnett` → `Kevin Garnettâ`,
+  `Don Nelson` → `Don Nelsonâ`, `Warriors` → `Warriorsâ`. Those can never match another
+  outlet's spelling. The umlaut case is the smaller half (`Dennis Schröder` → `Dennis Schr`).
+  So the bug degraded ~10% of grouping fingerprints while changing no grouping decision on
+  the batches measured.
+
+  **`[VERIFIED]` Cause one is the rarity ceiling, not `MIN_SHARED_NAMES`.** Measured
+  2026-08-15 against a live capture of 109 newsworthy articles, sweeping
+  `ceiling = int(n × MAX_NAME_FREQUENCY)` with `MIN_SHARED_NAMES` held at 2:
+
+  | ceiling | 1 | 2 | 3 | 4 | 5 | 6 | 8 |
+  |---|---|---|---|---|---|---|---|
+  | stories | 109 | 109 | 106 | 105 | 102 | 100 | 99 |
+  | largest Schröder group | 1 | 1 | 2 | 2 | **5** | 5 | 5 |
+
+  The 08:00 run grouped 48 articles after dedup, so its ceiling was `int(48 × 0.08) = 3` and
+  the story could reach a group of 2 at best — four slots. Today's probe fetched 109, ceiling
+  8, and the same story held together as one group of 5. **Same code, same story, different
+  batch size.**
+
+  `[VERIFIED]` The mechanism is visible in the extracted names: `Dennis Schroder` appears in
+  10 of the 109 articles, `Hornets` in 6, `Cavaliers` in 4, `Tre Mann` in 4. At a ceiling of
+  3 *every one of those is discarded as non-distinctive*, including the player's own name.
+  `[INFERRED]` **This is self-defeating: `MAX_NAME_FREQUENCY` is a share of the batch, so the
+  more outlets cover a story, the less distinctive its own name becomes.** The rule erases the
+  fingerprint of exactly the story it most needs to merge.
+
+  `[VERIFIED]` `MIN_SHARED_NAMES` is the wrong knob. Held at the 08:00 ceiling of 3, lowering
+  it to 1 collapses 109 stories to 81 to reach a Schröder group of 4 — mass merging — while
+  raising it to 3 fragments the story completely.
+
+  `[VERIFIED]` A **floor under the ceiling** — `max(floor, int(n × 0.08))` — was measured at
+  six batch sizes. A floor of 5 is **inert at 80 and 109 articles** (the shipped ceiling is
+  already higher) and repairs every smaller batch. Every merge it creates was inspected by
+  hand and **all of them are the Schröder trade; there are no false merges** at any tested
+  size. Floor 6 is identical to floor 5 in every row, so 5 is the cheaper choice; floor 4
+  leaves the story split as 2+2 at a batch of 48.
+
+  | batch | 24 | 36 | 48 | 60 | 80 | 109 |
+  |---|---|---|---|---|---|---|
+  | shipped ceiling | 1 | 2 | 3 | 4 | 6 | 8 |
+  | shipped: merged groups | 0 | 0 | 1 (size 2) | 2 (sizes 2, 2) | 3 | 5 |
+  | floor 5: merged groups | 1 (size 2) | 1 (size 4) | 1 (size 4) | 1 (size 4) | 3 | 5 |
+
+  `[VERIFIED]` At a batch of 60 the shipped code produces **two separate groups of the same
+  Schröder story**, which is the reported four-slot brief in miniature. At 24 and 36 it merges
+  nothing at all — the condition `P9` chose to log rather than fix. This is the evidence that
+  the logged-but-unfixed condition has a real cost.
+
+  **Open decision — do not pick silently (`CLAUDE.md` §6).** Options:
+  - a. **Floor the ceiling** at 5: `ceiling = max(5, int(n × max_name_frequency))`. One line,
+    measured inert above ~62 articles, no false merges observed. Does not address *why* the
+    threshold is proportional.
+  - b. **Make the ceiling absolute** — a name is non-distinctive above N articles regardless
+    of batch size. Simpler to explain, but unmeasured at large batches, where the proportional
+    rule is currently doing its job.
+  - c. **Leave it and cap repeats downstream** instead, by suppressing a story whose lead
+    names already appeared earlier in the same brief. Avoids touching a silent threshold, but
+    adds a second mechanism for one concern.
+  - d. **Fix `cluster.py`'s extractor first (P17)** and re-measure, on the grounds that the
+    `â`-welding above proves the extractor is also wrong. `[INFERRED]` Independent of this —
+    the ceiling table was produced with clean UTF-8 and the fragmentation is unchanged by it.
 
 ---
 

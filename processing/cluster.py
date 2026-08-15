@@ -42,6 +42,29 @@ MAX_NAME_FREQUENCY = 0.08
 # several, since a story about Kawhi and Daktronics tends to name both.
 MIN_SHARED_NAMES = 2
 
+# The rarity ceiling never drops below this, however small the batch.
+#
+# `[VERIFIED]` 2026-08-15 (TASKS.md P19). `MAX_NAME_FREQUENCY` is a *share of the batch*, and
+# that is self-defeating at the moment it matters most: the more outlets cover a story, the
+# less distinctive its own name becomes. A live capture carried the Schröder trade in 10 of
+# 109 articles, with `Hornets` in 6, `Cavaliers` in 4 and `Tre Mann` in 4. The 08:00 run
+# grouped 48 articles after dedup, giving `int(48 * 0.08) = 3` — which discards *every one of
+# those names*, including the player's own, and the story took four separate slots in one
+# brief. The same story on a 109-article batch (ceiling 8) merged into a single group of 5.
+# Same code, same story, different batch size.
+#
+# `[VERIFIED]` Five, measured rather than judged, sweeping the ceiling over that capture:
+# the story reaches a group of 2 at ceiling 3 or 4 and its full group of 5 at ceiling 5.
+# Across batches of 24, 36, 48, 60, 80 and 109 a floor of 5 is **inert at 80 and above** —
+# the proportional ceiling is already higher — and every merge it newly creates was read by
+# hand: all of them the Schröder trade, **no false merges at any size**. Floor 6 was
+# identical in every row, so 5 is the cheaper of two equal answers.
+#
+# `[VERIFIED]` This reverses P9, which chose to log the degenerate case rather than fix it,
+# on the grounds that raising the ceiling "cannot cause a false merge" was unproven. It is
+# now measured. See `test_a_small_batch_still_groups_a_widely_covered_story`.
+MIN_RARITY_CEILING = 5
+
 # Capitalised words and sequences of them: people, teams, companies.
 _NAME = re.compile(r"\b[A-Z][a-zà-ÿ']+(?:\s+[A-Z][a-zà-ÿ']+)*")
 
@@ -194,6 +217,7 @@ def group_related(
     articles: list[NewsArticle],
     max_name_frequency: float = MAX_NAME_FREQUENCY,
     min_shared_names: int = MIN_SHARED_NAMES,
+    min_rarity_ceiling: int = MIN_RARITY_CEILING,
 ) -> list[list[NewsArticle]]:
     """Cluster articles covering one story. Input order is preserved within and between groups.
 
@@ -214,20 +238,24 @@ def group_related(
     for names in names_by_index:
         frequency.update(names)
 
-    ceiling = max(1, int(len(articles) * max_name_frequency))
+    # The floor is what keeps a small batch from discarding the very names that identify its
+    # biggest story — see `MIN_RARITY_CEILING`. Above roughly 62 articles the proportional
+    # term wins and the floor does nothing.
+    ceiling = max(min_rarity_ceiling, int(len(articles) * max_name_frequency))
 
     # `[VERIFIED]` 2026-08-13 (TASKS.md P9): below a ceiling of `min_shared_names`, grouping
     # cannot happen at all. Two articles sharing a name give that name a document frequency
     # of at least 2, so it fails `frequency[name] <= 1` and is discarded as non-distinctive —
-    # which leaves `min_shared_names` of 2 unreachable by construction. With the default 0.08
-    # that is every batch under 25 articles.
+    # which leaves `min_shared_names` of 2 unreachable by construction.
     #
-    # Behaviour is deliberately unchanged; only the silence is fixed. The failure this guards
-    # against is invisible: duplicate coverage reaches the brief, `limit_per_source` spends
-    # the source cap on the duplicates, and the "grouped N into M" line below never fires
-    # because nothing merged. `[VERIFIED]` Nine of the eleven bugs in `SESSION.md` §8 were
-    # found by reading output, so making a failure visible is this project's cheapest remedy
-    # and the only one here that cannot cause a false merge.
+    # `[VERIFIED]` 2026-08-15 the *condition* this reports is now fixed rather than merely
+    # announced (P19), so at default settings this warning can no longer fire: the floor puts
+    # `ceiling` at 5 and `min_shared_names` is 2. It is kept because both are parameters and
+    # the guard is still correct whenever it does fire — a caller passing `min_shared_names=6`
+    # or a lower floor gets told, instead of silently grouping nothing.
+    #
+    # `[VERIFIED]` Nine of the eleven bugs in `SESSION.md` §8 were found by reading output,
+    # so making a failure visible remains this project's cheapest remedy.
     if ceiling < min_shared_names and len(articles) >= 2:
         logger.warning(
             "grouping skipped: %d articles gives a rarity ceiling of %d, below the %d "
