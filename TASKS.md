@@ -1056,8 +1056,10 @@ what each turned into, since several changed shape on contact with real data.
   on outlet agreement (a story three outlets carry outranks one only r/nba has). **Do not
   pick silently** — this is the most user-visible ordering in the product.
 
-- [ ] **P19. One story occupies four slots in the same brief, and the Yahoo feed is
-  mojibake.** Found 2026-08-15 while measuring P18. **Open — two separate causes.**
+- [x] **P19. One story occupies four slots in the same brief, and the Yahoo feed is
+  mojibake.** Found 2026-08-15 while measuring P18. **Both causes fixed 2026-08-15**
+  (`91a056b`, `95e7c2e`, `097a835`) — and the recorded link between them was measured and
+  retracted; see the strikethrough below.
   `[VERIFIED]` The Schröder trade appears as stories 1, 5, 9 and 14 in the same ranking, and
   the Beal signing as 2 and 7. `group_related` merged none of them.
   `[INFERRED]` Cause one is `MIN_SHARED_NAMES = 2`: `Clippers` is above the 8% frequency cap
@@ -1144,10 +1146,20 @@ what each turned into, since several changed shape on contact with real data.
   nothing at all — the condition `P9` chose to log rather than fix. This is the evidence that
   the logged-but-unfixed condition has a real cost.
 
-  **Open decision — do not pick silently (`CLAUDE.md` §6).** Options:
+  **RESOLVED 2026-08-15 as option (a),** chosen by the operator. Shipped in `95e7c2e` with
+  the pinning test in `097a835`. `[VERIFIED]` `make check` → 221 passed, 1 xfailed, exit 0.
+  Mutation-tested four ways — floor removed, floor 4, floor 99, `max` → `min` — and the first
+  pass left **floor 4 alive**, because every other grouping test uses a two-article story and
+  any ceiling ≥ 2 admits those equally. Closed with a test built on the five real trade
+  titles, where `Dennis Schroder` has a document frequency of exactly 5.
+  `[VERIFIED]` Both brief snapshots moved `+ 3 more` → `+ 2 more`; the merge behind it is two
+  ESPN articles on one Donovan Mitchell / Coco Jones wedding, sharing two rare names. The
+  15-article fixture had a ceiling of 1 and merged nothing at all before this.
+
+  Options as they stood:
   - a. **Floor the ceiling** at 5: `ceiling = max(5, int(n × max_name_frequency))`. One line,
     measured inert above ~62 articles, no false merges observed. Does not address *why* the
-    threshold is proportional.
+    threshold is proportional. **← chosen**
   - b. **Make the ceiling absolute** — a name is non-distinctive above N articles regardless
     of batch size. Simpler to explain, but unmeasured at large batches, where the proportional
     rule is currently doing its job.
