@@ -71,6 +71,7 @@ not one you want, run with `--no-summary`.
 ## Project documents
 
 - `CLAUDE.md` — operating rules and constraints for this repo (start here)
+- `ROADMAP.md` — what each version number means, and the one milestone in progress
 - `SESSION.md` — current working state, decisions made, open questions
 - `TASKS.md` — the task queue, in priority order, with proof required per completed item
 - `ARCHITECTURE.md` — target system shape
