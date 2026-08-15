@@ -30,6 +30,23 @@ logger = logging.getLogger(__name__)
 _INSIDE_A_NAME = "'’.-"
 _TRAILING_PUNCTUATION = ',;:!?()[]{}"“”«»…'
 
+# Punctuation that **separates two names** rather than merely following one. Stripping it is
+# not enough — the run has to end there too.
+#
+# `[VERIFIED]` 2026-08-15: the CBS fixture carries "Cavaliers, Heat, Warriors and Wolves, so
+# how do our NBA…". Every comma was stripped as trailing punctuation and the capitalised run
+# walked straight through them, producing the single "name" `Cavaliers Heat Warriors` — a
+# list of four teams read as one entity.
+#
+# `[VERIFIED]` That junk then did real damage through the refutation rule, which asks whether
+# any source name shares a last word and disagrees about the rest. Indexed under "warriors",
+# `{cavaliers, heat, warriors}` disagrees with `{golden, state, warriors}`, so **"Golden State
+# Warriors" was refused as invented** — and it is one of the names the 2026-08-15 16:00 run
+# was rejected for. Measured across the fixtures: 3 of 17 teams mentioned by short name were
+# refused when a summary expanded them to the full name, which is ordinary phrasing rather
+# than fabrication.
+_SEPARATES_NAMES = ",;"
+
 
 def _is_name_word(word: str) -> bool:
     """Whether a word could be part of a name: a capital, then letters.
@@ -85,6 +102,12 @@ class _ProperNames:
             word = token.rstrip(_TRAILING_PUNCTUATION)
             if _is_name_word(word):
                 run.append(word)
+                # A comma ends the name it follows. Checked on what was *stripped*, so
+                # `Leonard,` and `Leonard,"` and `Leonard",` all end the run alike.
+                if any(ch in _SEPARATES_NAMES for ch in token[len(word) :]):
+                    if len(run) >= 2:
+                        names.append(" ".join(run))
+                    run = []
                 continue
             if len(run) >= 2:
                 names.append(" ".join(run))

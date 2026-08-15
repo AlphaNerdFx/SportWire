@@ -112,12 +112,25 @@ def test_grounding_needs_two_words_and_clustering_accepts_one() -> None:
 def test_punctuation_ends_a_name_only_when_the_caller_says_so() -> None:
     """The measured disagreement between the two callers, in one assertion.
 
-    `[VERIFIED]` Grounding wants the weld: the run is checked as a whole and by subset, so a
-    stricter string costs nothing. Clustering cannot use it — `Cavs Celtics` is not an entity
-    and will never match another article's fingerprint.
+    ~~`[VERIFIED]` Grounding wants the weld: the run is checked as a whole and by subset, so
+    a stricter string costs nothing.~~ **WRONG, and corrected 2026-08-15.** The weld cost a
+    live brief its prose. `Cavs Celtics` is not merely a harmless stricter string — it is
+    indexed as a *source name*, and the refutation rule then treats it as an entity that
+    disagrees with any real name sharing its last word. `[VERIFIED]` That is how
+    `Cavaliers, Heat, Warriors` came to refuse `Golden State Warriors` in the 16:00 run.
+    Both presets now end a run on a comma; see `validate._SEPARATES_NAMES`.
+
+    `[VERIFIED]` The presets still differ, and the colon shows it: clustering ends a run on
+    **any** trailing punctuation, grounding only on a separator.
     """
-    assert GROUNDING.findall("Cavs, Celtics tip off") == ["Cavs Celtics"]
+    assert GROUNDING.findall("Cavs, Celtics tip off") == []
     assert CLUSTERING.findall("Cavs, Celtics tip off") == ["Cavs", "Celtics"]
+
+    assert GROUNDING.findall("Report: Kawhi Leonard signs") == ["Report Kawhi Leonard"]
+    assert CLUSTERING.findall("Report: Kawhi Leonard signs") == [
+        "Report",
+        "Kawhi Leonard",
+    ]
 
 
 def test_a_word_before_punctuation_is_still_part_of_its_name() -> None:

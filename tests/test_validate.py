@@ -30,7 +30,7 @@ from collections.abc import Callable
 import pytest
 
 from models.schemas import NewsArticle
-from processing.validate import validate_summary
+from processing.validate import _PROPER_NAME, validate_summary
 
 ArticleFactory = Callable[..., NewsArticle]
 
@@ -564,6 +564,87 @@ def test_a_sentence_ending_in_a_quotation_still_ends_the_sentence(
         f"wrongly flagged across {closing!r}: {result.invented_names} — a closing quote "
         "must not stop a full stop from ending the sentence"
     )
+
+
+def test_a_comma_separated_list_is_not_one_name(
+    make_article: ArticleFactory,
+) -> None:
+    """`[VERIFIED]` 2026-08-15, from the CBS fixture: "Cavaliers, Heat, Warriors and Wolves".
+
+    Commas were stripped as trailing punctuation and the capitalised run walked straight
+    through them, so four teams became the single "name" `Cavaliers Heat Warriors`. Names are
+    what the refutation rule compares against, and junk in that index refuses real names.
+    """
+    assert (
+        _PROPER_NAME.findall("Cavaliers, Heat, Warriors and Wolves play tonight") == []
+    )
+    assert _PROPER_NAME.findall(
+        "Reports from Shams Charania, Adrian Wojnarowski follow"
+    ) == [
+        "Shams Charania",
+        "Adrian Wojnarowski",
+    ]
+
+
+def test_a_comma_after_a_name_still_leaves_the_name(
+    make_article: ArticleFactory,
+) -> None:
+    """The complement, or the fix above would delete names instead of splitting them."""
+    assert _PROPER_NAME.findall("Kawhi Leonard, who signed Friday, spoke") == [
+        "Kawhi Leonard"
+    ]
+
+
+def test_expanding_a_team_name_is_not_a_fabrication(
+    make_article: ArticleFactory,
+) -> None:
+    """`[VERIFIED]` 2026-08-15 — a false rejection that reached the operator's phone.
+
+    The 16:00 brief fell back to the headline list, rejected in part for `Golden State
+    Warriors`. Writing a team's full name where the source used the short one is ordinary
+    phrasing, not invention — but `Cavaliers, Heat, Warriors` was indexed as a single name
+    ending in "warriors", and the refutation rule then found it disagreed with `Golden State
+    Warriors` and refused it.
+
+    Measured across the fixtures before the fix: **3 of 17** teams mentioned by short name
+    were refused when expanded.
+    """
+    articles = [
+        make_article(
+            "Cavaliers, Heat, Warriors and Wolves all made offers",
+            # Deliberately avoids a sentence opening "The Warriors": that welds a
+            # capitalised "The" onto the team and is a *second*, unfixed cause of the
+            # same false rejection. This test is scoped to the comma alone.
+            summary="Several teams made offers before Friday's deadline.",
+        )
+    ]
+
+    result = validate_summary(
+        "The Golden State Warriors were among the teams involved.", articles
+    )
+
+    assert result.is_safe, f"wrongly flagged: {result.invented_names}"
+
+
+def test_a_blended_name_is_still_refused_after_the_comma_fix(
+    make_article: ArticleFactory,
+) -> None:
+    """The guard on the fix above: splitting on commas must not disarm the refutation rule.
+
+    `[VERIFIED]` This is the P12 case — a model fusing two real players into one name that
+    the last-word rule would otherwise wave through.
+    """
+    articles = [
+        make_article(
+            "Celtics preview",
+            summary="Jayson Tatum and Jaylen Brown, the Celtics pair, both spoke.",
+        )
+    ]
+
+    result = validate_summary("Jayson Brown led the way.", articles)
+
+    assert not result.is_safe, "a blend of two real names must still be refused"
+    assert "Jayson Brown" in result.invented_names
 
 
 def test_figure_is_grounded_across_differing_formats(

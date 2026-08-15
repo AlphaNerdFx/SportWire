@@ -85,6 +85,12 @@ class NameScanner:
 
     min_words: int = 2
     break_run_on_punctuation: bool = False
+    # Characters that end a run even when `break_run_on_punctuation` is False, because they
+    # separate two names rather than trailing one. `[VERIFIED]` 2026-08-15: without this,
+    # "Cavaliers, Heat, Warriers and Wolves" scans as the single name `Cavaliers Heat
+    # Warriors`, which then refuted the real "Golden State Warriors" through the refutation
+    # rule and cost a live brief its prose.
+    separators: str = ""
 
     def findall(self, text: str) -> list[str]:
         """Every name-shaped run in `text`, in the order it appears."""
@@ -110,17 +116,24 @@ class NameScanner:
                 continue
 
             run.append(word)
+
             # The word still counts; what the punctuation ends is the *run* after it.
-            if self.break_run_on_punctuation and word != token:
+            trailing = token[len(word) :]
+            ends_the_run = (self.break_run_on_punctuation and trailing) or any(
+                ch in self.separators for ch in trailing
+            )
+            if ends_the_run:
                 flush()
 
         flush()
         return names
 
 
-# Runs of two or more, welded across punctuation. `[VERIFIED]` Asserted output-identical to
-# `validate._PROPER_NAME` over every fixture, so adopting it there changes no verdict.
-GROUNDING = NameScanner(min_words=2, break_run_on_punctuation=False)
+# Runs of two or more, welded across punctuation except the separators. `[VERIFIED]` Asserted
+# output-identical to `validate._PROPER_NAME` over every fixture, so adopting it there changes
+# no verdict — and `separators` is part of that equivalence rather than an improvement on it:
+# the comma rule landed in `validate.py` first, as a live bug fix, and this preset tracks it.
+GROUNDING = NameScanner(min_words=2, break_run_on_punctuation=False, separators=",;")
 
 # Single words count and punctuation ends a name — the shape `cluster.py` needs.
 #
