@@ -565,10 +565,44 @@ what each turned into, since several changed shape on contact with real data.
   3/6 without it**. Not shipped, on the P6 precedent: a change with no measured effect reads
   as protection it does not provide.
 
+  `[VERIFIED]` **Two more hypotheses were tested on the same batch and both are closed.**
+
+  *Shared state or concurrency between calls.* There is none. `main.py:178` already builds a
+  fresh `OllamaSummarizer` per run; `_generate` posts `model`, `system`, `prompt`, `stream`
+  and `options` and **never sends Ollama's `context` field**, which is the only mechanism that
+  would carry state between requests; and `grep` for `Thread|asyncio|concurrent|Pool|await`
+  across `main.py`, `processing/`, `ingestion/` and `delivery/` returns nothing but the word
+  "Thread" inside a docstring. Instantiating per delivery is already what happens.
+
+  *Temperature.* Measured at ten trials per setting, single attempt:
+
+  | temperature | passed |
+  |---|---|
+  | 0.0 | **0 / 10** |
+  | **0.3 — shipped** | **5 / 10** |
+  | 0.6 | 4 / 10 |
+  | 0.9 | 3 / 10 |
+
+  `[VERIFIED]` **0.0 is catastrophic, and the reason matters**: `Quentin Grimes` was invented
+  on **all ten** trials. A deterministic model reproduces the identical fabrication every
+  attempt, so the retry loop cannot help — which is the mechanism `summarize.py:61` already
+  recorded for `Ayo Dosunmu`, now measured. **Retry works only because sampling varies**, so
+  the temperature cannot be lowered to buy accuracy. Raising it is also worse. The shipped
+  value is at the optimum of those tested; nothing to change.
+
+  `[VERIFIED]` **Local models are exhausted.** `llama3.2:3b` scored **0 / 6** on this batch.
+  `mistral:7b` sits near 50% across three independent samples (3/6, 5/6, 5/10).
+
+  `[VERIFIED]` **Six trials is too few to compare anything.** The same model on the same batch
+  scored 3/6 and then 5/6. The earlier prompt A/B in this entry — 3/6 versus 3/6 — is within
+  that noise, so it establishes "no large effect" and not "no effect".
+
   `[INFERRED]` This is the outcome `ROADMAP.md` §3 anticipated for v0.2.0 — *"if it does not,
-  the honest outcome is an ADR on model choice, not more validator tuning."* The remaining
-  lever is model capability (ADR-012), and `config/settings.py:41` already defaults the hosted
-  path to `google/gemma-4-31b-it:free`, so a larger model costs a key rather than money (C2).
+  the honest outcome is an ADR on model choice, not more validator tuning."* Every lever that
+  is free has now been measured and none of them moved. The remaining one is model capability
+  (ADR-012), and `config/settings.py:41` already defaults the hosted path to
+  `google/gemma-4-31b-it:free`, so a larger model costs an API key rather than money (C2).
+  `[VERIFIED]` No key is configured today, so the hosted path is untested here.
 
   **2026-08-13: attempted, and blocked by a defect in the log itself.**
   - `[VERIFIED]` **The log recorded no date** — `main.py:65` set `datefmt="%H:%M:%S"`. Runs
