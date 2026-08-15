@@ -639,18 +639,25 @@ def test_a_capitalised_ordinary_word_does_not_refute_a_real_name(
     case is vocabulary. `[VERIFIED]` Measured against a hand-written stop-word list like
     `cluster.py`'s `_NOT_NAMES`: that left `Miami Heat` still refused, this leaves none of
     the 11 expandable fixture teams refused, and both keep all seven curated blends.
+
+    **This case is deliberately two words against two.** `[VERIFIED]` 2026-08-15 by
+    mutation, during the `/commit` audit: a first version used `Golden State Warriors`
+    against `The Warriors` and **passed with the filter disabled**, because the length rule
+    added later already refuses a 2-word name the right to refute a 3-word one. It asserted
+    nothing about this filter. `Miami Heat` against `Retired Heat` is equal length, so the
+    length rule cannot reach it and only the ordinary-word filter can — which is also the
+    measured evidence that this filter is not redundant.
     """
     articles = [
         make_article(
-            "Warriors weigh their options",
+            "Retired Heat star returns for the ceremony",
             summary=(
-                "The Warriors have not decided. The front office said the retired guard "
-                "is inside the building and the deal is close."
+                "The retired guard will be honoured, and the Heat have confirmed the date."
             ),
         )
     ]
 
-    result = validate_summary("The Golden State Warriors have not decided.", articles)
+    result = validate_summary("Miami Heat confirmed the date.", articles)
 
     assert result.is_safe, f"wrongly flagged: {result.invented_names}"
 
