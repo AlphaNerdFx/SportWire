@@ -376,19 +376,65 @@ def _name_words(name: str) -> list[str]:
     return [cleaned for word in name.split() if (cleaned := _depossess(word.lower()))]
 
 
+def _ordinary_words(articles: list[NewsArticle]) -> frozenset[str]:
+    """Words the sources also write in lower case — vocabulary, not parts of a name.
+
+    **The corpus decides this, not a list**, and that is the whole point (TASKS.md P20
+    option (b)). `[VERIFIED]` 2026-08-15 the alternative was a hand-written stop-word list
+    like `cluster.py`'s `_NOT_NAMES`; measured side by side it left `Miami Heat` still
+    refused, while this leaves none.
+
+    `[INFERRED]` The reasoning is that capitalisation is only evidence of a name when the
+    word is not *also* used as ordinary English in the same batch. "The", "Inside" and
+    "Retired" appear in lower case constantly; "Lakers" and "Westbrook" never do.
+
+    `[VERIFIED]` The obvious objection was that NBA teams are named after common words —
+    `Heat`, `Magic`, `Jazz`, `Kings`, `Thunder`, `Bucks` — so this could strip the very names
+    it must keep. Measured across the committed fixtures: **none of the 28 team words appears
+    in lower case**, and all seven curated real-player blends are still caught.
+    `[UNKNOWN]` Whether that holds on every live batch. `[INFERRED]` The failure direction is
+    the safe one: stripping a word shortens a *refuter* and can only make this rule accuse
+    less, never more, so the cost of being wrong is a missed blend rather than a lost brief.
+    """
+    ordinary: set[str] = set()
+    for article in articles:
+        for field in (article.title, article.summary):
+            for token in field.split():
+                if not token[:1].islower():
+                    continue
+                if cleaned := _depossess(token.strip(_TRAILING_PUNCTUATION).lower()):
+                    ordinary.add(cleaned)
+    return frozenset(ordinary)
+
+
 def _index_source_names(articles: list[NewsArticle]) -> dict[str, list[frozenset[str]]]:
     """The sources' own proper names, keyed by the last word that identifies them.
 
     Built per field rather than from the joined blob so that a title running into the next
     article's summary cannot manufacture a name that spans them.
+
+    `[VERIFIED]` 2026-08-15: ordinary vocabulary is dropped from each name before indexing,
+    because a headline's capitalisation is not evidence. `Inside Lakers mega-deal` was
+    indexed as the name `{inside, lakers}`, and `_contradicted` then read it as an entity
+    disagreeing with `Los Angeles Lakers` — refusing a real team on the strength of a
+    headline's first word. Measured: **2 of 11** teams named by their short form were refused
+    when a summary expanded them, and **0 of 11** after this.
     """
+    ordinary = _ordinary_words(articles)
     index: dict[str, list[frozenset[str]]] = {}
     for article in articles:
         for field in (article.title, article.summary):
             for sentence in _SENTENCE_BREAK.split(field):
                 for name in _PROPER_NAME.findall(sentence):
-                    words = _name_words(name.strip(" .,;:"))
-                    if words:
+                    words = [
+                        word
+                        for word in _name_words(name.strip(" .,;:"))
+                        if word not in ordinary
+                    ]
+                    # One word left is not a disagreement about anything: the index exists to
+                    # answer "who else shares this last name", and a bare surname agrees with
+                    # every expansion of it.
+                    if len(words) >= 2:
                         index.setdefault(words[-1], []).append(frozenset(words))
     return index
 

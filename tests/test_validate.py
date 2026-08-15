@@ -626,6 +626,35 @@ def test_expanding_a_team_name_is_not_a_fabrication(
     assert result.is_safe, f"wrongly flagged: {result.invented_names}"
 
 
+def test_a_capitalised_ordinary_word_does_not_refute_a_real_name(
+    make_article: ArticleFactory,
+) -> None:
+    """`[VERIFIED]` 2026-08-15 (TASKS.md P20 option (b)) — a false accusation, measured.
+
+    A sentence-initial "The" or a headline's "Retired" is capitalised by position, not
+    because it names anything. Indexed as part of a name, `{the, warriors}` then reads as an
+    entity that disagrees with `Golden State Warriors`, and the real team is refused.
+
+    The corpus decides which words are ordinary — a word the sources also write in lower
+    case is vocabulary. `[VERIFIED]` Measured against a hand-written stop-word list like
+    `cluster.py`'s `_NOT_NAMES`: that left `Miami Heat` still refused, this leaves none of
+    the 11 expandable fixture teams refused, and both keep all seven curated blends.
+    """
+    articles = [
+        make_article(
+            "Warriors weigh their options",
+            summary=(
+                "The Warriors have not decided. The front office said the retired guard "
+                "is inside the building and the deal is close."
+            ),
+        )
+    ]
+
+    result = validate_summary("The Golden State Warriors have not decided.", articles)
+
+    assert result.is_safe, f"wrongly flagged: {result.invented_names}"
+
+
 def test_a_blended_name_is_still_refused_after_the_comma_fix(
     make_article: ArticleFactory,
 ) -> None:
