@@ -1170,8 +1170,9 @@ what each turned into, since several changed shape on contact with real data.
     `â`-welding above proves the extractor is also wrong. `[INFERRED]` Independent of this —
     the ceiling table was produced with clean UTF-8 and the fragmentation is unchanged by it.
 
-- [ ] **P20. A capitalised common word in front of a real name refutes that name.** Found
-  2026-08-15 while diagnosing why the 16:00 brief fell back to the headline list. **Open.**
+- [x] **P20. A capitalised common word in front of a real name refutes that name.** Found
+  2026-08-15 while diagnosing why the 16:00 brief fell back to the headline list. **Fixed the
+  same day, in two parts; see below.**
   `[VERIFIED]` `_index_source_names` indexes any run of two capitalised words as a *name*, so
   `Inside Lakers mega-deal` yields `{inside, lakers}`, the book title `the LeBron Lakers`
   yields `{lebron, lakers}`, ESPN's `Retired Heat` yields `{heat, retired}` and CBS's
@@ -1184,18 +1185,41 @@ what each turned into, since several changed shape on contact with real data.
   `[INFERRED]` This is the same class as P13 and the comma bug: the extractor over-generates
   on title-case and headline text, and the refutation rule is the first consumer strict enough
   to be hurt by it. The rule itself is not obviously wrong — the *input* is.
-  **PARTIALLY FIXED 2026-08-15 as option (b)** (`4fcfa3a`, pinned by `abfc447`), chosen by
-  the operator. `_index_source_names` now drops words the sources also write in lower case,
-  and requires two words to remain. `[VERIFIED]` Fixture teams refused when expanded:
-  **2/11 → 0/11**, with all seven curated real-player blends still caught and `make check`
-  green at 233 passed.
+  **FIXED 2026-08-15 in two parts**, because one did not reach the whole problem.
 
-  `[VERIFIED]` **It does not close the item, and does not fix the case that opened it.** On
-  the real 16:00 batch `Los Angeles Lakers` is still refused, by `{inside, lakers}` from the
-  headline *"Inside Lakers mega-deal"* and `{lebron, lakers}` from the book title *"the LeBron
-  Lakers"*. Neither `inside` nor `lebron` appears in lower case in that batch, so a
-  corpus-derived filter cannot see them as ordinary — the heuristic is only as strong as the
-  batch's vocabulary, and a small batch has little.
+  **Part 1 — option (b)** (`4fcfa3a`, pinned by `abfc447`), chosen by the operator.
+  `_index_source_names` drops words the sources also write in lower case, and requires two
+  words to remain. `[VERIFIED]` Fixture teams refused when expanded: **2/11 → 0/11**, all
+  seven curated blends kept. `[VERIFIED]` **It did not fix the case that opened the item**:
+  on the real 16:00 batch `Los Angeles Lakers` was still refused by `{inside, lakers}` from
+  *"Inside Lakers mega-deal"* and `{lebron, lakers}` from the book title *"the LeBron
+  Lakers"*. Neither word appears in lower case there, so a corpus filter cannot see them —
+  the heuristic is only as strong as the batch's vocabulary, and a small batch has little.
+
+  **Part 2 — option (i), a length rule** (`487130c`). A source name may only refute one at
+  least as long as itself. `[INFERRED]` A **longer** summary name sharing a last word with a
+  **shorter** source name is an expansion, which is writing; an **equal-length** disagreement
+  is a substitution, which is the failure ADR-012 measured. A blend is the same length as the
+  name it displaces, so the rule never reaches it.
+
+  `[VERIFIED]` Final state, measured across the fixtures, the seven curated blends and the
+  live 16:00 batch together:
+
+  | check | result |
+  |---|---|
+  | fixture teams refused when expanded | **0 / 11** |
+  | curated real-player blends caught | **7 / 7** |
+  | auto-generated blend set, with vs without the length rule | 5590/5760 either way — **no cost** |
+  | 16:00 `Los Angeles Lakers` | now accepted |
+  | 16:00 `Golden State Warriors` | still refused, **correctly** — that batch has no Warriors story |
+
+  `[VERIFIED]` Mutation-tested three ways: filter removed, `>=` weakened to `>`, comparison
+  inverted. All three fail, and `>` fails six tests, which is the guard that the rule has not
+  been loosened into disarming blend detection.
+
+  `[UNKNOWN]` A fabrication *longer* than the name it displaces — `Jayson Marcus Brown`
+  against a source's `Jaylen Brown` — is no longer refuted. No such case has been observed;
+  the measured failures swap words rather than add them. Reopen if one appears.
 
   `[VERIFIED]` Options measured side by side on the committed fixtures. "Curated blends" are
   seven fusions of two real players; the auto-generated 5,760-pair figure is **not** used
@@ -1209,10 +1233,11 @@ what each turned into, since several changed shape on contact with real data.
   | (d) refuter seen ≥2× | 0/11 | 0 | **6/7** | yes |
   | (b)+(d) | 0/11 | 0 | 6/7 | yes |
 
-  `[INFERRED]` (d) is the only measured option that fixes the motivating case, and it was
-  **not** taken: it costs a real blend (`LeBron Tatum`), and that is the expensive direction.
-  A false accusation costs a brief its prose; a missed blend puts an invented person's name on
-  the phone, which is what this module exists to prevent. Revisit only with a way to keep both.
+  `[VERIFIED]` (d) was **not** taken. It fixes the motivating case but costs a real blend
+  (`LeBron Tatum`), and that is the expensive direction — a false accusation costs a brief its
+  prose, while a missed blend puts an invented person's name on the phone. Option (i) was
+  found by looking for the way to keep both, and does: it fixes the same case at no measured
+  detection cost.
 
   `[VERIFIED]` One objection to (b) was raised and measured rather than argued: NBA teams are
   named after common words (`Heat`, `Magic`, `Jazz`, `Kings`, `Thunder`, `Bucks`), so the
