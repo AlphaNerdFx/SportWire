@@ -457,7 +457,35 @@ def _contradicted(
         return False
 
     mine = frozenset(words)
-    return all(not (mine <= other or other <= mine) for other in others)
+
+    # A source name may only refute one at least as long as itself.
+    #
+    # `[VERIFIED]` 2026-08-15 (TASKS.md P20). `Los Angeles Lakers` was refused as invented
+    # because the sources carried `Inside Lakers mega-deal` and the book title `the LeBron
+    # Lakers`. Both are two words, both share the last word, and neither agrees about the
+    # rest — so the rule convicted a real team on the strength of a headline's first word.
+    #
+    # `[INFERRED]` The asymmetry is the point, and it follows from what this rule is for. A
+    # **longer** summary name sharing a last word with a **shorter** source name is an
+    # expansion — `Lakers` written out as `Los Angeles Lakers` — which is writing, not
+    # invention. An **equal-length** disagreement is a substitution, and substitution is the
+    # failure ADR-012 actually measured: a less famous name replaced by a more famous one.
+    # Nothing here weakens that case, because a blend is the same length as the name it
+    # displaces.
+    #
+    # `[VERIFIED]` Measured against the alternative of requiring a refuter to occur twice,
+    # which also fixes the Lakers case: this keeps all seven curated real-player blends,
+    # while the occurrence rule loses `LeBron Tatum`. Fixture teams refused when expanded
+    # stay at 0 of 11.
+    #
+    # `[UNKNOWN]` A fabrication *longer* than the name it displaces — `Jayson Marcus Brown`
+    # against a source's `Jaylen Brown` — is no longer refuted. No such case has been
+    # observed; the measured failures swap words rather than add them.
+    eligible = [other for other in others if len(other) >= len(mine)]
+    if not eligible:
+        return False
+
+    return all(not (mine <= other or other <= mine) for other in eligible)
 
 
 def _depossess_text(text: str) -> str:

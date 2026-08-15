@@ -655,6 +655,60 @@ def test_a_capitalised_ordinary_word_does_not_refute_a_real_name(
     assert result.is_safe, f"wrongly flagged: {result.invented_names}"
 
 
+def test_a_shorter_source_name_does_not_refute_an_expansion(
+    make_article: ArticleFactory,
+) -> None:
+    """`[VERIFIED]` 2026-08-15 — the case that opened P20, from the live 16:00 batch.
+
+    `Los Angeles Lakers` was refused as invented because the sources carried
+    `Inside Lakers mega-deal` and the book title `the LeBron Lakers`. Both are two words,
+    both end in "lakers", and neither agrees about the rest — so the refutation rule
+    convicted a real team on the strength of a headline's first word.
+
+    `[INFERRED]` A **longer** summary name sharing a last word with a **shorter** source name
+    is an expansion, which is writing. An **equal-length** disagreement is a substitution,
+    which is the failure ADR-012 measured. The next test holds that half.
+
+    Neither `inside` nor `lebron` appears in lower case here, so the ordinary-vocabulary
+    filter cannot reach them — this is the half of P20 that filter could not fix.
+    """
+    articles = [
+        make_article(
+            "Inside Lakers mega-deal: Mark Walter made a shocking decision",
+            summary="The sale of the Lakers to Bob Iger comes as Mark Walter faces probes.",
+        ),
+        make_article(
+            "Book documents the LeBron Lakers",
+            summary="A Hollywood Ending covers the LeBron Lakers and James in Los Angeles.",
+        ),
+    ]
+
+    result = validate_summary("Los Angeles Lakers were sold this week.", articles)
+
+    assert result.is_safe, f"wrongly flagged: {result.invented_names}"
+
+
+def test_an_equal_length_disagreement_still_refutes(
+    make_article: ArticleFactory,
+) -> None:
+    """The other half: the length rule must not disarm blend detection.
+
+    `[VERIFIED]` A blend is the same length as the name it displaces — "Jayson Tatum" and
+    "Jaylen Brown" fusing into "Jayson Brown" — so the rule above never reaches it.
+    """
+    articles = [
+        make_article(
+            "Celtics camp opens",
+            summary="Jaylen Brown spoke on Monday and Jayson Tatum was present.",
+        )
+    ]
+
+    result = validate_summary("Jayson Brown led the way.", articles)
+
+    assert not result.is_safe, "a same-length substitution must still be refused"
+    assert "Jayson Brown" in result.invented_names
+
+
 def test_stripping_a_word_must_not_leave_a_lone_surname_in_the_index(
     make_article: ArticleFactory,
 ) -> None:
