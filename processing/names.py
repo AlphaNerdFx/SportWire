@@ -51,7 +51,13 @@ def is_name_word(word: str) -> bool:
     `[INFERRED]` Every enumerated range fails on the next name from the next alphabet; the NBA
     acquires those faster than this file is edited.
 
-    Digits keep "76ers" and "2026-27" out, since neither starts with an uppercase letter.
+    `[VERIFIED]` **"76ers" and "2026-27" are excluded by the all-letters test, not by the
+    capital.** Allowing a digit to start a word is a *provably equivalent* mutation — it
+    changes no output, because a leading digit then fails `isalpha()` inside `all()` a
+    character later. Mutation testing surfaced this on 2026-08-15; the previous wording
+    credited the capital check with work the all-letters test was doing, which is the same
+    shape as P6 and P7. What `isupper` actually excludes is a **lowercase** word, and that is
+    what stops "the", "signed" and "with" from joining a name.
     """
     return (
         bool(word)

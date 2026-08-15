@@ -46,10 +46,31 @@ def test_a_name_is_found_whatever_alphabet_it_is_written_in(
 
 
 def test_a_number_is_not_a_name() -> None:
-    """`[VERIFIED]` "76ers" and "2026-27" start with a digit, so no capital starts the word."""
+    """A word containing digits is never part of a name, wherever the digits sit.
+
+    `[VERIFIED]` 2026-08-15 this test previously asserted the wrong mechanism — that "76ers"
+    is excluded because it does not *start* with a capital. Mutation testing proved that
+    claim empty: allowing a leading digit changes no output, because the digit then fails the
+    all-letters test a character later. The exclusion these cases actually rely on is the one
+    asserted below, so it is asserted directly.
+    """
     assert is_name_word("76ers") is False
     assert is_name_word("2026-27") is False
+    assert is_name_word("Sixers76") is False  # digits anywhere, not only in front
     assert GROUNDING.findall("The 76ers open 2026-27 at home") == []
+
+
+def test_a_lowercase_word_is_not_a_name() -> None:
+    """What the capital check is actually for, asserted on its own.
+
+    `[INFERRED]` Without it every sentence collapses into one enormous name, and `validate.py`
+    would then ground or accuse whole clauses rather than people.
+    """
+    assert is_name_word("signed") is False
+    assert GROUNDING.findall("beal signed with the clippers") == []
+    assert GROUNDING.findall("Bradley Beal signed with the Clippers") == [
+        "Bradley Beal"
+    ]
 
 
 # --- punctuation: trailing only, never leading ------------------------------------------
