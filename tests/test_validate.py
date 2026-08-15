@@ -655,6 +655,38 @@ def test_a_capitalised_ordinary_word_does_not_refute_a_real_name(
     assert result.is_safe, f"wrongly flagged: {result.invented_names}"
 
 
+def test_stripping_a_word_must_not_leave_a_lone_surname_in_the_index(
+    make_article: ArticleFactory,
+) -> None:
+    """The guard on the P20 filter: a one-word entry would acquit every blend of that name.
+
+    `[VERIFIED]` 2026-08-15 by mutation. Dropping the two-word floor in
+    `_index_source_names` to one passes the rest of the suite, so nothing else pins it — but
+    it is not an equivalent mutant. `Reportedly Brown` reduces to the bare `{brown}` once
+    "reportedly" is recognised as ordinary vocabulary, and `_contradicted` acquits whenever
+    **any** source name agrees, treating a lone surname as agreement with every expansion of
+    it. The blend `Jayson Brown` then passes and reaches the phone.
+
+    A bare surname is not evidence about which person is meant, so it must not enter the
+    index at all.
+    """
+    articles = [
+        make_article(
+            "Celtics camp opens",
+            summary=(
+                "Jaylen Brown spoke on Monday. Reportedly Brown will sign an extension, "
+                "though reportedly the talks stalled."
+            ),
+        ),
+        make_article("Tatum update", summary="Jayson Tatum was present."),
+    ]
+
+    result = validate_summary("Jayson Brown led the way.", articles)
+
+    assert not result.is_safe, "a blend of two real players must still be refused"
+    assert "Jayson Brown" in result.invented_names
+
+
 def test_a_blended_name_is_still_refused_after_the_comma_fix(
     make_article: ArticleFactory,
 ) -> None:
