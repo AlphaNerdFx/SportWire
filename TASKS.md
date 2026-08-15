@@ -1184,7 +1184,44 @@ what each turned into, since several changed shape on contact with real data.
   `[INFERRED]` This is the same class as P13 and the comma bug: the extractor over-generates
   on title-case and headline text, and the refutation rule is the first consumer strict enough
   to be hurt by it. The rule itself is not obviously wrong — the *input* is.
-  Options, none picked:
+  **PARTIALLY FIXED 2026-08-15 as option (b)** (`4fcfa3a`, pinned by `abfc447`), chosen by
+  the operator. `_index_source_names` now drops words the sources also write in lower case,
+  and requires two words to remain. `[VERIFIED]` Fixture teams refused when expanded:
+  **2/11 → 0/11**, with all seven curated real-player blends still caught and `make check`
+  green at 233 passed.
+
+  `[VERIFIED]` **It does not close the item, and does not fix the case that opened it.** On
+  the real 16:00 batch `Los Angeles Lakers` is still refused, by `{inside, lakers}` from the
+  headline *"Inside Lakers mega-deal"* and `{lebron, lakers}` from the book title *"the LeBron
+  Lakers"*. Neither `inside` nor `lebron` appears in lower case in that batch, so a
+  corpus-derived filter cannot see them as ordinary — the heuristic is only as strong as the
+  batch's vocabulary, and a small batch has little.
+
+  `[VERIFIED]` Options measured side by side on the committed fixtures. "Curated blends" are
+  seven fusions of two real players; the auto-generated 5,760-pair figure is **not** used
+  here because it is contaminated with junk-derived pairs and understates every option:
+
+  | option | teams refused | genuine names refused | curated blends | fixes the Lakers case |
+  |---|---|---|---|---|
+  | baseline | 2/11 | 0 | 7/7 | no |
+  | (a) hardcoded stop-words | 1/11 | 0 | 7/7 | no |
+  | **(b) corpus lower case** | **0/11** | **0** | **7/7** | **no** |
+  | (d) refuter seen ≥2× | 0/11 | 0 | **6/7** | yes |
+  | (b)+(d) | 0/11 | 0 | 6/7 | yes |
+
+  `[INFERRED]` (d) is the only measured option that fixes the motivating case, and it was
+  **not** taken: it costs a real blend (`LeBron Tatum`), and that is the expensive direction.
+  A false accusation costs a brief its prose; a missed blend puts an invented person's name on
+  the phone, which is what this module exists to prevent. Revisit only with a way to keep both.
+
+  `[VERIFIED]` One objection to (b) was raised and measured rather than argued: NBA teams are
+  named after common words (`Heat`, `Magic`, `Jazz`, `Kings`, `Thunder`, `Bucks`), so the
+  filter could strip the names it must keep. **None of the 28 team words appears in lower case
+  anywhere in the fixtures.** `[UNKNOWN]` Whether that holds on every live batch — but the
+  failure direction is safe, since stripping a word shortens a *refuter* and can only make the
+  rule accuse less.
+
+  Options as they stood:
   - a. **Exclude common words from the index**, as `cluster.py` already does with `_NOT_NAMES`.
     Small and proven in-repo, but it is a hardcoded English list, and the operator rejected
     exactly that shape for P13. `[INFERRED]` Weaker objection here than there: P13 enumerated
