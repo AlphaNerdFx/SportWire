@@ -242,15 +242,25 @@ def test_the_floor_admits_a_name_carried_by_five_outlets(
 
 
 def test_the_floor_is_inert_once_the_batch_is_large(
-    make_article: ArticleFactory,
+    articles: list[NewsArticle],
+    cbs_articles: list[NewsArticle],
+    reddit_articles: list[NewsArticle],
 ) -> None:
     """The floor must not quietly loosen grouping on the batches the pipeline usually sees.
 
-    `[VERIFIED]` At 80 articles the proportional ceiling is already 6, so `max(5, 6)` is 6 and
-    the floor changes nothing. Asserted by comparing against the floor switched off.
+    `[VERIFIED]` Across all 76 captured articles the proportional ceiling is already
+    `int(76 * 0.08) = 6`, so `max(5, 6)` is 6 and the floor changes nothing.
+
+    **Real captured articles, not synthetic filler**, and that is what makes this assert
+    anything. `[VERIFIED]` 2026-08-15 by mutation during the `/commit` audit: a first version
+    built the batch from `_filler`, whose articles deliberately share no names, so grouping
+    was identical at *every* ceiling and the test **survived raising the floor to 99**. On
+    these real articles the ceiling matters — floors 1 and 5 both give 68 groups, while a
+    floor of 99 gives 62 — so the same mutation now fails here.
     """
-    batch = [make_article(KAWHI_ONE), make_article(KAWHI_TWO)] + _filler(
-        make_article, 78
+    batch = [*articles, *cbs_articles, *reddit_articles]
+    assert len(batch) == 76, (
+        "the fixtures are the batch; the ceiling here is 6, above 5"
     )
 
     with_floor = group_related(batch)
