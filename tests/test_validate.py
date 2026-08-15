@@ -512,6 +512,60 @@ def test_names_are_not_matched_across_a_sentence_boundary(
     assert result.is_safe, f"wrongly flagged: {result.invented_names}"
 
 
+@pytest.mark.parametrize(
+    "closing",
+    ['."', ".”", ".'", ".’", ".)", '.")'],
+    ids=["straight", "curly", "apostrophe", "curly-apostrophe", "paren", "quote-paren"],
+)
+def test_a_sentence_ending_in_a_quotation_still_ends_the_sentence(
+    make_article: ArticleFactory, closing: str
+) -> None:
+    """`[VERIFIED]` 2026-08-15 — the 2026-08-08 fusion bug above, returning through a gap.
+
+    The 16:00 brief fell back to the headline list, and attempt 3 was rejected for the
+    invented name `Hollywood Ending. Meanwhile Charles Oakley's` — two real names welded into
+    one. `(?<=[.!?])\\s+` requires whitespace **immediately** after the terminator, and a
+    sentence ending in a quotation reads `Ending.” Meanwhile`, where the next character is a
+    quote mark. No split happened, `.` is legal inside a name, and the run walked into the
+    next sentence.
+
+    `[INFERRED]` This shape is routine here rather than exotic: the summariser works from
+    headlines that quote players, so sentences ending in `.”` are ordinary. A phantom name
+    can never be grounded in any source, so one of them costs the entire brief its prose.
+
+    Parametrized over the closing marks that actually occur, because the original fix was
+    correct for the unquoted case and this is the class it missed.
+
+    **The second sentence deliberately ends its capitalised run on an ungrounded word.**
+    `[VERIFIED]` A first version of this test read "…Meanwhile, Philadelphia completed…" and
+    **passed even with the bug present**, because the fused candidate ends in "Philadelphia",
+    which the sources do contain, and the last-word rule acquits on that alone. That is the
+    same trap the test above this one documents, and it was walked into again. Ending the run
+    on "Meanwhile" is what makes the fusion detectable.
+    """
+    articles = [
+        make_article(
+            "Mavericks talks collapse",
+            summary='Dallas walked away, saying "this is over for the Mavericks."',
+        ),
+        make_article(
+            "Philadelphia lands its target",
+            summary="The Sixers completed the signing on Monday.",
+        ),
+    ]
+
+    result = validate_summary(
+        f'Dallas said "this is over for the Mavericks{closing} '
+        "Meanwhile the signing completed.",
+        articles,
+    )
+
+    assert result.is_safe, (
+        f"wrongly flagged across {closing!r}: {result.invented_names} — a closing quote "
+        "must not stop a full stop from ending the sentence"
+    )
+
+
 def test_figure_is_grounded_across_differing_formats(
     make_article: ArticleFactory,
 ) -> None:

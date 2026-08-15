@@ -100,7 +100,21 @@ _PROPER_NAME = _ProperNames()
 # the whole summary treated "...with the Mavericks. LeBron James chose Philadelphia" as a
 # single name, "Mavericks. Le", and rejected a summary in which every fact was correct. A
 # validator that rejects good output silently disables the feature it was meant to protect.
-_SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+")
+#
+# The closing-punctuation class is not decoration. `[VERIFIED]` 2026-08-15 the same bug
+# returned through it: the 16:00 brief fell back to the headline list, and attempt 3 was
+# rejected for the invented name `Hollywood Ending. Meanwhile Charles Oakley's`. That is two
+# real names welded together, because `(?<=[.!?])\s+` alone requires whitespace **immediately**
+# after the terminator — and a sentence ending in a quotation reads `Ending.” Meanwhile`, where
+# the next character is a quote mark. No split happened, `.` is a legal character inside a name
+# (`J.R. Smith`), and the run walked straight into the following sentence.
+#
+# `[INFERRED]` This domain makes that shape common rather than exotic: the summariser works
+# from headlines that quote players, so sentences ending in `.”` or `.")` are routine. A
+# phantom name can never be grounded in any source, so a single one fails the whole summary
+# and costs the brief its prose — exactly what the 2026-08-08 comment above warned about,
+# recurring through the case it did not cover.
+_SENTENCE_BREAK = re.compile(r"(?<=[.!?])[\"'”’»）)\]]*\s+")
 
 # Money and counts. `[VERIFIED]` mistral:7b invented "$3.3M" for a contract whose value the
 # source never stated.
