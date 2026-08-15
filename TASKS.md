@@ -1170,6 +1170,51 @@ what each turned into, since several changed shape on contact with real data.
     `â`-welding above proves the extractor is also wrong. `[INFERRED]` Independent of this —
     the ceiling table was produced with clean UTF-8 and the fragmentation is unchanged by it.
 
+- [ ] **P20. A capitalised common word in front of a real name refutes that name.** Found
+  2026-08-15 while diagnosing why the 16:00 brief fell back to the headline list. **Open.**
+  `[VERIFIED]` `_index_source_names` indexes any run of two capitalised words as a *name*, so
+  `Inside Lakers mega-deal` yields `{inside, lakers}`, the book title `the LeBron Lakers`
+  yields `{lebron, lakers}`, ESPN's `Retired Heat` yields `{heat, retired}` and CBS's
+  sentence-initial `The Warriors` yields `{the, warriors}`. The P12 refutation rule then reads
+  each as an entity that disagrees with a real name sharing its last word.
+  `[VERIFIED]` Cost, measured on the real 16:00 batch: **`Los Angeles Lakers` is refused as
+  invented** — refuted by `{inside, lakers}` and `{lebron, lakers}`. On the committed fixtures,
+  **2 of 11** teams named by their short form are refused when a summary expands them, down
+  from 3 of 11 after the comma fix in `b0d8499`.
+  `[INFERRED]` This is the same class as P13 and the comma bug: the extractor over-generates
+  on title-case and headline text, and the refutation rule is the first consumer strict enough
+  to be hurt by it. The rule itself is not obviously wrong — the *input* is.
+  Options, none picked:
+  - a. **Exclude common words from the index**, as `cluster.py` already does with `_NOT_NAMES`.
+    Small and proven in-repo, but it is a hardcoded English list, and the operator rejected
+    exactly that shape for P13. `[INFERRED]` Weaker objection here than there: P13 enumerated
+    *characters*, where the next alphabet always breaks the list, while function words are a
+    closed and stable set.
+  - b. **Derive it from the corpus instead of listing it** — a word that also appears in
+    lower case somewhere in the batch is ordinary vocabulary, not part of a name. Not
+    hardcoded, and `The`/`Inside`/`Retired` all appear lower case constantly. `[UNKNOWN]`
+    Whether it misfires on names that are also words (`Heat`, `Magic`, `Jazz`, `Kings`) —
+    **measure before building**, since those are team names and would be the expensive miss.
+  - c. **Only refute when the two names have the same length**, so a 2-word source name cannot
+    refute a 3-word summary name. `[VERIFIED]` Does not help: `{inside, lakers}` and
+    `{heat, retired}` are both 2 words, and so is `Miami Heat`.
+  - d. **Require the refuting source name to appear more than once.** A one-off headline
+    artefact is discarded; a real person named repeatedly still refutes. `[UNKNOWN]` Effect
+    unmeasured.
+
+- [ ] **P21. Expanding an abbreviation reads as invention.** Found the same way. **Open.**
+  `[VERIFIED]` The 16:00 run was rejected in part for `Madison Square Garden`, whose sources
+  say only `MSG` — twice, in the title and the body. Nothing in the sources contains
+  "Madison", "Square" or "Garden", so every grounding rule correctly fails, and the index is
+  empty: this is **not** the P20 refutation path.
+  `[INFERRED]` It is nonetheless a false accusation of the kind `SESSION.md` §8 says costs the
+  most, because the fallback is silent — the model expanded a well-known abbreviation
+  correctly and the brief lost its prose for it.
+  `[UNKNOWN]` How often this happens; `MSG`, `OKC`, `LA` and `NBA` are the plausible set.
+  Resolve by counting abbreviation expansions across a week of rejected attempts before
+  building anything — `[INFERRED]` a rule mapping abbreviations to expansions is a lookup
+  table, which is the shape this project keeps deciding it does not want.
+
 ---
 
 ## LOW — deferred; each requires a trigger condition
