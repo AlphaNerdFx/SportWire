@@ -166,6 +166,39 @@ def articles(espn_rss_xml: str) -> list[NewsArticle]:
 
 
 @pytest.fixture
+def reddit_articles() -> list[NewsArticle]:
+    """The r/nba capture as the pipeline sees it, parsed by the real adapter.
+
+    `[VERIFIED]` This is the fixture that carries camelCase names — `LeBron`, `DeMar
+    DeRozan` — which is why `TASKS.md` P13 and P17 both had to be measured against it. Until
+    2026-08-15 no test loaded it at all, so the only community feed in the pipeline was
+    covered solely by hand-written titles.
+    """
+    return RssNewsAdapter("r/nba").parse(
+        (FIXTURES / "reddit_nba_atom.xml").read_text(encoding="utf-8")
+    )
+
+
+@pytest.fixture
+def article_texts(
+    articles: list[NewsArticle],
+    cbs_articles: list[NewsArticle],
+    reddit_articles: list[NewsArticle],
+) -> list[str]:
+    """Every title and summary the repository has captured, as plain strings.
+
+    For tests that assert two implementations agree over real text rather than over invented
+    examples. `[INFERRED]` An extractor compared only against titles someone wrote by hand
+    agrees on exactly the cases that occurred to whoever wrote them.
+    """
+    return [
+        text
+        for article in [*articles, *cbs_articles, *reddit_articles]
+        for text in (article.title, article.summary)
+    ]
+
+
+@pytest.fixture
 def games(balldontlie_json: dict[str, Any]) -> list[GameData]:
     """The 9 games as the pipeline sees them, parsed by the real adapter."""
     return BallDontLieGamesAdapter(api_key="test-key-never-used").parse(
