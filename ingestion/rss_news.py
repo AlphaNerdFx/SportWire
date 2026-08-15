@@ -145,13 +145,27 @@ class RssNewsAdapter(NewsSourceAdapter):
             },
         )
         response.raise_for_status()
-        return self.parse(response.text)
+        # `.content`, never `.text`. `[VERIFIED]` 2026-08-15: Yahoo serves
+        # `Content-Type: application/xml` with **no charset**, so `requests` falls back to
+        # `apparent_encoding` — chardet guessed **Windows-1254 (Turkish)** — and `.text`
+        # turned the bytes `Schr\xc3\xb6der` into `SchrÃ¶der`. The feed's own declaration
+        # says `encoding="UTF-8"` and `.text` never looks at it. Every non-ASCII name from
+        # that feed reached the brief mangled, and a mangled name can never match a clean
+        # one, so this also silently prevented `cluster.py` from grouping the affected
+        # stories (TASKS.md P19).
+        return self.parse(response.content)
 
-    def parse(self, feed_xml: str) -> list[NewsArticle]:
+    def parse(self, feed_xml: str | bytes) -> list[NewsArticle]:
         """Convert a feed into articles, accepting both RSS 2.0 and Atom.
 
         Public and network-free on purpose: tests drive this with the captured fixtures in
         `tests/fixtures/` rather than hitting the live feeds (`CLAUDE.md` §8).
+
+        Accepts **bytes** as well as `str`, and bytes are what the live path passes. An XML
+        document declares its own encoding in its first line, so handing the parser the raw
+        bytes lets it obey that declaration; handing it a `str` means something upstream has
+        already guessed. `[INFERRED]` The fixtures are read as text and stay valid, because
+        decoding a file whose encoding you already know is not a guess.
 
         `[VERIFIED]` 2026-08-07 both formats are needed. ESPN and CBS publish RSS 2.0
         (`<channel><item>`); Reddit publishes Atom (`<feed><entry>`), with `<id>` instead of
