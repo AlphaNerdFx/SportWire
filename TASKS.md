@@ -536,6 +536,40 @@ what each turned into, since several changed shape on contact with real data.
   a number from one sitting. `[VERIFIED]` Every occurrence in `main.py` and `SESSION.md`
   has been corrected to `[UNKNOWN]`; check ADR-012 has not been missed.
 
+  **2026-08-16: first controlled measurement, and it changes what P4 is about.**
+  `[VERIFIED]` The three delivered runs either side of it: 08:00 accepted on attempt 1 of 3;
+  16:00 and 00:00 both failed all three attempts and fell back to the headline list.
+
+  `[VERIFIED]` Measured against `mistral:7b`, **single attempt, six trials per variant**, on
+  the nine stories of the 2026-08-16 00:00 run transcribed from the delivered brief:
+
+  | batch | passed |
+  |---|---|
+  | committed fixtures (76 articles → 9 stories) | **6 / 6** |
+  | the real 00:00 batch | **3 / 6** |
+
+  `[VERIFIED]` **The fixtures cannot measure this.** They pass six times out of six, so any
+  fix A/B-ed against them shows no difference for the same reason a passing test on easy data
+  shows nothing. A real failing batch has to be transcribed from the brief.
+
+  `[VERIFIED]` **The dominant cause is wholesale fabrication, not a validator defect and not
+  a prompt defect.** Across twelve trials the most-rejected names were `Phoenix Suns` (6),
+  `Quentin Grimes` (4), `Boston Celtics` (3), `Houston Rockets` (2), `Julius Randle` (1) —
+  teams and players with **no story in that batch at all**. The validator is right about
+  every one of them.
+
+  `[VERIFIED]` **A prompt fix was measured and rejected.** `SYSTEM_PROMPT` — the reduce step
+  that writes the prose — forbids adding "scores, statistics, dates or outcomes" and never
+  mentions names, while `NOTES_PROMPT` does say "keep names… exactly as given". Adding an
+  explicit rule to write names exactly as the notes have them scored **3/6, identical to the
+  3/6 without it**. Not shipped, on the P6 precedent: a change with no measured effect reads
+  as protection it does not provide.
+
+  `[INFERRED]` This is the outcome `ROADMAP.md` §3 anticipated for v0.2.0 — *"if it does not,
+  the honest outcome is an ADR on model choice, not more validator tuning."* The remaining
+  lever is model capability (ADR-012), and `config/settings.py:41` already defaults the hosted
+  path to `google/gemma-4-31b-it:free`, so a larger model costs a key rather than money (C2).
+
   **2026-08-13: attempted, and blocked by a defect in the log itself.**
   - `[VERIFIED]` **The log recorded no date** — `main.py:65` set `datefmt="%H:%M:%S"`. Runs
     are 8h apart and cron skips whenever WSL sleeps, so two consecutive `08:00:17` lines
