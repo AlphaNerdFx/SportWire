@@ -662,6 +662,52 @@ def test_a_capitalised_ordinary_word_does_not_refute_a_real_name(
     assert result.is_safe, f"wrongly flagged: {result.invented_names}"
 
 
+@pytest.mark.parametrize("written", ["Mike D'Antoni", "Mike D’Antoni"])
+def test_an_apostrophe_shape_does_not_decide_whether_a_name_exists(
+    make_article: ArticleFactory, written: str
+) -> None:
+    """`[VERIFIED]` 2026-08-17, from the 00:00 run — the fourth false accusation of this class.
+
+    All three attempts were rejected for `Mike D'Antoni`, and lead 3 of that very batch was
+    Yahoo's *"Honoring new Hall of Fame inductee, former Rockets coach Mike D’Antoni"*. The
+    feed writes U+2019 RIGHT SINGLE QUOTATION MARK and the model writes U+0027 APOSTROPHE.
+    Every comparison in this module is literal string matching, so the two could never meet
+    and a name plainly present in the sources was reported as fabricated.
+
+    `[INFERRED]` It stayed hidden because both shapes **render identically** — reading the
+    rejection log beside the feed shows the same characters. This is the first bug of the
+    class found by an automated check rather than by the operator noticing a degraded brief.
+
+    Parametrized over both shapes: the summary may use either, and so may the source.
+    """
+    articles = [
+        make_article(
+            "Honoring new Hall of Fame inductee, former Rockets coach Mike D’Antoni",
+            summary="The coach enters the Hall this weekend.",
+        )
+    ]
+
+    result = validate_summary(f"{written} enters the Hall of Fame.", articles)
+
+    assert result.is_safe, f"wrongly flagged: {result.invented_names}"
+
+
+def test_folding_apostrophes_does_not_ground_an_absent_name(
+    make_article: ArticleFactory,
+) -> None:
+    """The complement: folding shapes must not turn the check into a rubber stamp."""
+    articles = [
+        make_article(
+            "Honoring new Hall of Fame inductee, former Rockets coach Mike D’Antoni",
+            summary="The coach enters the Hall this weekend.",
+        )
+    ]
+
+    result = validate_summary("Steve O’Malley enters the Hall of Fame.", articles)
+
+    assert not result.is_safe, "a name absent from the sources must still be refused"
+
+
 def test_a_shorter_source_name_does_not_refute_an_expansion(
     make_article: ArticleFactory,
 ) -> None:

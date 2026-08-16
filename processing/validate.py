@@ -48,6 +48,25 @@ _TRAILING_PUNCTUATION = ',;:!?()[]{}"“”«»…'
 _SEPARATES_NAMES = ",;"
 
 
+# Apostrophe shapes that mean the same thing. `[VERIFIED]` 2026-08-17: the 00:00 run
+# rejected `Mike D'Antoni` as invented while lead 3 of that very batch was Yahoo's
+# "Honoring new Hall of Fame inductee, former Rockets coach Mike D’Antoni". The feed writes
+# U+2019 RIGHT SINGLE QUOTATION MARK; the model writes U+0027 APOSTROPHE. Every comparison
+# here is literal string matching, so the two can never meet and a name plainly present in
+# the sources is reported as fabricated.
+#
+# `[INFERRED]` This is invisible precisely because both render identically — reading the log
+# beside the feed shows the same characters. It is the fourth false-accusation bug of this
+# class, and the first found by an automated check rather than by the operator noticing a
+# degraded brief.
+_APOSTROPHE_SHAPES = str.maketrans({"’": "'", "‘": "'", "ʼ": "'", "´": "'"})
+
+
+def _same_apostrophes(text: str) -> str:
+    """Fold every apostrophe shape onto one, so `D’Antoni` and `D'Antoni` compare equal."""
+    return text.translate(_APOSTROPHE_SHAPES)
+
+
 def _is_name_word(word: str) -> bool:
     """Whether a word could be part of a name: a capital, then letters.
 
@@ -199,7 +218,7 @@ def validate_summary(summary: str, articles: list[NewsArticle]) -> ValidationRes
     useless in practice. The measured failures are wholesale substitutions, not paraphrases,
     and those are caught either way.
     """
-    source = " ".join(f"{a.title} {a.summary}" for a in articles)
+    source = _same_apostrophes(" ".join(f"{a.title} {a.summary}" for a in articles))
     source_lower = source.lower()
     source_names = _index_source_names(articles)
 
@@ -339,7 +358,7 @@ def _grounded(
     The verbatim rule stays unconditional and must come first: sources containing both
     "Bronny James" and "LeBron James" would otherwise refute each other.
     """
-    if name.lower() in source_lower:
+    if _same_apostrophes(name).lower() in source_lower:
         return True
 
     words = _name_words(name)
@@ -373,7 +392,11 @@ def _name_words(name: str) -> list[str]:
     shortening a hyphenated first name, the **validator** was truncating it and then failing
     to ground its own truncation.
     """
-    return [cleaned for word in name.split() if (cleaned := _depossess(word.lower()))]
+    return [
+        cleaned
+        for word in _same_apostrophes(name).split()
+        if (cleaned := _depossess(word.lower()))
+    ]
 
 
 def _ordinary_words(articles: list[NewsArticle]) -> frozenset[str]:
