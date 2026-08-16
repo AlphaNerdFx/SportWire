@@ -808,9 +808,19 @@ what each turned into, since several changed shape on contact with real data.
   arithmetic rather than by prose.
   - Proof:
 
-- [ ] **P9. `group_related` silently groups nothing in a batch under 25 articles.**
+- [x] **P9. `group_related` silently groups nothing in a batch under 25 articles.**
   Found 2026-08-13 by testing. **The most consequential of the four findings this session,
   because the degradation is invisible and the margin is thin.**
+
+  **Closed 2026-08-16, in two stages.** `[VERIFIED]` Stage one was option (c) on 2026-08-13:
+  the behaviour stood and a warning was added, asserted by
+  `test_a_batch_too_small_to_group_says_so`. `[VERIFIED]` Stage two removed the condition
+  itself — P19's `MIN_RARITY_CEILING` floor in `95e7c2e` means the ceiling can no longer fall
+  below 5, so at default settings the warning cannot fire and small batches group normally.
+  The reasoning recorded below for *not* raising the ceiling — that it risked a false merge —
+  was measured under P19 and did not hold: zero false merges at any batch size tested.
+  `[INFERRED]` Left as a closed entry rather than deleted, because the option (a)/(b)/(c)
+  analysis below is what P19 eventually had to overturn, and the overturning is the lesson.
   `[VERIFIED]` `ceiling = max(1, int(len(articles) * MAX_NAME_FREQUENCY))` with
   `MAX_NAME_FREQUENCY = 0.08` evaluates to **1** for any batch below 25. A name shared by two
   articles has document frequency 2, which exceeds that ceiling, so it is discarded as
@@ -963,9 +973,12 @@ what each turned into, since several changed shape on contact with real data.
     the 2026-08-11 "Anthony Towns" bug — the model was not shortening a hyphenated first
     name, the **validator** was truncating it and then failing to ground its own truncation.
 
-- [ ] **P13. `_PROPER_NAME` cannot see a camelCase name, so LeBron James has never been
-  validated.** Found 2026-08-14 while probing the tokenizer for P12. **Open — needs a
-  decision.**
+- [x] **P13. `_PROPER_NAME` cannot see a camelCase name, so LeBron James has never been
+  validated.** Found 2026-08-14 while probing the tokenizer for P12. **Fixed in `fca4298`**
+  by asking Python what a capital letter is instead of listing them; proof is in this entry.
+  `[VERIFIED]` The checkbox said `- [ ]` and the header said "Open — needs a decision" for
+  two days after the fix shipped, which is why `ROADMAP.md` §5 warns that the open count here
+  cannot be trusted mechanically. Reconciled 2026-08-16.
   `[VERIFIED]` `_PROPER_NAME.findall("LeBron James attended the game.")` returns `[]`, and so
   does `"DeMar DeRozan scored 30 points."` The pattern is anchored with `\b`, and there is no
   word boundary inside `LeBron` — "e" and "B" are both word characters — so no match can

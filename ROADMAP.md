@@ -155,7 +155,9 @@ number of its own rather than riding along inside another milestone.
 - **Move the line rather than redefine it.** If `v1.0.0`'s conditions turn out to be wrong,
   change them here in place with a dated note, the way `SESSION.md` and `TASKS.md` record
   retractions. Do not quietly drop a condition that became inconvenient.
-- `[VERIFIED]` **`TASKS.md` checkboxes have drifted** and should not be counted mechanically:
-  P9 is still `- [ ]` although P19's rarity floor removed the condition it describes, and
-  P13's body records it resolved while its box is unchecked. Reconcile before using the open
-  count as evidence of anything.
+- ~~`[VERIFIED]` **`TASKS.md` checkboxes have drifted** and should not be counted
+  mechanically: P9 is still `- [ ]` although P19's rarity floor removed the condition it
+  describes, and P13's body records it resolved while its box is unchecked.~~ **Reconciled
+  2026-08-16**; both are now `- [x]` with the closing evidence in their entries. The warning
+  stands as a habit though: a box is only as true as the last person to edit it, so check an
+  entry's body before counting its box.
