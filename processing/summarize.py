@@ -42,6 +42,7 @@ from __future__ import annotations
 import logging
 import re
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 
 import requests
 
@@ -159,6 +160,36 @@ NOTES_PROMPT = (
 )
 
 
+def _with_exclusions(system: str, avoid: Sequence[str]) -> str:
+    """Append the names an earlier attempt invented, so a retry is not a byte-identical ask.
+
+    `[VERIFIED]` 2026-08-16: without this every attempt received the same prompt, and the
+    measured consequence is that retry buys far less than the arithmetic suggests — at
+    temperature 0 `mistral:7b` invented "Quentin Grimes" on **all ten** trials of one batch,
+    so three attempts were one attempt tried three times.
+
+    Phrased as "not in today's news" rather than "banned", because these are real teams and
+    players. `[INFERRED]` Telling a model a name does not exist would be a lie it may
+    generalise from; telling it the name is not in *this* batch is both true and the actual
+    requirement. Nothing here persists — the exclusion dies with the run, so a genuine
+    Phoenix Suns story next week is unaffected.
+    """
+    if not avoid:
+        return system
+
+    # `dict.fromkeys` rather than `set`, so the order is stable and the prompt is
+    # reproducible between attempts.
+    listed = ", ".join(dict.fromkeys(avoid))
+    return (
+        f"{system}\n"
+        "\n"
+        "Correction, from an earlier attempt at this same brief:\n"
+        f"- These names appear nowhere in the notes: {listed}.\n"
+        "- They are not part of today's news. Do not mention them.\n"
+        "- Use only names the notes themselves contain."
+    )
+
+
 class Summarizer(ABC):
     """Turns articles into one paragraph of prose."""
 
@@ -168,8 +199,17 @@ class Summarizer(ABC):
         """Human-readable label, e.g. "Ollama (llama3.2)". Used in logs."""
 
     @abstractmethod
-    def _summarise(self, articles: list[NewsArticle], max_chars: int) -> str:
+    def _summarise(
+        self,
+        articles: list[NewsArticle],
+        max_chars: int,
+        avoid: Sequence[str] = (),
+    ) -> str:
         """Produce the summary text. Allowed to raise.
+
+        `avoid` holds names an earlier attempt invented, for implementations that can act on
+        it. Defaulted so an implementation may ignore it entirely — a summarizer that cannot
+        steer its own output is still a valid summarizer.
 
         Takes articles rather than a finished prompt because how many model calls this
         requires is the implementation's business, not the interface's. `OllamaSummarizer`
@@ -207,9 +247,16 @@ class Summarizer(ABC):
         if not articles:
             return None
 
+        # Names earlier attempts invented, accumulated so attempt 3 avoids what attempts 1
+        # and 2 both produced. `[VERIFIED]` 2026-08-16: the loop already computed this and
+        # threw it away — every attempt received a byte-identical prompt, so a model
+        # pattern-completing from its training prior had no reason to answer differently.
+        # It invented "Quentin Grimes" on all ten trials at temperature 0.
+        invented: list[str] = []
+
         for attempt in range(1, max(1, attempts) + 1):
             try:
-                text = self._summarise(articles, max_chars)
+                text = self._summarise(articles, max_chars, avoid=invented)
             except Exception:
                 # `[VERIFIED]` 2026-08-10 a production run got HTTP 500 from Ollama on the
                 # first attempt and gave up, delivering the headline list — an earlier
@@ -242,6 +289,7 @@ class Summarizer(ABC):
                 return cleaned
 
             logger.warning("attempt %d rejected (%s)", attempt, result.describe())
+            invented.extend(result.invented_names)
 
         logger.warning(
             "no attempt passed validation after %d tries; using the headline list",
@@ -277,7 +325,12 @@ class OllamaSummarizer(Summarizer):
     def summarizer_name(self) -> str:
         return f"Ollama ({self._model})"
 
-    def _summarise(self, articles: list[NewsArticle], max_chars: int) -> str:
+    def _summarise(
+        self,
+        articles: list[NewsArticle],
+        max_chars: int,
+        avoid: Sequence[str] = (),
+    ) -> str:
         """Summarise, chunking first if the batch is long enough to lose its tail.
 
         `[VERIFIED]` 2026-08-06: given all 15 fixture articles in one call, this model
@@ -290,7 +343,10 @@ class OllamaSummarizer(Summarizer):
         sits near the front of *some* call.
         """
         if len(articles) <= self._chunk_size:
-            return self._generate(SYSTEM_PROMPT, build_prompt(articles, max_chars))
+            return self._generate(
+                _with_exclusions(SYSTEM_PROMPT, avoid),
+                build_prompt(articles, max_chars),
+            )
 
         chunks = [
             articles[index : index + self._chunk_size]
@@ -309,7 +365,12 @@ class OllamaSummarizer(Summarizer):
             for chunk in chunks
         ]
 
-        return self._generate(SYSTEM_PROMPT, build_reduce_prompt(notes, max_chars))
+        # The exclusion goes on the prose call, not the notes call: notes are extracted
+        # from the items themselves, so a name invented in prose is what has to be corrected.
+        return self._generate(
+            _with_exclusions(SYSTEM_PROMPT, avoid),
+            build_reduce_prompt(notes, max_chars),
+        )
 
     def _generate(self, system: str, prompt: str) -> str:
         """One POST to Ollama's generate endpoint. Exceptions handled by `summarise`."""

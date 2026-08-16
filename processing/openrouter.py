@@ -28,11 +28,17 @@ The validator applies identically here, so the answer is measurable rather than 
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 
 import requests
 
 from models.schemas import NewsArticle
-from processing.summarize import SYSTEM_PROMPT, Summarizer, build_prompt
+from processing.summarize import (
+    SYSTEM_PROMPT,
+    Summarizer,
+    _with_exclusions,
+    build_prompt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -65,8 +71,17 @@ class OpenRouterSummarizer(Summarizer):
     def summarizer_name(self) -> str:
         return f"OpenRouter ({self._model})"
 
-    def _summarise(self, articles: list[NewsArticle], max_chars: int) -> str:
-        """One request, every article. Exceptions and retries are handled by `summarise`."""
+    def _summarise(
+        self,
+        articles: list[NewsArticle],
+        max_chars: int,
+        avoid: Sequence[str] = (),
+    ) -> str:
+        """One request, every article. Exceptions and retries are handled by `summarise`.
+
+        `avoid` carries the names an earlier attempt invented, appended to the system
+        prompt by the same helper the local summarizer uses, so both behave alike.
+        """
         response = requests.post(
             API_URL,
             headers={
@@ -79,7 +94,10 @@ class OpenRouterSummarizer(Summarizer):
             json={
                 "model": self._model,
                 "messages": [
-                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {
+                        "role": "system",
+                        "content": _with_exclusions(SYSTEM_PROMPT, avoid),
+                    },
                     {"role": "user", "content": build_prompt(articles, max_chars)},
                 ],
                 # Low, for the same reason as the local summarizer: this is a factual
