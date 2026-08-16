@@ -536,6 +536,38 @@ what each turned into, since several changed shape on contact with real data.
   a number from one sitting. `[VERIFIED]` Every occurrence in `main.py` and `SESSION.md`
   has been corrected to `[UNKNOWN]`; check ADR-012 has not been missed.
 
+  **2026-08-16, from the log: the first end-to-end rate this task has ever had.**
+  `[VERIFIED]` Counted from `logs/sportwire.log`, restricted to runs dated after `ec7bc3c`
+  added the date to the log format. Six earlier runs are undated and remain uncountable.
+
+  | run | outcome |
+  |---|---|
+  | 2026-08-15 00:00 | prose, attempt 2 |
+  | 2026-08-15 08:00 | prose, attempt 1 |
+  | 2026-08-15 16:00 | **fallback** |
+  | 2026-08-16 00:00 | **fallback** |
+  | 2026-08-16 16:00 | **fallback** |
+
+  **2 of 5 delivered prose — 40% — and the last three consecutive runs all fell back.**
+
+  `[VERIFIED]` **This retracts the "ordinary bad luck" reading recorded above.** That reading
+  assumed roughly 87% end-to-end; three consecutive failures at that rate has a 0.2% chance.
+  Whatever the real rate is, it is not 87%.
+
+  `[VERIFIED]` **The transcribed benchmark is easier than production, not harder.** The
+  reconstruction of the 00:00 batch scores ~11/12 while the run it was built from failed 3/3.
+  The note above claiming the transcription is "harder… less source text" is wrong and should
+  not be relied on. `[UNKNOWN]` Why — candidates are the story count (9 transcribed against 11
+  in the 16:00 run) and summaries the brief truncated with an ellipsis.
+
+  `[VERIFIED]` The 2026-08-16 16:00 run rejected `Klay Thompson` and `Kawhi Leonard` on all
+  three attempts. `[UNKNOWN]` Whether those are genuine — both were *deduplicated out* of that
+  batch after appearing on 2026-08-16 00:00, so the model may be completing a pattern from a
+  topic rather than from its notes. Resolve by capturing the batch, not by reasoning.
+
+  `[VERIFIED]` **The schedule is irregular**: no 08:00 run exists on 2026-08-16, between the
+  00:00 and 16:00 runs. That compounds the open `[UNKNOWN]` about what schedules these at all.
+
   **2026-08-16: first controlled measurement, and it changes what P4 is about.**
   `[VERIFIED]` The three delivered runs either side of it: 08:00 accepted on attempt 1 of 3;
   16:00 and 00:00 both failed all three attempts and fell back to the headline list.
