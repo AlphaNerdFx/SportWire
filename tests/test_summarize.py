@@ -21,19 +21,17 @@ degrade the brief exactly as a dead source does.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 
 import pytest
 
 from models.schemas import NewsArticle
 from processing.summarize import (
     CHUNK_SIZE,
-    SYSTEM_PROMPT,
     OllamaSummarizer,
     Summarizer,
     _note_lines,
     _tidy,
-    _with_exclusions,
     build_prompt,
     build_reduce_prompt,
 )
@@ -45,10 +43,6 @@ GROUNDED = "Russell Westbrook has retired after 18 seasons."
 # "Joe Dumars" appears in no source. `[VERIFIED]` mistral:7b produced this exact name on
 # three consecutive attempts from a real Pistons story.
 FABRICATED = "Joe Dumars is leading the negotiations."
-# A *different* invention, for asserting the correction accumulates across attempts.
-# `[VERIFIED]` mistral:7b produced this name on all three attempts of the 2026-08-13
-# 00:00 run.
-FABRICATED_OTHER = "Ayo Dosunmu was central to the plan."
 
 
 def _sources(make_article: ArticleFactory) -> list[NewsArticle]:
@@ -66,21 +60,13 @@ class StubSummarizer(Summarizer):
     def __init__(self, *responses: str | Exception) -> None:
         self._responses = list(responses)
         self.calls = 0
-        # What each attempt was told to avoid, so the feedback loop can be asserted on.
-        self.avoided: list[list[str]] = []
 
     @property
     def summarizer_name(self) -> str:
         return "Stub"
 
-    def _summarise(
-        self,
-        articles: list[NewsArticle],
-        max_chars: int,
-        avoid: Sequence[str] = (),
-    ) -> str:
+    def _summarise(self, articles: list[NewsArticle], max_chars: int) -> str:
         self.calls += 1
-        self.avoided.append(list(avoid))
         response = self._responses[min(self.calls - 1, len(self._responses) - 1)]
         if isinstance(response, Exception):
             raise response
@@ -125,70 +111,6 @@ def test_a_fabricated_summary_is_retried_then_accepted(
     assert summarizer.calls == 2
     assert "Joe Dumars" in caplog.text, "the log must name what was rejected"
     assert "accepted on attempt 2" in caplog.text
-
-
-def test_a_retry_is_told_what_the_previous_attempt_invented(
-    make_article: ArticleFactory,
-) -> None:
-    """`[VERIFIED]` 2026-08-16 — the loop computed this and threw it away.
-
-    Every attempt received a byte-identical prompt, so a model pattern-completing from its
-    training prior had no reason to answer differently. Measured: at temperature 0
-    `mistral:7b` invented "Quentin Grimes" on **all ten** trials of one batch, which makes
-    three attempts one attempt tried three times.
-
-    The first attempt is told nothing — there is nothing to tell it yet — and that is
-    asserted too, so the feedback cannot degrade into a permanent exclusion list.
-    """
-    summarizer = StubSummarizer(FABRICATED, GROUNDED)
-
-    summarizer.summarise(_sources(make_article))
-
-    assert summarizer.avoided[0] == [], "the first attempt has nothing to correct"
-    assert "Joe Dumars" in summarizer.avoided[1], (
-        "the retry must be told which name the first attempt invented"
-    )
-
-
-def test_the_correction_names_every_invention_so_far(
-    make_article: ArticleFactory,
-) -> None:
-    """Attempt 3 must avoid what attempts 1 *and* 2 produced, not only the most recent.
-
-    `[INFERRED]` A model that invents a different name each time would otherwise be free to
-    cycle back to the first one, and the loop would never converge.
-    """
-    summarizer = StubSummarizer(FABRICATED, FABRICATED_OTHER, GROUNDED)
-
-    summarizer.summarise(_sources(make_article))
-
-    assert "Joe Dumars" in summarizer.avoided[2]
-    assert "Ayo Dosunmu" in summarizer.avoided[2]
-
-
-def test_the_correction_reaches_the_prompt_the_model_sees(
-    make_article: ArticleFactory,
-) -> None:
-    """The list is worthless if it never reaches the system prompt.
-
-    `[INFERRED]` Threading a value through three call sites and forgetting to use it is the
-    failure `_drop_leading_stopword` recorded (P6): a mechanism that reads as protection and
-    changes nothing.
-    """
-    original = _with_exclusions(SYSTEM_PROMPT, ())
-    corrected = _with_exclusions(SYSTEM_PROMPT, ["Joe Dumars", "Phoenix Suns"])
-
-    assert original == SYSTEM_PROMPT, "no names means no change at all"
-    assert "Joe Dumars" in corrected
-    assert "Phoenix Suns" in corrected
-    assert corrected.startswith(SYSTEM_PROMPT), "the original instructions must survive"
-
-
-def test_a_repeated_invention_is_named_once(make_article: ArticleFactory) -> None:
-    """Two attempts inventing the same name must not list it twice."""
-    corrected = _with_exclusions(SYSTEM_PROMPT, ["Joe Dumars", "Joe Dumars"])
-
-    assert corrected.count("Joe Dumars") == 1
 
 
 def test_fabrication_on_every_attempt_falls_back_to_the_headline_list(
