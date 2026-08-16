@@ -597,12 +597,37 @@ what each turned into, since several changed shape on contact with real data.
   scored 3/6 and then 5/6. The earlier prompt A/B in this entry — 3/6 versus 3/6 — is within
   that noise, so it establishes "no large effect" and not "no effect".
 
+  `[VERIFIED]` **A retry-feedback mechanism was built, measured and reverted** (`3042962`,
+  reverted in `8f89e02`). Telling attempt 2 which names attempt 1 invented is sound in theory
+  — every attempt otherwise receives a byte-identical prompt — but produced no effect:
+
+  | measurement | with feedback | without |
+  |---|---|---|
+  | end-to-end, 3 attempts | 10/10 | 10/10 |
+  | end-to-end, 3 attempts | 11/12 | **12/12** |
+  | attempt 2 succeeding after attempt 1 failed | 2/6 | 3/4 |
+
+  **The most important number in this entry is a null one.** `[VERIFIED]` Attempt 1 is
+  byte-identical in both arms by construction, since the avoid-list is empty until something
+  is rejected — and it scored **6/12 and 8/12**. That is the same process sampled twice, so
+  the noise floor is about ±2 in 12. No effect smaller than that is detectable at this sample
+  size, and resolving one costs hours of local inference per arm.
+
+  `[INFERRED]` **The benchmark does not reproduce the failure it was built from, and this
+  reframes P4.** The real 00:00 run failed all three attempts; its reconstruction succeeds
+  roughly 11 times in 12 with no change at all. At ~50% per attempt, three consecutive
+  failures has a ~12.5% chance, so **the two fallback briefs the operator saw are consistent
+  with ordinary bad luck rather than a reliably hard batch.** Before concluding the model is
+  the constraint, count fallbacks across a real soak: three runs is not a rate, and this entry
+  should not be read as one.
+
   `[INFERRED]` This is the outcome `ROADMAP.md` §3 anticipated for v0.2.0 — *"if it does not,
-  the honest outcome is an ADR on model choice, not more validator tuning."* Every lever that
-  is free has now been measured and none of them moved. The remaining one is model capability
-  (ADR-012), and `config/settings.py:41` already defaults the hosted path to
-  `google/gemma-4-31b-it:free`, so a larger model costs an API key rather than money (C2).
-  `[VERIFIED]` No key is configured today, so the hosted path is untested here.
+  the honest outcome is an ADR on model choice, not more validator tuning."* Every free lever
+  has now been measured and none moved. `config/settings.py:41` already defaults the hosted
+  path to `google/gemma-4-31b-it:free`, so a larger model costs an API key rather than money
+  (C2). `[VERIFIED]` No key is configured today, so the hosted path is untested here.
+  `[INFERRED]` **But the soak comes first** — switching models on three runs of evidence would
+  repeat the "~84% from one sitting" mistake this task exists to correct.
 
   **2026-08-13: attempted, and blocked by a defect in the log itself.**
   - `[VERIFIED]` **The log recorded no date** — `main.py:65` set `datefmt="%H:%M:%S"`. Runs
