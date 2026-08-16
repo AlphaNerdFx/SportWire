@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import re
+import unicodedata
 
 from models.schemas import NewsArticle
 
@@ -59,12 +60,36 @@ _SEPARATES_NAMES = ",;"
 # beside the feed shows the same characters. It is the fourth false-accusation bug of this
 # class, and the first found by an automated check rather than by the operator noticing a
 # degraded brief.
-_APOSTROPHE_SHAPES = str.maketrans({"’": "'", "‘": "'", "ʼ": "'", "´": "'"})
+_APOSTROPHE_SHAPES = str.maketrans(
+    {"’": "'", "‘": "'", "ʼ": "'", "´": "'", "‑": "-", "–": "-", "—": "-"}
+)
 
 
-def _same_apostrophes(text: str) -> str:
-    """Fold every apostrophe shape onto one, so `D’Antoni` and `D'Antoni` compare equal."""
-    return text.translate(_APOSTROPHE_SHAPES)
+def _comparable(text: str) -> str:
+    """Fold the spellings of one name onto a single form, **for comparison only**.
+
+    Never used for display or for extraction — `_is_name_word` still reads the real Unicode,
+    because P13 established that enumerating characters is how this module goes stale. This
+    is the opposite operation: it decides whether two spellings *mean* the same name.
+
+    Two classes, both measured across 329 live and fixture articles rather than imagined:
+
+    **Apostrophe and dash shapes.** `[VERIFIED]` U+2019 appears 137 times in that corpus,
+    against U+0027 from the model. The 2026-08-17 00:00 run was rejected for
+    `Mike D'Antoni` while its own lead 3 read `Mike D’Antoni`.
+
+    **Diacritics.** `[VERIFIED]` Three of the six accented names in that corpus **also appear
+    unaccented in it** — `Dončić`/`Doncic`, `Jokić`/`Jokic`, and `Schröder`/`Schroder`, the
+    last of those 9 accented against 17 plain. Yahoo prints both spellings of the same player
+    in different headlines of one story, so this is not a model quirk to be corrected at the
+    prompt: **the sources disagree with themselves.**
+
+    `[INFERRED]` Folding cannot create a false acquittal here in any realistic case, because
+    the pairs it merges are the same person by construction. It is the reverse risk that has
+    cost this project four briefs: two spellings of one name failing to meet.
+    """
+    stripped = unicodedata.normalize("NFD", text.translate(_APOSTROPHE_SHAPES))
+    return "".join(c for c in stripped if not unicodedata.combining(c))
 
 
 def _is_name_word(word: str) -> bool:
@@ -218,7 +243,7 @@ def validate_summary(summary: str, articles: list[NewsArticle]) -> ValidationRes
     useless in practice. The measured failures are wholesale substitutions, not paraphrases,
     and those are caught either way.
     """
-    source = _same_apostrophes(" ".join(f"{a.title} {a.summary}" for a in articles))
+    source = _comparable(" ".join(f"{a.title} {a.summary}" for a in articles))
     source_lower = source.lower()
     source_names = _index_source_names(articles)
 
@@ -358,7 +383,7 @@ def _grounded(
     The verbatim rule stays unconditional and must come first: sources containing both
     "Bronny James" and "LeBron James" would otherwise refute each other.
     """
-    if _same_apostrophes(name).lower() in source_lower:
+    if _comparable(name).lower() in source_lower:
         return True
 
     words = _name_words(name)
@@ -394,7 +419,7 @@ def _name_words(name: str) -> list[str]:
     """
     return [
         cleaned
-        for word in _same_apostrophes(name).split()
+        for word in _comparable(name).split()
         if (cleaned := _depossess(word.lower()))
     ]
 

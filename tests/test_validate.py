@@ -692,6 +692,63 @@ def test_an_apostrophe_shape_does_not_decide_whether_a_name_exists(
     assert result.is_safe, f"wrongly flagged: {result.invented_names}"
 
 
+@pytest.mark.parametrize(
+    ("source_spelling", "summary_spelling"),
+    [
+        # `[VERIFIED]` Every pair below appears in BOTH spellings across 329 live and fixture
+        # articles — the sources disagree with themselves, so neither side can be called the
+        # model's error. Counts from that corpus: Schröder 9 accented against 17 plain.
+        ("Luka Dončić", "Luka Doncic"),
+        ("Luka Doncic", "Luka Dončić"),
+        ("Nikola Jokić", "Nikola Jokic"),
+        ("Nikola Jokic", "Nikola Jokić"),
+        ("Dennis Schröder", "Dennis Schroder"),
+        ("Dennis Schroder", "Dennis Schröder"),
+        # Not yet seen in both forms, but the same mechanism and the same league.
+        ("Kristaps Porziņģis", "Kristaps Porzingis"),
+        ("Alperen Şengün", "Alperen Sengun"),
+        ("Nikola Vučević", "Nikola Vucevic"),
+        ("Bogdan Bogdanović", "Bogdan Bogdanovic"),
+    ],
+)
+def test_a_diacritic_does_not_decide_whether_a_name_exists(
+    make_article: ArticleFactory, source_spelling: str, summary_spelling: str
+) -> None:
+    """`[VERIFIED]` 2026-08-17 — the same defect as the apostrophe, measured across the league.
+
+    Three of the six accented names in the corpus **also appear unaccented in it**. Yahoo
+    prints `Dennis Schröder` and `Dennis Schroder` in different headlines of the *same story*,
+    so this cannot be corrected at the prompt: the sources disagree with themselves, and
+    whichever spelling the model copies, the other one is what it gets compared against.
+
+    Both directions are asserted, because either side may carry either spelling.
+    """
+    articles = [
+        make_article(
+            f"{source_spelling} dominates the fourth quarter",
+            summary=f"A statement night from {source_spelling}.",
+        )
+    ]
+
+    result = validate_summary(f"{summary_spelling} dominated late.", articles)
+
+    assert result.is_safe, f"wrongly flagged: {result.invented_names}"
+
+
+def test_folding_a_diacritic_does_not_ground_a_different_player(
+    make_article: ArticleFactory,
+) -> None:
+    """Folding must merge spellings of one name, never two different names.
+
+    `[INFERRED]` The risk of any normalisation is over-merging. `Jokić` and `Jokic` are one
+    person; `Jokić` and `Dončić` are not, and stripping accents must not blur them.
+    """
+    articles = [make_article("Nikola Jokić posts a triple-double")]
+
+    assert validate_summary("Nikola Jokic starred.", articles).is_safe
+    assert not validate_summary("Luka Doncic starred.", articles).is_safe
+
+
 def test_folding_apostrophes_does_not_ground_an_absent_name(
     make_article: ArticleFactory,
 ) -> None:
