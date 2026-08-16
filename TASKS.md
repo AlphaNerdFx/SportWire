@@ -1433,6 +1433,44 @@ what each turned into, since several changed shape on contact with real data.
   building anything — `[INFERRED]` a rule mapping abbreviations to expansions is a lookup
   table, which is the shape this project keeps deciding it does not want.
 
+- [x] **P22. One name spelled two ways is read as two names.** Found 2026-08-17 00:10 by an
+  autonomous check watching the pipeline log, then generalised on the operator's instruction
+  to anticipate the whole class rather than fix instances. **Fixed** in `4e98cc1` and
+  `2ba3dd7`.
+  `[VERIFIED]` The trigger: the 00:00 run rejected `Mike D'Antoni` on all three attempts
+  while lead 3 of its own batch was Yahoo's *"Honoring new Hall of Fame inductee, former
+  Rockets coach Mike D’Antoni"*. U+2019 in the feed against U+0027 from the model, compared
+  as literal strings. **Both shapes render identically**, so this bug is invisible to reading
+  output — the technique that found the other eleven.
+  `[VERIFIED]` Scoped by scanning 329 live and fixture articles for every non-ASCII character
+  actually present: U+2019 (137), curly double quotes (109), em dash (15), `ö`/`ć`/`é`/`č`
+  (24 combined), ellipsis (7), en dash (1).
+  `[VERIFIED]` **Three of the six accented names also appear unaccented in the same corpus** —
+  `Dončić`/`Doncic`, `Jokić`/`Jokic`, `Schröder`/`Schroder` (9 accented against 17 plain).
+  Yahoo prints both spellings of one player in different headlines of the **same story**, so
+  this is not correctable at the prompt: the sources disagree with themselves.
+  `[VERIFIED]` Folding is for comparison only; extraction still reads real Unicode, per P13.
+  No detection lost: fixture teams falsely refused 0/11, curated blends 7/7, known
+  fabrications `Joe Dumars` and `Ayo Dosunmu` both still caught. Mutation-tested two ways.
+
+- [ ] **P23. The model uses generic NBA vocabulary the sources never write.** Found
+  2026-08-17 in the same run. **Open — and it is not obviously a defect.**
+  `[VERIFIED]` That run's other two rejections were `Eastern Conference` and `Western
+  Conference`, and both are **correct**: neither phrase appears in any of the 8 leads, which
+  were reconstructed exactly (the replay produced 8 leads, matching the log's "8 articles").
+  `[INFERRED]` These are not fabrications in any harmful sense — they are structural terms of
+  the sport, like naming a conference a team plays in. But the validator cannot tell them
+  from an invented person, and one of them fails a whole brief.
+  `[UNKNOWN]` How often this costs a run. Two of the five most recent fallbacks involved it.
+  Options, none picked and none measured:
+  - a. **Leave it.** The prompt already says to state only what the notes say; a model adding
+    conference names is doing more than asked. Cheapest, and keeps the check strict.
+  - b. **Strengthen the prompt** against structural commentary. `[VERIFIED]` A prompt change
+    of this shape was measured for names and moved nothing (3/6 vs 3/6), so expect little.
+  - c. **Treat a fixed set of competition terms as always-grounded.** Small and effective,
+    but it is a hardcoded vocabulary list — the shape rejected for P13 and avoided for P20 —
+    and every entry is a permanent hole in the check.
+
 ---
 
 ## LOW — deferred; each requires a trigger condition
