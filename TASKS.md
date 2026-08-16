@@ -565,8 +565,26 @@ what each turned into, since several changed shape on contact with real data.
   batch after appearing on 2026-08-16 00:00, so the model may be completing a pattern from a
   topic rather than from its notes. Resolve by capturing the batch, not by reasoning.
 
-  `[VERIFIED]` **The schedule is irregular**: no 08:00 run exists on 2026-08-16, between the
-  00:00 and 16:00 runs. That compounds the open `[UNKNOWN]` about what schedules these at all.
+  ~~`[VERIFIED]` **The schedule is irregular**: no 08:00 run exists on 2026-08-16, between the
+  00:00 and 16:00 runs. That compounds the open `[UNKNOWN]` about what schedules these at
+  all.~~ **Half right, and the open question is now closed.** `[VERIFIED]` 2026-08-16 via
+  `crontab -l`: there is an **active** entry, and it is correct —
+
+  ```
+  0 */8 * * * cd "/mnt/c/DSC/Career/Projects/SportWire" && ./.venv/bin/python main.py >> ".../logs/sportwire.log" 2>&1
+  ```
+
+  A WSL path, not the Windows one; not commented out; appending to the log the runs appear in.
+  `0 */8` fires at 00:00, 08:00 and 16:00, which matches every dated run exactly.
+  **`HANDOVER.md` is wrong on this point** — it records the line as commented out with a
+  Windows path and lists the scheduler as `[UNKNOWN]`. That document lives on the
+  `worktree-handover-2026-08-15` branch and has not been merged; the operator fixed cron
+  during the 2026-08-15 session, so the finding was already stale when it was written.
+
+  `[INFERRED]` The missing 08:00 run on 2026-08-16 is therefore not a mystery: cron does not
+  fire while the machine is asleep, which this file already noted as the reason the log could
+  not be segmented by time. **The soak will have gaps, and a rate must be counted per run
+  rather than assumed from elapsed days.**
 
   **2026-08-16: first controlled measurement, and it changes what P4 is about.**
   `[VERIFIED]` The three delivered runs either side of it: 08:00 accepted on attempt 1 of 3;
