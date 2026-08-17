@@ -30,7 +30,11 @@ from collections.abc import Callable
 import pytest
 
 from models.schemas import NewsArticle
-from processing.validate import _PROPER_NAME, validate_summary
+from processing.validate import (
+    _PROPER_NAME,
+    unsupported_sentences,
+    validate_summary,
+)
 
 ArticleFactory = Callable[..., NewsArticle]
 
@@ -1347,3 +1351,113 @@ def test_a_label_is_dropped_but_the_person_after_it_is_still_checked(
 
     assert not result.is_safe
     assert "Joe Dumars" in " ".join(result.invented_names)
+
+
+# --- claims joining entities that never met -------------------------------------------------
+
+
+def _lillard_batch(make_article: ArticleFactory) -> list[NewsArticle]:
+    """Four real articles from the 2026-08-18 00:00 batch, reconstructed from the database."""
+    return [
+        make_article(
+            "Blazers offseason recap and early season preview: Lillard is back but "
+            "questions remain",
+            summary=(
+                "With noise outside the hardwood growing in Portland, how will the Blazers "
+                "respond? We're looking at the offseason and previewing the 2026-27 season."
+            ),
+        ),
+        make_article("Sources: Watford, Pels agree to 1-yr, $2.9M deal"),
+        make_article("Former LSU Forward Trendon Watford signs with the Pelicans"),
+        make_article("Report: Cavaliers actively searching to move key contributor"),
+    ]
+
+
+def test_a_claim_joining_two_entities_that_never_met_is_flagged(
+    make_article: ArticleFactory,
+) -> None:
+    """`[VERIFIED]` 2026-08-18: this sentence reached the operator's phone and is false.
+
+    The batch's only Lillard article says he is back with Portland. The brief moved him to New
+    Orleans and invented a trade to explain it. Both `Pelicans` and `Damian Lillard` are real
+    and both are in the batch, so grounding passes them; only the relationship is invented.
+    TASKS.md P5.
+    """
+    articles = _lillard_batch(make_article)
+
+    flagged = unsupported_sentences(
+        "The Pelicans, who are welcoming back star point guard Damian Lillard following "
+        "his trade from Portland, are shaping up as a team.",
+        articles,
+    )
+
+    assert len(flagged) == 1, flagged
+    assert "Damian Lillard" in flagged[0]
+
+
+def test_flagging_a_claim_does_not_reject_the_summary(
+    make_article: ArticleFactory,
+) -> None:
+    """The operator's choice on 2026-08-18: mark these, do not reject them.
+
+    `[VERIFIED]` Rejecting the sentence would reject the summary, and the 00:00 run would then
+    have delivered a headline list on all three attempts. So this must never touch `is_safe`.
+    """
+    articles = _lillard_batch(make_article)
+    summary = "The Pelicans are welcoming back Damian Lillard following his trade from Portland."
+
+    assert unsupported_sentences(summary, articles)
+    assert validate_summary(summary, articles).is_safe
+
+
+def test_a_true_claim_about_entities_sharing_an_article_is_not_flagged(
+    make_article: ArticleFactory,
+) -> None:
+    """The expensive direction. `[VERIFIED]` This sentence is true and was flagged twice while
+    the check was being built.
+
+    First because source entities were read with grounding's two-word rule, so the lone
+    capitalised `Pelicans` in "signs with the Pelicans" contributed nothing. Then because the
+    opener "In NBA news" extracts as `In NBA`, keying on `nba`, which shares no article with
+    `watford`. Both are fixed, and both were found by running the real string rather than a
+    tidied one.
+    """
+    articles = _lillard_batch(make_article)
+
+    flagged = unsupported_sentences(
+        "In NBA news, Trendon Watford has signed a one-year, $2.9 million deal with the "
+        "New Orleans Pelicans, marking his return to Louisiana.",
+        articles,
+    )
+
+    assert flagged == [], f"wrongly flagged: {flagged}"
+
+
+def test_a_sentence_naming_one_entity_is_never_flagged(
+    make_article: ArticleFactory,
+) -> None:
+    """A relationship needs two parties. One entity cannot contradict anything."""
+    articles = _lillard_batch(make_article)
+
+    assert (
+        unsupported_sentences(
+            "The Portland Trail Blazers face uncertainty this season.", articles
+        )
+        == []
+    )
+
+
+def test_competition_vocabulary_is_not_an_entity_for_this_check(
+    make_article: ArticleFactory,
+) -> None:
+    """`[VERIFIED]` `nba` co-occurs with almost nothing, so treating it as an entity flags
+    everything. The sport's own vocabulary cannot hold a relationship.
+    """
+    articles = _lillard_batch(make_article)
+
+    assert (
+        unsupported_sentences(
+            "The Western Conference saw Trendon Watford join the Pelicans.", articles
+        )
+        == []
+    )
