@@ -550,6 +550,36 @@ what each turned into, since several changed shape on contact with real data.
 
   **2 of 5 delivered prose — 40% — and the last three consecutive runs all fell back.**
 
+  **2026-08-17 — the operator asked to "revert back to what worked". There is nothing to
+  revert to.** `[VERIFIED]` Every run in the log, with the names it was rejected for:
+
+  | run | new articles | outcome | rejected for |
+  |---|---|---|---|
+  | 2026-08-14 16:00 | 81 | prose | — |
+  | 2026-08-15 00:00 | 29 | prose | — |
+  | 2026-08-15 08:00 | 48 | prose | — |
+  | 2026-08-15 16:00 | 19 | **fallback** | Warriors, Lakers, `Hollywood Ending. Meanwhile` → P20 + sentence break |
+  | 2026-08-16 00:00 | 17 | **fallback** | Kobe Bryant, Quentin Grimes |
+  | 2026-08-16 16:00 | 46 | **fallback** | Klay Thompson, Kawhi Leonard |
+  | 2026-08-17 00:00 | 12 | **fallback** | `Mike D'Antoni` → P22; Eastern/Western Conference → P23 |
+  | 2026-08-17 08:00 | 23 | **fallback** | LeBron James, **Karl-Anthony Towns** |
+
+  `[VERIFIED]` **Each fallback has a different cause, and no cause recurs once fixed.**
+  `Golden State Warriors` and `Los Angeles Lakers` appeared on 2026-08-15 16:00 and never
+  again after P20. `Mike D'Antoni` appeared on 2026-08-17 00:00 and never again after P22.
+  There is no single commit whose reversion restores the prose runs; reverting would restore
+  four already-retired bugs.
+
+  `[VERIFIED]` **The 08:00 fallback was the check working, not failing.** `Karl-Anthony
+  Towns` appears **0 times** across all 127 live articles captured that day — as do `Towns`
+  and `NBA TV`. The model invented a player on all three attempts.
+
+  `[INFERRED]` The one variable that tracks the outcome is volume: the prose runs averaged
+  **49** new articles, the five fallback runs **23**. Mid-August feeds are quiet, so each
+  batch is thin and the model pads from its training prior — which is exactly the ADR-012
+  failure. `[UNKNOWN]` Whether this is causal. It is a correlation over 8 runs with two
+  exceptions in it (29 → prose, 46 → fallback), and it is the thing P4's soak must settle.
+
   `[VERIFIED]` **This retracts the "ordinary bad luck" reading recorded above.** That reading
   assumed roughly 87% end-to-end; three consecutive failures at that rate has a 0.2% chance.
   Whatever the real rate is, it is not 87%.
@@ -1453,8 +1483,10 @@ what each turned into, since several changed shape on contact with real data.
   No detection lost: fixture teams falsely refused 0/11, curated blends 7/7, known
   fabrications `Joe Dumars` and `Ayo Dosunmu` both still caught. Mutation-tested two ways.
 
-- [ ] **P23. The model uses generic NBA vocabulary the sources never write.** Found
-  2026-08-17 in the same run. **Open — and it is not obviously a defect.**
+- [x] **P23. The model uses generic NBA vocabulary the sources never write.** Found
+  2026-08-17 in the same run. ~~**Open — and it is not obviously a defect.**~~
+  **Closed 2026-08-17 by option (c), on the operator's explicit authorisation:** *"If
+  Hard-Coded Vocabulary list is what it takes than go for it."* Commits `ecef1e9`, `6d0c57a`.
   `[VERIFIED]` That run's other two rejections were `Eastern Conference` and `Western
   Conference`, and both are **correct**: neither phrase appears in any of the 8 leads, which
   were reconstructed exactly (the replay produced 8 leads, matching the log's "8 articles").
@@ -1469,7 +1501,59 @@ what each turned into, since several changed shape on contact with real data.
     of this shape was measured for names and moved nothing (3/6 vs 3/6), so expect little.
   - c. **Treat a fixed set of competition terms as always-grounded.** Small and effective,
     but it is a hardcoded vocabulary list — the shape rejected for P13 and avoided for P20 —
-    and every entry is a permanent hole in the check.
+    and every entry is a permanent hole in the check. **← chosen.**
+
+  **Why the corpus could not decide it instead.** `[VERIFIED]` P20's `_ordinary_words` learns
+  from words the sources write in *lower* case. `Eastern Conference` is written capitalised or
+  not at all, so no amount of corpus evidence reaches it. This is the one place a list is not
+  laziness.
+
+  **What bounds the hole: the all-words rule.** Every word of a name must be vocabulary, so a
+  single city, surname or nickname sends it back through grounding.
+  `[VERIFIED]` Measured 2026-08-17 against 31 team names and 311 distinct proper names in a
+  203-article live-plus-fixture corpus:
+
+  | | result |
+  |---|---|
+  | teams exempted without grounding | **0 of 31** |
+  | people exempted | **0** |
+  | source names exempted | 5 — `NBA Finals`, `NBA Draft`, `Eastern Conference`, `Eastern Conference Finals`, `WNBA All-Star Weekend` |
+  | historical rejections acquitted | **2 of 55** — exactly `Eastern Conference` and `Western Conference` |
+  | `Joe Dumars`, `Ayo Dosunmu`, `LeBron Tatum`, `Jayson Brown` | all still caught |
+
+  **What may enter the list later**, recorded so it does not grow by habit: a formal name of
+  an NBA structure, competition or honour, capitalised when written, that cannot be part of a
+  person's or a team's name. Re-run the measurement before adding one.
+
+  `[VERIFIED]` **What this gives up.** Where the sources name only the Western Conference and
+  the model writes `Eastern Conference`, refutation *would* have refused it; putting the
+  exemption before `_contradicted` gives that up. Two reasons it is there anyway. First, no
+  such case appears in the log — the observed rejections had **neither** conference in their
+  sources. Second, the alternative ordering was measured to break a real case: the live corpus
+  writes `Eastern Conference Finals`, which refutes a summary's `NBA Finals` under P20's
+  length rule. `[INFERRED]` A wrong conference is a *claim* error, and P5 already records that
+  this module grounds entities rather than claims.
+
+  `[VERIFIED]` Mutation-tested three ways, each verified to have applied by printing the
+  resulting vocabulary size: emptying the list (size 0) → 12 failures; `all` → `any` (size 41)
+  → 1 failure; dropping `"conference"` (size 40) → 4 failures. The `all` → `any` mutant
+  **survived the first campaign** and its test is `6d0c57a`; see that commit for why the
+  obvious test did not exercise the rule.
+
+- [ ] **P24. Grounding matches substrings, so one name can ground another.** Found
+  2026-08-17 while writing P23's team-safety test. **Open, not yet costing anything.**
+  `[VERIFIED]` `_grounded` ends in `words[-1] in normalised_source`, a plain substring test.
+  Against the source `Sources: Cavs deal Schroder for Hornets' Mann`, the summary name
+  `Brooklyn Nets` is **grounded** — because `"nets"` occurs inside `"Hornets"`. The test that
+  found it now uses a headline containing no team nickname as a substring, so it tests P23
+  rather than this.
+  `[INFERRED]` The direction of the error is the expensive one for correctness and the cheap
+  one for the operator: it makes the check too *lenient*, so it can miss a fabrication but
+  cannot cost a brief. That is why it is not urgent.
+  `[UNKNOWN]` How often it fires on real data, and whether word-boundary matching would
+  reintroduce false accusations that possessives and plurals currently slide past. Resolve by
+  measuring both readings across the fixtures before changing anything — the same method that
+  settled P20.
 
 ---
 
