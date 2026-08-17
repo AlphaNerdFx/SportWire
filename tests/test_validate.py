@@ -1310,3 +1310,40 @@ def test_indexing_both_ends_still_acquits_two_real_players(
     assert validate_summary("Jaylen Brown spoke about it.", articles).is_safe
     assert validate_summary("Jayson Tatum spoke about it.", articles).is_safe
     assert not validate_summary("Jayson Brown spoke about it.", articles).is_safe
+
+
+def test_a_headline_label_does_not_refute_the_team_beside_it(
+    make_article: ArticleFactory,
+) -> None:
+    """`[VERIFIED]` 2026-08-17: the third time this bug shipped, and the first found by a dry run.
+
+    With P25 and P26 both in place, a full dry run still rejected `Philadelphia Sixers` on two
+    attempts. The batch carried the real headline below, which was read as the name
+    `{report, sixers}`. That is two words sharing a last word with the team and disagreeing
+    about the other, so the refutation rule treated a headline's label as a rival entity.
+
+    P20 was supposed to cover this. Its fix does not reach here, because `_ordinary_words` only
+    learns that a word is vocabulary when the batch writes it in lower case, and a 12-story
+    batch never wrote "report". `[VERIFIED]` Confirmed by adding one article containing "per
+    report" to the same batch, after which the team grounded. A colon is now a separator.
+    """
+    articles = [
+        make_article("Report: Sixers hire Tommy Balcetis to front office"),
+        make_article("Wolves to retire Garnett's 21 after Celtics game"),
+    ]
+
+    result = validate_summary("Philadelphia Sixers hired him this week.", articles)
+
+    assert result.is_safe, f"wrongly flagged: {result.invented_names}"
+
+
+def test_a_label_is_dropped_but_the_person_after_it_is_still_checked(
+    make_article: ArticleFactory,
+) -> None:
+    """Ending the run at a colon must not let the name after it through unexamined."""
+    articles = [make_article("Wolves to retire Garnett's 21 after Celtics game")]
+
+    result = validate_summary("Sources: Joe Dumars is leading the talks.", articles)
+
+    assert not result.is_safe
+    assert "Joe Dumars" in " ".join(result.invented_names)
