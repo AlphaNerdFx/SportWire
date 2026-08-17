@@ -315,11 +315,46 @@ print(scoreboard.ScoreBoard().get_dict())
   superseded §6 contract. The rule survives the reversal, the attribution does not.
 - **Docstrings:** one line stating *intent* on every public function. Longer only where the
   *why* is non-obvious.
-- **Commits:** `<type>: <imperative summary>` — `feat:`, `fix:`, `test:`, `docs:`, `refactor:`,
-  `chore:`. One logical change per commit.
+- **Commits:** `<type>: <imperative summary>`, one of `feat:`, `fix:`, `test:`, `docs:`,
+  `refactor:`, `chore:`. Two rules the operator set on 2026-08-17, both hard:
+  - **256 characters maximum for the whole message**, subject and body together. Count it
+    before committing. The long explanations this repo was writing belong in `TASKS.md`, not
+    in git history that nobody reads twice.
+  - **One commit per file.** A change touching three files is three commits. Do not bundle a
+    code change with its test, or either with its documentation. Where that forces an order,
+    commit the code first so the tree stays runnable (§9 branches).
+  - This does not weaken §0. Claims inside a commit still carry `[VERIFIED]`, `[INFERRED]` or
+    `[UNKNOWN]`, but the measurement itself now lives in `TASKS.md` and the commit points at
+    the item. `[INFERRED]` A tag with no room for its evidence is worse than a short message
+    that says where the evidence is, so name the task id when there is one.
+- **Tags:** `git tag -a vX.Y.Z -F <file>`, and the message becomes the release notes.
+  **Do not start the notes with the version or a headline.** `[VERIFIED]` 2026-08-17:
+  `release.yml` already passes `--title "$GITHUB_REF_NAME"`, so the GitHub title is correct on
+  its own, and `gh release view v0.1.2` confirms it reads `v0.1.2`. What made the release page
+  look wrong was the first line of the notes body, which repeated the version and a headline
+  after a dash. Open with a plain sentence about what changed instead.
 - **Branches:** `main` stays runnable at all times. Work on `slice/<name>`.
 - **Documentation:** ADRs in `docs/decisions/`. `SESSION.md` updated at the end of every
   working session. `TASKS.md` updated as tasks complete, with proof.
+
+### How to write, everywhere
+
+Set by the operator on 2026-08-17. This covers commit messages, tag notes, documents, code
+comments, docstrings and replies in conversation. All of it.
+
+- **Plain words over jargon.** Say the thing, not the term for the thing. Where a term is
+  genuinely the clearest option, say what it means the first time it appears, then use it.
+- **No em dashes. None.** Use a comma, a full stop, brackets, or restructure the sentence.
+  This applies even where one would be grammatically neat.
+- **Bold almost nothing.** Reserve it for a line a reader must not miss, and expect that to be
+  rare. `[INFERRED]` The existing documents in this repo bold so heavily that the emphasis
+  carries no information, which is the problem this rule fixes.
+- **Sound like a person.** Write to a colleague who knows the project, not to a specification.
+  Short sentences are fine. Hedging every claim is not, that is what the §0 tags are for.
+
+`[UNKNOWN]` Whether the older documents get rewritten to match. They were written under the
+previous style and are heavy with dashes and bold. Nothing here requires a sweep, so treat the
+rule as binding on new text and on any passage being edited anyway.
 
 ---
 
