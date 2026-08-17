@@ -42,6 +42,7 @@ from processing.newsworthy import drop_non_news
 from processing.openrouter import OpenRouterSummarizer
 from processing.priority import sort_by_priority
 from processing.summarize import OllamaSummarizer, Summarizer
+from processing.validate import unsupported_sentences
 from storage.db import SeenStore
 
 logger = logging.getLogger("sportwire")
@@ -158,6 +159,7 @@ def main(argv: list[str] | None = None) -> int:
         # The summarizer validates its own output and returns None when nothing passes, so
         # a fabrication can never reach a phone: the worst case is the headline list.
         news_summary: str | None = None
+        unsupported_claims: list[str] = []
         if story_groups and not args.no_summary:
             # Only what the brief would actually show. `[VERIFIED]` 2026-08-08: summarising
             # everything fetched meant 16 chunks and 17 model calls, exceeding the timeout
@@ -185,6 +187,24 @@ def main(argv: list[str] | None = None) -> int:
 
             if news_summary is None:
                 logger.info("using the headline list")
+            else:
+                # Claims the sources cannot have reported, marked rather than removed.
+                #
+                # `[VERIFIED]` 2026-08-18: the 00:00 brief said Damian Lillard had been traded
+                # from Portland to the Pelicans. He had not; the batch says he is back with
+                # Portland. Every name in the sentence is real and in the batch, so the
+                # summarizer's own validation grounds them all and the brief was delivered.
+                #
+                # This runs *after* acceptance and never changes it. `[VERIFIED]` The operator
+                # chose marking over rejecting, because rejecting that sentence would have
+                # rejected all three attempts and delivered a headline list. TASKS.md P5.
+                unsupported_claims = unsupported_sentences(news_summary, to_summarise)
+                if unsupported_claims:
+                    logger.warning(
+                        "%d sentence(s) name entities that never share a source article: %s",
+                        len(unsupported_claims),
+                        " | ".join(unsupported_claims),
+                    )
 
         # --- format ------------------------------------------------------------
         # Head-to-head comes from what this instance has already recorded, not the API.
@@ -218,6 +238,7 @@ def main(argv: list[str] | None = None) -> int:
             story_groups,
             news_summary=news_summary,
             series=series,
+            unsupported_claims=unsupported_claims,
         )
 
         if not messages:
