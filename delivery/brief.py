@@ -76,6 +76,7 @@ def build_messages(
     max_articles: int = DEFAULT_MAX_ARTICLES,
     series: dict[int, SeriesContext] | None = None,
     unsupported_claims: list[str] | None = None,
+    failed_sources: list[str] | None = None,
 ) -> list[str]:
     """Render the brief as an ordered list of message bodies, omitting empty sections.
 
@@ -106,7 +107,9 @@ def build_messages(
     if article_groups:
         if news_summary:
             messages.append(
-                _render_news_summary(news_summary, unsupported_claims or [])
+                _render_news_summary(
+                    news_summary, unsupported_claims or [], failed_sources or []
+                )
             )
         else:
             # Truncation happens here, in presentation, not in dedup: the dropped articles
@@ -230,7 +233,9 @@ def _describe(highlight: GameHighlight) -> str:
 _UNSUPPORTED_MARK = "⚠️"
 
 
-def _render_news_summary(summary: str, unsupported: list[str]) -> str:
+def _render_news_summary(
+    summary: str, unsupported: list[str], failed_sources: list[str] | None = None
+) -> str:
     """Message 3, written form: one paragraph instead of a headline list.
 
     Flagged sentences keep their place in the prose and gain a mark, so the paragraph still
@@ -248,6 +253,12 @@ def _render_news_summary(summary: str, unsupported: list[str]) -> str:
             f"\n\n{_UNSUPPORTED_MARK} these names never appear in the same source article, "
             "so the link between them is not something the sources reported."
         )
+    # A source that failed is named, because otherwise the brief is quietly shorter and looks
+    # complete. `[VERIFIED]` 2026-08-18: Reddit returned HTTP 500 for a whole run, costing 25
+    # of 87 articles, and the only trace was a log line the operator would never see.
+    if failed_sources:
+        missing = ", ".join(failed_sources)
+        body += f"\n\nMissing this run: {missing}. Those stories are not in the brief."
     return body
 
 
