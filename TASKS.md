@@ -790,6 +790,49 @@ what each turned into, since several changed shape on contact with real data.
   `[INFERRED]` (c) is the one to cost first — it is the only option that is mechanical,
   testable offline against the two captured briefs, and consistent with this project's
   record that bounding structure beats classifying meaning (`SESSION.md` §11).
+
+  **2026-08-18: a third delivered instance, reported by the operator, and (c) is now costed.**
+
+  `[VERIFIED]` The 00:00 brief reached the phone saying *"The Pelicans, who are welcoming back
+  star point guard Damian Lillard following his trade from Portland"*. There was no such trade.
+  The batch's only Lillard article is *"Blazers offseason recap and early season preview:
+  Lillard is back but questions remain"*, whose body reads *"With noise outside the hardwood
+  growing in Portland, how will the Blazers respond?"*. Lillard is back with Portland. The
+  model moved him to New Orleans and invented a trade.
+
+  `[VERIFIED]` Counted in that batch: `lillard` 1, `pelicans` 3, `portland` 1, `new orleans` 0,
+  `trade` 0, `damian` 0. The validator extracted exactly two names from the sentence,
+  `Pelicans` and `Damian Lillard`, and grounded both. Both are real and both are present. Only
+  the relationship is invented, which is this task restated.
+
+  `[VERIFIED]` **Today's P25, P26 and P27 changes did not cause this.** The same sentence passes
+  under the 2026-08-14 rules, tested by restoring last-word-only grounding, the old index, no
+  alias table and no colon separator. It is a pre-existing gap, not something the loosening let
+  through.
+
+  `[VERIFIED]` **Option (c) works, with one correction to how it must be built.** Keying on
+  every word pairwise flags true sentences, because `New Orleans` and `Portland Trail Blazers`
+  are expansions the sources never write in full. Keying **one word per entity, its last word**,
+  and reading source entities with a one-word scanner so a bare `Pelicans` counts:
+
+  | | result |
+  |---|---|
+  | the false Lillard sentence | **flagged** |
+  | four true sentences from the same brief | all pass |
+  | sentences flagged in a separately accepted 11-sentence brief | **0 of 11** |
+
+  `[UNKNOWN]` The real false-accusation rate. The 0 of 11 used a 103-article superset as the
+  source rather than that brief's true 12-story batch, and a superset makes co-occurrence easier,
+  so it understates flagging. Settle it by capturing batch and accepted summary together over
+  several runs before shipping.
+
+  `[VERIFIED]` **The decision this forces, stated plainly because it is a trade and not a fix.**
+  Option (c) rejects the sentence, so it rejects the whole summary, so the 00:00 run would have
+  fallen back to the headline list on all three attempts. The operator asked on 2026-08-17 not
+  to see the headline format at all. Those two wants are in direct opposition here: entity-only
+  checking delivers prose more often and lets a false relationship through occasionally, while
+  pair checking catches the false relationship and falls back more often. `[INFERRED]` No
+  amount of measurement dissolves that; it is a choice about which error is worse.
   - Proof:
 
 - [ ] **P6. `_drop_leading_stopword` no longer affects any verdict.** Found 2026-08-13 while
