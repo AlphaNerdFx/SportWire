@@ -92,6 +92,100 @@ def _comparable(text: str) -> str:
     return "".join(c for c in stripped if not unicodedata.combining(c))
 
 
+# The competition's own vocabulary: structures, rounds and honours that exist whether or not
+# any outlet mentioned them today. **This is a hardcoded list, which this repository has twice
+# refused to write** — rejected for P13, avoided for P20 in favour of the corpus-derived
+# `_ordinary_words`. It is written here deliberately and with the operator's approval, because
+# the corpus cannot derive it: `_ordinary_words` learns from words the sources write in *lower*
+# case, and "Eastern Conference" is capitalised everywhere or absent entirely.
+#
+# `[VERIFIED]` 2026-08-17, from `logs/sportwire.log`: of 55 distinct names ever rejected as
+# invented, exactly two are of this class — `Eastern Conference` (3 rejections) and
+# `Western Conference` (3). Both were **correct rejections** by the letter of the rule: the
+# replayed batch's 8 leads contain neither phrase. They are not fabrications in any harmful
+# sense, and each one cost a whole brief its prose.
+#
+# **What may enter this list**, so it does not grow by habit: a formal name of an NBA
+# structure, competition or honour, which is capitalised when written and cannot be part of a
+# person's or a team's name. `[VERIFIED]` Measured against the 31 NBA team names and 311
+# distinct proper names in a 203-article live-plus-fixture corpus, the rule below acquits
+# **0 teams, 0 people**, and 5 source names — `NBA Finals`, `NBA Draft`, `Eastern Conference`,
+# `Eastern Conference Finals`, `WNBA All-Star Weekend`. Re-run
+# `scratchpad/p23_vocab.py`-style measurement before adding an entry.
+_COMPETITION_VOCABULARY = frozenset(
+    {
+        # league bodies
+        "nba",
+        "wnba",
+        "nbpa",
+        "league",
+        # how the league is divided
+        "conference",
+        "conferences",
+        "division",
+        "divisions",
+        "eastern",
+        "western",
+        "east",
+        "west",
+        "atlantic",
+        "central",
+        "southeast",
+        "northwest",
+        "pacific",
+        "southwest",
+        # the competition
+        "playoff",
+        "playoffs",
+        "postseason",
+        "finals",
+        "semifinals",
+        "quarterfinals",
+        "play-in",
+        "in-season",
+        "tournament",
+        "cup",
+        # the calendar
+        "summer",
+        "draft",
+        "lottery",
+        "combine",
+        "weekend",
+        # honours
+        "all-star",
+        "all-nba",
+        "all-defensive",
+        "all-rookie",
+        "mvp",
+        "rookie",
+        "team",
+        "game",
+    }
+)
+
+
+def _is_competition_term(words: list[str]) -> bool:
+    """Whether a name is nothing but the sport's own structural vocabulary.
+
+    **Every** word must be in the list, and that is what bounds the damage. A single word
+    from outside it — a city, a surname, a nickname — sends the name back through grounding,
+    so `Eastern Conference` is acquitted while `Eastern Conference Lakers` is not. The hole
+    this opens is exactly the set of names built only from the words above, and none of them
+    can name a person or a team.
+
+    `[UNKNOWN]` What it now misses. `[VERIFIED]` One case, measured 2026-08-17: where the
+    sources name only the Western Conference and the model writes `Eastern Conference`, the
+    refutation rule *would* have refused it, and placing this check before `_contradicted`
+    gives that up. Two reasons it is placed here anyway. First, no such case appears in the
+    log — the observed rejections had **neither** conference in their sources. Second, putting
+    it after refutation was measured to leave a real case broken: the live corpus writes
+    `Eastern Conference Finals`, which refutes a summary's `NBA Finals` under the length rule.
+    `[INFERRED]` A wrong conference is also a *claim* error, and P5 already records that this
+    module grounds entities rather than claims — so it was never this check's job.
+    """
+    return bool(words) and all(word in _COMPETITION_VOCABULARY for word in words)
+
+
 def _is_name_word(word: str) -> bool:
     """Whether a word could be part of a name: a capital, then letters.
 
@@ -382,6 +476,10 @@ def _grounded(
 
     The verbatim rule stays unconditional and must come first: sources containing both
     "Bronny James" and "LeBron James" would otherwise refute each other.
+
+    One name never reaches any of this: the sport's own structural vocabulary, which needs no
+    source because it is not a claim about anyone. See `_is_competition_term` for what that
+    covers and what it costs (TASKS.md P23).
     """
     if _comparable(name).lower() in source_lower:
         return True
@@ -389,6 +487,9 @@ def _grounded(
     words = _name_words(name)
     if not words:
         return False
+
+    if _is_competition_term(words):
+        return True
 
     if _contradicted(words, source_names):
         return False

@@ -979,3 +979,127 @@ def test_false_relationship_between_grounded_names_is_caught(
     assert not result.is_safe, (
         "a sentence asserting a false relationship between grounded names was accepted"
     )
+
+
+# --- the sport's own vocabulary is not a claim about anyone --------------------------------
+
+
+def test_a_conference_the_sources_never_mention_is_not_invented(
+    make_article: ArticleFactory,
+) -> None:
+    """`[VERIFIED]` 2026-08-17 00:00 — this exact batch cost a brief its prose.
+
+    All three attempts were rejected for `Eastern Conference` and `Western Conference`, and
+    by the letter of the rule the rejections were right: the replayed batch's 8 leads contain
+    neither phrase. The headlines below are four of those real leads.
+
+    They are also not fabrications in any sense that matters. Naming the half of the league a
+    team plays in is not a claim about a person, and there is no `Eastern Conference` to be
+    wrong about. `TASKS.md` P23.
+    """
+    articles = [
+        make_article("NBA HOF week: Mike D'Antoni dishes on Nash, Kobe and Linsanity"),
+        make_article("Wolves to retire Garnett's 21 after Celtics game"),
+        make_article("Ex-Knick Oakley's assault case vs. MSG dismissed"),
+        make_article("Sources: Cavs deal Schroder for Hornets' Mann"),
+    ]
+
+    result = validate_summary(
+        "The Wolves will retire Kevin Garnett's number. "
+        "Elsewhere in the Eastern Conference, the Cavs moved on from Dennis Schroder.",
+        articles,
+    )
+
+    assert result.is_safe, f"wrongly flagged: {result.invented_names}"
+
+
+@pytest.mark.parametrize(
+    "term",
+    [
+        # `[VERIFIED]` Every phrase here is written by the live feeds themselves — measured
+        # 2026-08-17 across 203 live and fixture articles.
+        "Eastern Conference",
+        "Western Conference",
+        "Eastern Conference Finals",
+        "NBA Finals",
+        "NBA Draft",
+        "WNBA All-Star Weekend",
+        # `[INFERRED]` Same class, same league, not yet observed in a rejection.
+        "Atlantic Division",
+        "Play-In Tournament",
+        "Summer League",
+        "Draft Lottery",
+        "All-Defensive Team",
+    ],
+)
+def test_competition_vocabulary_needs_no_source(
+    make_article: ArticleFactory, term: str
+) -> None:
+    """A structural term of the sport is grounded by the sport, not by today's headlines."""
+    articles = [make_article("Sources: Cavs deal Schroder for Hornets' Mann")]
+
+    result = validate_summary(f"The move reshapes the {term}.", articles)
+
+    assert result.is_safe, f"wrongly flagged: {result.invented_names}"
+
+
+def test_vocabulary_does_not_launder_the_name_standing_next_to_it(
+    make_article: ArticleFactory,
+) -> None:
+    """The exemption needs **every** word, which is the whole of its safety.
+
+    `[VERIFIED]` `Joe Dumars` is the fabrication that proved retry cannot beat a training
+    prior. Putting a real structural term in front of it must not buy it a pass.
+    """
+    articles = [make_article("The Detroit Pistons are exploring a sign-and-trade")]
+
+    result = validate_summary(
+        "Eastern Conference executive Joe Dumars is leading the negotiations.", articles
+    )
+
+    assert not result.is_safe
+    assert "Joe Dumars" in " ".join(result.invented_names)
+
+
+@pytest.mark.parametrize(
+    "team",
+    [
+        # Every NBA nickname that is also an ordinary English word. `[INFERRED]` These are
+        # the ones a vocabulary list could plausibly swallow, so they are the ones asserted:
+        # if any entry ever collides, a real team stops needing a source.
+        "Miami Heat",
+        "Orlando Magic",
+        "Utah Jazz",
+        "Sacramento Kings",
+        "Brooklyn Nets",
+        "Chicago Bulls",
+        "Phoenix Suns",
+        "Oklahoma City Thunder",
+        "Milwaukee Bucks",
+        "Detroit Pistons",
+        "Houston Rockets",
+        "Indiana Pacers",
+        "Washington Wizards",
+    ],
+)
+def test_a_team_is_never_exempt_from_grounding(
+    make_article: ArticleFactory, team: str
+) -> None:
+    """`[VERIFIED]` 0 of 31 team names are competition vocabulary — asserted, not assumed.
+
+    A team is an entity that can be fabricated; a conference is not. If a future entry in
+    `_COMPETITION_VOCABULARY` ever makes a team exempt, this fails rather than shipping a
+    hole in the one check standing between the model and the operator's phone.
+
+    The source headline is chosen to contain **no team nickname as a substring**.
+    `[VERIFIED]` 2026-08-17: written first against "Sources: Cavs deal Schroder for Hornets'
+    Mann", this passed for 12 of 13 teams and let `Brooklyn Nets` through — because grounding
+    asks `"nets" in source`, and "Hornets" contains it. That is a real weakness of substring
+    matching and it is **not** what this test is for, so the fixture avoids it; TASKS.md P24
+    holds the weakness itself.
+    """
+    articles = [make_article("LeBron tests new talent with YouTube golf page")]
+
+    result = validate_summary(f"The {team} were quiet on Sunday.", articles)
+
+    assert not result.is_safe, f"{team} was exempted from grounding"
