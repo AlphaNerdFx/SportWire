@@ -1555,6 +1555,47 @@ what each turned into, since several changed shape on contact with real data.
   measuring both readings across the fixtures before changing anything — the same method that
   settled P20.
 
+  **Measured 2026-08-17, and the answer is leave it alone.** `[VERIFIED]` Word boundary
+  matching scored identically to the shipped substring rule on the P20 population of 226 real
+  names and 3,000 blends: 3 refused and 1956 detected either way, with 0 names newly refused
+  and 0 fabrications newly caught. `[INFERRED]` That population cannot probe the gap, since
+  every blend's last word is a corpus word that appears exactly, so read this as "no measured
+  benefit" rather than "no difference exists".
+
+  `[VERIFIED]` More importantly, P26 shows the substring behaviour is load bearing in the
+  other direction. A source writing `Timberwolves` grounds a summary's `Wolves` only because
+  `wolves` occurs inside it. Tightening to word boundaries would turn that into a false
+  accusation. Do not fix this without fixing P26 first.
+
+- [ ] **P26. The feeds and the model use different short forms of the same team.**
+  Found 2026-08-17 16:00, which fell back after all three attempts were rejected for
+  `Philadelphia Sixers`. Open, measured, and the biggest known cause left alongside P25.
+
+  `[VERIFIED]` The live feeds write `76ers` 11 times and `Sixers` once. `76ers` starts with a
+  digit, so `_is_name_word` deliberately refuses it, and grounding never sees it. When the
+  batch says only `76ers` and the brief says `Philadelphia Sixers`, the last word `sixers`
+  appears nowhere and a real team is reported as invented. Confirmed in isolation: source
+  `76ers`, summary `Philadelphia Sixers`, rejected.
+
+  `[VERIFIED]` Five of ten real alias pairs are rejected: `76ers` against
+  `Philadelphia Sixers`, `Cavs` against `Cleveland Cavaliers`, `Wolves` against
+  `Minnesota Timberwolves`, `T-Wolves` against the same, `Mavs` against `Dallas Mavericks`.
+  The five that pass do so because the short form keeps the same last word, as with `Knicks`,
+  `Nets` and `Blazers`.
+
+  `[VERIFIED]` These are not hypothetical. The feeds captured at 2026-08-17 16:20 use
+  `76ers` 11 times against `Sixers` once, `Cavs` 4 against `Cavaliers` 6, and `Wolves` 5
+  against `Timberwolves` 5.
+
+  `[INFERRED]` It shows up in the rejection history as `Philadelphia Sixers`,
+  `Philadelphia Sixer` and `NY Knicks`, and it was hit by accident while writing a P23 test
+  that used `Timberwolves` against a source saying `Wolves`.
+
+  The fix is an alias table mapping each short form to the team it names, consulted when the
+  last word test fails. It is a hardcoded list, the same shape approved for P23, but a plainer
+  one: `Cavs` and `Cavaliers` are the same team as a matter of fact, not of judgement.
+  `[UNKNOWN]` Not yet written, and not measured against the blend population.
+
 - [ ] **P25. A player the sources name by first name alone cannot be written in full.**
   Found 2026-08-17 while diagnosing that morning's fallback. **Open — measured, and the fix
   needs the operator's decision because it changes `_grounded`'s central rule.**
