@@ -1213,3 +1213,100 @@ def test_an_alias_grounds_its_own_team_and_no_other(
     assert validate_summary("Cleveland Cavaliers made a deal.", articles).is_safe
     assert not validate_summary("Miami Heat made a deal.", articles).is_safe
     assert not validate_summary("Dallas Mavericks made a deal.", articles).is_safe
+
+
+# --- a player the feeds name by first name alone --------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("as_the_feed_writes_it", "as_the_brief_writes_it"),
+    [
+        # `[VERIFIED]` Counted in the 127 live articles captured 2026-08-17. The bare first
+        # name is what the feeds print; the count after it is how often the full name appears.
+        # `Ja` 33 times against `Ja Morant` 0. `LeBron` 26 against `LeBron James` 15.
+        # `Wemby` 4 against 0. `Giannis` and `Luka` twice each, against 0.
+        ("LeBron", "LeBron James"),
+        ("Giannis", "Giannis Antetokounmpo"),
+        ("Luka", "Luka Doncic"),
+        ("Ja", "Ja Morant"),
+        ("Kobe", "Kobe Bryant"),
+        ("Klay", "Klay Thompson"),
+        ("Kawhi", "Kawhi Leonard"),
+    ],
+)
+def test_writing_out_a_first_name_is_not_inventing_a_player(
+    make_article: ArticleFactory,
+    as_the_feed_writes_it: str,
+    as_the_brief_writes_it: str,
+) -> None:
+    """`[VERIFIED]` The 2026-08-17 08:00 run lost its prose to `LeBron James`, three attempts.
+
+    Grounding used to end on the last word, so a name was identified by its surname. When the
+    batch says only `LeBron`, the full name has no surname to match and the brief is accused
+    of inventing the player it is reporting on.
+
+    `[INFERRED]` This is the mirror of the bug the last-word rule was added to fix. P11 fixed
+    `Knicks` written out as `New York Knicks`, where the last word identifies. Here the first
+    word does, and one rule caused both. TASKS.md P25.
+    """
+    articles = [
+        make_article(
+            f"{as_the_feed_writes_it} was the story of the night",
+            summary=f"Everyone wanted to talk about {as_the_feed_writes_it}.",
+        )
+    ]
+
+    result = validate_summary(f"{as_the_brief_writes_it} was the story.", articles)
+
+    assert result.is_safe, f"wrongly flagged: {result.invented_names}"
+
+
+@pytest.mark.parametrize(
+    "fabricated",
+    [
+        # A real first name from the sources with a surname from nowhere. `[VERIFIED]` Letting
+        # the first word ground a name, without also letting it refute one, missed all six of
+        # these. That reading is recorded in TASKS.md P25 as rejected for this reason.
+        "Anthony Edwards",
+        "Anthony Simons",
+        "Anthony Kowalski",
+        "LeBron Smith",
+        "LeBron Okoro",
+        "LeBron Vanterpool",
+    ],
+)
+def test_a_real_first_name_does_not_carry_an_invented_surname(
+    make_article: ArticleFactory, fabricated: str
+) -> None:
+    """The cost of grounding on the first word, and the reason the index keys both ends.
+
+    Without the matching change to `_index_source_names`, a grounded first name would launder
+    any surname attached to it, which invents people. Naming a real player who is not in the
+    batch is exactly what this module exists to stop.
+    """
+    articles = [
+        make_article("Anthony Davis contract extension on hold as Wizards wait"),
+        make_article("LeBron James tests new talent with YouTube golf page"),
+    ]
+
+    result = validate_summary(f"{fabricated} signed on Sunday.", articles)
+
+    assert not result.is_safe, f"{fabricated} was accepted"
+
+
+def test_indexing_both_ends_still_acquits_two_real_players(
+    make_article: ArticleFactory,
+) -> None:
+    """The other direction: a wider index must not start refusing real people.
+
+    `[VERIFIED]` A feed carrying both `Jaylen Brown` and `Jayson Tatum` must ground each of
+    them. `_contradicted` needs *every* same-key source name to disagree, so the name's own
+    entry acquits it, and that holds under either key.
+    """
+    articles = [
+        make_article("Jaylen Brown details bumpy Celtics exit with Jayson Tatum")
+    ]
+
+    assert validate_summary("Jaylen Brown spoke about it.", articles).is_safe
+    assert validate_summary("Jayson Tatum spoke about it.", articles).is_safe
+    assert not validate_summary("Jayson Brown spoke about it.", articles).is_safe
