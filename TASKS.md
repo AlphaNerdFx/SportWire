@@ -1555,6 +1555,52 @@ what each turned into, since several changed shape on contact with real data.
   measuring both readings across the fixtures before changing anything — the same method that
   settled P20.
 
+- [ ] **P25. A player the sources name by first name alone cannot be written in full.**
+  Found 2026-08-17 while diagnosing that morning's fallback. **Open — measured, and the fix
+  needs the operator's decision because it changes `_grounded`'s central rule.**
+
+  `[VERIFIED]` The 08:00 run was rejected for `LeBron James` on all three attempts. Grounding
+  ends on the **last** word, so a name is grounded by its surname; when the feeds write only
+  `LeBron`, the full name has no surname to match and is reported as invented.
+
+  `[VERIFIED]` This is not a one-off. Counted across the 127 live articles captured that day,
+  **four NBA players appear only as bare first names**: `Ja` (33 occurrences, `Ja Morant` 0),
+  `LeBron` (26 against 15), `Wemby` (4 against 0), `Giannis` (2 against 0), `Luka` (2 against
+  0). Behaviour check: **6 of 6** expansions tested were rejected.
+
+  `[INFERRED]` It plausibly accounts for a large share of the fallback history. The rejection
+  log's most frequent names are `LeBron James` (6), `Kawhi Leonard` (6), `Klay Thompson` (3),
+  `Kobe Bryant` (2), `Giannis Antetokounmpo` (2) — every one a player the feeds routinely
+  name by first name alone, and `Kobe` appears bare in a real 2026-08-17 headline. `[UNKNOWN]`
+  Whether each specific rejection had that cause; per-run batches were not preserved.
+
+  **This is the mirror of the bug the last-word rule was built for.** P11 fixed `Knicks` →
+  `New York Knicks`, where the *last* word identifies. Here the *first* word does, and the
+  same rule that fixed one causes the other.
+
+  Three readings measured 2026-08-17 across 203 live-plus-fixture articles — 226 real
+  two-word names (must pass) and 3,000 synthetic blends built from them (must fail), the
+  population P20 used:
+
+  | | real names refused | blends detected | mononyms rescued |
+  |---|---|---|---|
+  | **a. leave it** (shipped) | 3/226 | 1956/3000 — 65.2% | 0/8 |
+  | **b. also ground on the first word** | — | — | 7/8 |
+  | **c. b, plus index source names by first word too** | **3/226** | **2628/3000 — 87.6%** | **7/8** |
+
+  `[VERIFIED]` **Reading (b) alone is not acceptable and is recorded so it is not retried:**
+  it misses **6 of 6** fabricated surnames hung on a grounded first name — `Anthony Edwards`
+  and `LeBron Smith` against sources naming Anthony Davis and LeBron James both pass. Making
+  the first word ground a name without also letting it *refute* one invents people.
+
+  `[VERIFIED]` **Reading (c) is not a trade-off.** It refuses no more real names than the
+  shipped rule (3/226 either way), detects **22 points more** blends, misses 0 of 6 fabricated
+  surnames, and rescues 7 of 8 expansions. The 8th is `Wemby` → `Victor Wembanyama`, where
+  neither word matches — a nickname rather than a first name, and correctly still refused.
+
+  `[UNKNOWN]` Whether (c) accepts anything a *model* would really write that the synthetic
+  blends do not represent. Resolve by replaying captured batches, not by reasoning.
+
 ---
 
 ## LOW — deferred; each requires a trigger condition
