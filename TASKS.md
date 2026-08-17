@@ -1693,6 +1693,47 @@ what each turned into, since several changed shape on contact with real data.
   `[VERIFIED]` Mutation-tested three ways: reverting grounding to the last word only gave 7
   failures; not indexing the first word gave 6; not refuting on the first word gave 6.
 
+- [x] **P27. A headline's opening label was read as part of a name.** Found and fixed
+  2026-08-17, and it is the first bug here found by a dry run rather than by a delivered brief.
+
+  `[VERIFIED]` With P25 and P26 both in, a full 12-story dry run still rejected
+  `Philadelphia Sixers` on two of three attempts. The batch carried the real headline
+  `Report: Sixers hire Tommy Balcetis to front office`, which was read as the single name
+  `{report, sixers}`. That is two words sharing a last word with the team and disagreeing about
+  the other, so the refutation rule treated a headline's label as a rival entity.
+
+  **This is P20 for the third time, through a gap in its own fix.** `_ordinary_words` only
+  learns a word is vocabulary when the batch writes it in lower case somewhere, and a 12-story
+  batch never wrote "report". `[VERIFIED]` Confirmed by adding one article containing "per
+  report" to the same batch, after which the team grounded.
+
+  `[VERIFIED]` The shape is common, not exotic: 61 of 331 live and fixture titles, 18%, open
+  with a label and a colon. `Sources:`, `NBA odds:`, `NBA Power Rankings:`, `NBA HOF week:`,
+  `SB Nation Reacts:`.
+
+  **Fixed by making a colon a separator**, the same way a comma became one for P20. A name that
+  *ends* at a colon is still kept, because the run is recorded before it is cleared, so
+  `Jordan Goodwin: a quiet week` keeps `Jordan Goodwin` and only one-word labels are lost.
+
+  `[VERIFIED]` Strictly better on both axes, on 331 articles with 267 real names and 3,000
+  blends: false refusals dropped from 2 to 1, and blend detection rose from 84.0% to 85.2%.
+  The remaining refusal is `Redick On`, an extraction artifact rather than a name.
+
+  `[VERIFIED]` `processing/names.py` needed the same change, and the test asserting the two
+  extractors stay output-identical is what caught the drift, on the real title `Sources: Knicks
+  executive Rosas leaving team`. Commits `ca5eceb`, `7e13899`, `90627ea`, `383ff99`.
+
+  `[VERIFIED]` One existing test asserted the old behaviour outright, that grounding *should*
+  weld `Report:` onto the following name. That is the same assumption its own docstring already
+  retracts for the comma, so it was corrected in place with the measurement rather than
+  deleted. `[INFERRED]` Worth noting as the one case this session where a test was changed to
+  pass: it encoded a wrong expectation, which `OPERATING_RULES.md` §4 allows only when said out
+  loud first.
+
+  `[VERIFIED]` Mutation-tested per file, each verified applied by printing both separator
+  strings: removing the colon from `validate.py` alone gave 2 failures, and from
+  `processing/names.py` alone gave 2.
+
 ---
 
 ## LOW — deferred; each requires a trigger condition
