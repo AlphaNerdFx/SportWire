@@ -99,9 +99,16 @@ def main(argv: list[str] | None = None) -> int:
     # Every configured feed, in one list. Each adapter swallows its own failures, so one
     # dead outlet shortens the brief rather than ending the run.
     articles: list[NewsArticle] = []
+    failed_sources: list[str] = []
     for source_name in FEEDS:
-        fetched = RssNewsAdapter(source_name).fetch()
+        adapter = RssNewsAdapter(source_name)
+        fetched = adapter.fetch()
         logger.info("  %s: %d articles", source_name, len(fetched))
+        # A failure and a quiet feed both return [], so the adapter is asked which happened.
+        # `[VERIFIED]` 2026-08-18: Reddit answered HTTP 500 for the whole 00:00 run, the brief
+        # lost 25 of 87 articles, and nothing outside the log said so.
+        if adapter.last_error:
+            failed_sources.append(source_name)
         articles.extend(fetched)
 
     # Remove items that are not reporting at all — highlight clips, retrospectives,
@@ -239,6 +246,7 @@ def main(argv: list[str] | None = None) -> int:
             news_summary=news_summary,
             series=series,
             unsupported_claims=unsupported_claims,
+            failed_sources=failed_sources,
         )
 
         if not messages:
