@@ -30,10 +30,14 @@ Every step below exists because it was skipped once in this repository and cost 
 4. **Stage narrowly.** Name the files this change touches. Avoid `git add -A`, which has
    swept up unrelated edits here before (a stray newline in `CLAUDE.md`).
 
-5. **Write the message for the *why*.** Conventional prefix (`feat:`, `fix:`, `test:`,
-   `docs:`, `refactor:`, `chore:`), imperative summary, one logical change per commit. Tag
-   factual claims `[VERIFIED]` / `[INFERRED]` / `[UNKNOWN]` per `CLAUDE.md` §0, and state the
-   evidence — a command that was run, a measurement that was taken.
+5. **Write the message for the *why*, and keep it short.** Conventional prefix (`feat:`,
+   `fix:`, `test:`, `docs:`, `refactor:`, `chore:`) and an imperative summary.
+   - **256 characters maximum for the whole message. One commit per file.** Set 2026-08-17;
+     `CLAUDE.md` §9 owns both. Count the characters before committing, and split a multi-file
+     change into one commit each rather than staging them together.
+   - Claims still carry `[VERIFIED]` / `[INFERRED]` / `[UNKNOWN]` per `CLAUDE.md` §0, but the
+     measurement goes in `TASKS.md` and the commit names the item. There is no room for both.
+   - No em dashes, little jargon, almost no bold. `CLAUDE.md` §9 "How to write, everywhere".
 
 6. **Report the real outcome**, including anything noticed but not fixed. "Should work" is not
    a status.
