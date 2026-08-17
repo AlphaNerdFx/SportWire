@@ -1128,3 +1128,88 @@ def test_one_vocabulary_word_does_not_exempt_the_whole_name(
 
     assert not result.is_safe, "a fabricated name rode in on a vocabulary word"
     assert "Dumars" in " ".join(result.invented_names)
+
+
+# --- one team, several names ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("as_the_feed_writes_it", "as_the_brief_writes_it"),
+    [
+        # `[VERIFIED]` Every short form here was counted in 331 live and fixture articles.
+        # The first pair is the one that cost the 2026-08-17 16:00 brief its prose.
+        ("76ers", "Philadelphia Sixers"),
+        ("Sixers", "Philadelphia 76ers"),
+        ("Cavs", "Cleveland Cavaliers"),
+        ("Wolves", "Minnesota Timberwolves"),
+        ("Twolves", "Minnesota Timberwolves"),
+        ("Mavs", "Dallas Mavericks"),
+        ("Ex-Knick", "New York Knicks"),
+        ("OKC", "Oklahoma City Thunder"),
+    ],
+)
+def test_a_team_is_one_team_under_either_name(
+    make_article: ArticleFactory,
+    as_the_feed_writes_it: str,
+    as_the_brief_writes_it: str,
+) -> None:
+    """`[VERIFIED]` 2026-08-17 16:00 fell back on `Philadelphia Sixers`, three attempts running.
+
+    The feeds wrote `76ers` 11 times and `Sixers` once that day. `76ers` starts with a digit,
+    so `_is_name_word` refuses it on purpose, and grounding therefore never sees it. A team
+    that half the batch was about got reported as invented. TASKS.md P26.
+    """
+    articles = [
+        make_article(
+            f"{as_the_feed_writes_it} make a move ahead of the season",
+            summary=f"A busy week for {as_the_feed_writes_it}.",
+        )
+    ]
+
+    result = validate_summary(f"{as_the_brief_writes_it} made a move.", articles)
+
+    assert result.is_safe, f"wrongly flagged: {result.invented_names}"
+
+
+@pytest.mark.parametrize(
+    ("headline", "team"),
+    [
+        # `[VERIFIED]` Each of these short forms really occurs in the corpus and never means
+        # the team. `king` appears 5 times: it is LeBron, and a quarterback named Haynes King.
+        (
+            "Rookie QBs Carson Beck, Haynes King shine in the Hall of Fame Game",
+            "Sacramento Kings",
+        ),
+        ("Watch the best clips from last night", "Los Angeles Clippers"),
+        ("The safety net under his contract is thin", "Brooklyn Nets"),
+    ],
+)
+def test_an_ordinary_word_is_not_a_team_alias(
+    make_article: ArticleFactory, headline: str, team: str
+) -> None:
+    """The alias table is only worth having if it stays a table of teams.
+
+    `[VERIFIED]` These three were measured and then deliberately left out. Had `king`, `clips`
+    or `net` been aliased on the strength of looking like a short form, each would ground a
+    team on a word that has nothing to do with it.
+    """
+    articles = [make_article(headline)]
+
+    result = validate_summary(f"{team} were busy this week.", articles)
+
+    assert not result.is_safe, f"{team} was grounded by an ordinary word"
+
+
+def test_an_alias_grounds_its_own_team_and_no_other(
+    make_article: ArticleFactory,
+) -> None:
+    """`[VERIFIED]` Both teams the model actually invented on 2026-08-17 stay caught.
+
+    `Heat`, `Miami Heat`, `Mavericks` and `Mavs` appear **0** times in the 128 live articles
+    captured that day, and attempt 3 asserted both. An alias must reach its own team only.
+    """
+    articles = [make_article("Sources: Cavs deal Schroder for Hornets' Mann")]
+
+    assert validate_summary("Cleveland Cavaliers made a deal.", articles).is_safe
+    assert not validate_summary("Miami Heat made a deal.", articles).is_safe
+    assert not validate_summary("Dallas Mavericks made a deal.", articles).is_safe
