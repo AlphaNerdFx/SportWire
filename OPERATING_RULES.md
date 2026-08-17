@@ -114,8 +114,11 @@ State the result before writing. Agents fail by accretion, not by exception.
 
 ## 6. One concern per change.
 
-If you notice a second problem while fixing the first, **name it and ask** — do not fix three
-things and present them as one diff. One logical change per commit (`CLAUDE.md` §9).
+If you notice a second problem while fixing the first, **name it and ask**. Do not fix three
+things and present them as one diff.
+
+Since 2026-08-17 the commit rule is stricter than "one logical change": it is **one commit per
+file**, with the whole message capped at 256 characters. See `CLAUDE.md` §9, which owns it.
 
 ## 7. Scope tripwires — stop and split.
 
