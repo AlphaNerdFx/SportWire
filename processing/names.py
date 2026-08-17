@@ -133,7 +133,10 @@ class NameScanner:
 # output-identical to `validate._PROPER_NAME` over every fixture, so adopting it there changes
 # no verdict — and `separators` is part of that equivalence rather than an improvement on it:
 # the comma rule landed in `validate.py` first, as a live bug fix, and this preset tracks it.
-GROUNDING = NameScanner(min_words=2, break_run_on_punctuation=False, separators=",;")
+# `separators` gained the colon on 2026-08-17, in step with `validate._SEPARATES_NAMES`. The
+# test that asserts these two agree is what caught the drift, on the real title "Sources:
+# Knicks executive Rosas leaving team", which the old rule read as the name `Sources Knicks`.
+GROUNDING = NameScanner(min_words=2, break_run_on_punctuation=False, separators=",;:")
 
 # Single words count and punctuation ends a name — the shape `cluster.py` needs.
 #
