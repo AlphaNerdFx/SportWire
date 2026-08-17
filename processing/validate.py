@@ -23,6 +23,7 @@ import re
 import unicodedata
 
 from models.schemas import NewsArticle
+from processing.names import NameScanner
 
 logger = logging.getLogger(__name__)
 
@@ -738,6 +739,107 @@ def _contradicted(
         return False
 
     return all(not (mine <= other or other <= mine) for other in eligible)
+
+
+# Entities that share an article, used to spot a claim joining two that never met.
+#
+# `[VERIFIED]` 2026-08-18 (TASKS.md P5), the third delivered instance of this class and the
+# first the operator reported the same night. The 00:00 brief said "The Pelicans, who are
+# welcoming back star point guard Damian Lillard following his trade from Portland". There was
+# no trade. The batch's only Lillard article was "Blazers offseason recap and early season
+# preview: Lillard is back but questions remain", whose body reads "With noise outside the
+# hardwood growing in Portland, how will the Blazers respond?". He is back with Portland.
+#
+# Grounding cannot see this and is not meant to. It extracted `Pelicans` and `Damian Lillard`,
+# and both are real and both are in the batch. Only the relationship is invented.
+#
+# `[VERIFIED]` The operator chose on 2026-08-18 to **mark** these rather than reject them:
+# rejecting the sentence rejects the summary, and that run would have delivered a headline list
+# on all three attempts. So nothing here feeds `is_safe`, and this function is additive by
+# design. A sentence it flags is still delivered, with a marker.
+#
+# Source entities are read with a **one-word** scanner while summary entities keep grounding's
+# two-word rule, and that asymmetry is the whole mechanism. `[VERIFIED]` Measured while
+# building it: with a two-word scanner on both sides, `Trendon Watford signs with the Pelicans`
+# contributes no `pelicans` at all, because there it is a lone capitalised word. The true
+# sentence about Watford joining the Pelicans was then flagged, and the check was worthless.
+_SOURCE_ENTITIES = NameScanner(
+    min_words=1, break_run_on_punctuation=False, separators=_SEPARATES_NAMES
+)
+
+
+def _entity_keys(text: str, scanner: NameScanner | _ProperNames) -> list[str]:
+    """One key per entity in `text`: the last word of each name, which identifies it.
+
+    `[VERIFIED]` Keying on every word instead flags true sentences, because a brief writes
+    names out in full where the feeds do not. `New Orleans Pelicans` yields `new` and
+    `orleans`, which co-occur with nothing since no source spells the city out, and
+    `Portland Trail Blazers` yields `trail` for the same reason. Both true sentences were
+    flagged before this narrowed to the identifying word.
+    """
+    keys: list[str] = []
+    for sentence in _SENTENCE_BREAK.split(text):
+        for name in scanner.findall(sentence):
+            # Trimmed first, so a sentence opener cannot disguise what the name is.
+            # `[VERIFIED]` 2026-08-18: "In NBA news, Trendon Watford has signed..." extracts
+            # `In NBA`, whose words are `in` and `nba`. The vocabulary test below needs every
+            # word to be vocabulary and `in` is not, so `nba` survived as an entity, shared no
+            # article with `watford`, and flagged a true sentence twice over. Stripping the
+            # opener leaves `NBA`, which the vocabulary test then removes.
+            words = _name_words(_trim_name_for_reporting(name.strip(" .,;:")))
+            if not words:
+                continue
+            # The sport's own vocabulary is not an entity and cannot hold a relationship, so
+            # its co-occurrence means nothing. `[VERIFIED]` 2026-08-18: without this the
+            # opener "In NBA news, Trendon Watford has signed..." keys on `nba`, which shares
+            # no article with `watford`, and a plainly true sentence was flagged. This was
+            # missed on the first measurement because that was run on the sentence with the
+            # opener already stripped, which is a reminder to measure the real string.
+            if _is_competition_term(words):
+                continue
+            if words[-1] not in keys:
+                keys.append(words[-1])
+    return keys
+
+
+def _entity_pairs(articles: list[NewsArticle]) -> set[tuple[str, str]]:
+    """Every pair of entities that appears together inside one article.
+
+    Built per article rather than over the joined text, for the reason
+    `_index_source_names` gives: one article's title running into the next one's summary would
+    manufacture a co-occurrence that no source actually reports.
+    """
+    pairs: set[tuple[str, str]] = set()
+    for article in articles:
+        keys = _entity_keys(f"{article.title} {article.summary}", _SOURCE_ENTITIES)
+        for first in keys:
+            for second in keys:
+                pairs.add((first, second))
+    return pairs
+
+
+def unsupported_sentences(summary: str, articles: list[NewsArticle]) -> list[str]:
+    """Sentences naming two entities that never share a source article.
+
+    Not a verdict. `is_safe` ignores this entirely, and a flagged sentence is still delivered
+    with a marker, because the operator chose visibility over a stricter check (P5).
+
+    `[INFERRED]` Reading a co-occurrence as permission rather than proof is what keeps this
+    usable. Two entities in one article does not establish that any particular claim about
+    them is true; two entities that never met establishes that the sources cannot have
+    reported a relationship between them, which is the narrower and checkable thing.
+    """
+    pairs = _entity_pairs(articles)
+    flagged: list[str] = []
+    for sentence in _SENTENCE_BREAK.split(summary):
+        keys = _entity_keys(sentence, _PROPER_NAME)
+        if any(
+            (first, second) not in pairs
+            for index, first in enumerate(keys)
+            for second in keys[index + 1 :]
+        ):
+            flagged.append(sentence.strip())
+    return flagged
 
 
 def _depossess_text(text: str) -> str:
