@@ -25,6 +25,7 @@ a test to make it pass (`OPERATING_RULES.md` §4).
 from __future__ import annotations
 
 import difflib
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -95,3 +96,82 @@ def test_offseason_brief_matches_snapshot(
 def test_nothing_to_report_sends_nothing() -> None:
     """An empty pipeline produces no messages at all, rather than an empty brief."""
     assert build_messages([], [], []) == []
+
+
+def test_an_unsupported_claim_is_marked_and_still_delivered(
+    make_article: Callable[..., NewsArticle],
+) -> None:
+    """`[VERIFIED]` 2026-08-18 the operator chose marking over rejecting (TASKS.md P5).
+
+    Rejecting the sentence rejects the summary, and the 00:00 run would then have delivered a
+    headline list on all three attempts, which is what he had just asked never to see again.
+    So the prose survives intact and gains a mark, and the legend says what the mark means.
+    """
+    claim = "The Pelicans are welcoming back Damian Lillard following his trade from Portland."
+    messages = build_messages(
+        [],
+        [],
+        [[make_article("Blazers preview: Lillard is back but questions remain")]],
+        news_summary=f"Watford signed with the Pelicans. {claim}",
+        unsupported_claims=[claim],
+    )
+
+    news = "\n".join(messages)
+    assert claim in news, "the sentence must still be delivered, not dropped"
+    assert f"{claim} ⚠️" in news, "the sentence must carry the mark"
+    assert "never appear in the same source article" in news, (
+        "the legend must explain it"
+    )
+
+
+def test_a_brief_with_nothing_flagged_gains_no_marker(
+    make_article: Callable[..., NewsArticle],
+) -> None:
+    """The quiet case. A clean brief must look exactly as it did before this existed."""
+    messages = build_messages(
+        [],
+        [],
+        [[make_article("Blazers preview: Lillard is back")]],
+        news_summary="Lillard is back with the Blazers.",
+    )
+
+    news = "\n".join(messages)
+    assert "⚠️" not in news
+    assert "never appear in the same source article" not in news
+
+
+def test_a_source_that_failed_is_named_in_the_brief(
+    make_article: Callable[..., NewsArticle],
+) -> None:
+    """`[VERIFIED]` 2026-08-18: Reddit answered HTTP 500 for the whole 00:00 run and the brief
+    lost 25 of 87 articles while saying nothing.
+
+    A failed source and a quiet one both produce no articles, so a brief that stays silent
+    looks complete when it is not. Second observed case, after CBS timed out on 2026-08-15.
+    """
+    messages = build_messages(
+        [],
+        [],
+        [[make_article("Blazers preview: Lillard is back")]],
+        news_summary="Lillard is back with the Blazers.",
+        failed_sources=["r/nba"],
+    )
+
+    news = "\n".join(messages)
+    assert "r/nba" in news
+    assert "Missing this run" in news
+
+
+def test_a_brief_with_every_source_healthy_says_nothing_about_sources(
+    make_article: Callable[..., NewsArticle],
+) -> None:
+    """The complement, so the note cannot become permanent furniture."""
+    messages = build_messages(
+        [],
+        [],
+        [[make_article("Blazers preview: Lillard is back")]],
+        news_summary="Lillard is back with the Blazers.",
+        failed_sources=[],
+    )
+
+    assert "Missing this run" not in "\n".join(messages)
