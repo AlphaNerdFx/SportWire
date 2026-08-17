@@ -46,7 +46,25 @@ _TRAILING_PUNCTUATION = ',;:!?()[]{}"“”«»…'
 # was rejected for. Measured across the fixtures: 3 of 17 teams mentioned by short name were
 # refused when a summary expanded them to the full name, which is ordinary phrasing rather
 # than fabrication.
-_SEPARATES_NAMES = ",;"
+#
+# The colon was added 2026-08-17, and it is the same bug a third time. `[VERIFIED]` A dry run
+# with the P25 and P26 fixes in place still rejected `Philadelphia Sixers` on two attempts,
+# because the batch carried the headline "Report: Sixers hire Tommy Balcetis to front office".
+# That was read as the name `{report, sixers}`, which is two words sharing a last word with
+# `Philadelphia Sixers` and disagreeing about the other, so it refuted a real team.
+#
+# P20 was supposed to have handled this, and its fix does not reach here: `_ordinary_words`
+# only knows a word is vocabulary if the batch writes it in lower case somewhere, and a
+# 12-story batch never wrote "report". `[VERIFIED]` Confirmed by adding one article containing
+# "per report" to the same batch, after which the team grounded.
+#
+# `[VERIFIED]` This is not a rare shape. 61 of 331 live and fixture titles, 18%, open with a
+# label and a colon: "Sources:", "NBA odds:", "NBA Power Rankings:", "NBA HOF week:". A colon
+# separates a label from what follows, so the run has to end there.
+#
+# A name *followed* by a colon is still kept, because the run is recorded before it is
+# cleared. "Jordan Goodwin: ..." keeps `Jordan Goodwin`, and only the one-word labels are lost.
+_SEPARATES_NAMES = ",;:"
 
 
 # Apostrophe shapes that mean the same thing. `[VERIFIED]` 2026-08-17: the 00:00 run
