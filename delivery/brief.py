@@ -75,6 +75,7 @@ def build_messages(
     news_summary: str | None = None,
     max_articles: int = DEFAULT_MAX_ARTICLES,
     series: dict[int, SeriesContext] | None = None,
+    unsupported_claims: list[str] | None = None,
 ) -> list[str]:
     """Render the brief as an ordered list of message bodies, omitting empty sections.
 
@@ -104,7 +105,9 @@ def build_messages(
 
     if article_groups:
         if news_summary:
-            messages.append(_render_news_summary(news_summary))
+            messages.append(
+                _render_news_summary(news_summary, unsupported_claims or [])
+            )
         else:
             # Truncation happens here, in presentation, not in dedup: the dropped articles
             # are still recorded as delivered, so they will not reappear next run. They were
@@ -213,9 +216,39 @@ def _describe(highlight: GameHighlight) -> str:
     return ""
 
 
-def _render_news_summary(summary: str) -> str:
-    """Message 3, written form — one paragraph instead of a headline list."""
-    return f"📰 NEWS\n\n{summary}"
+# Appended to a sentence whose named entities never share a source article.
+#
+# `[VERIFIED]` 2026-08-18: the operator was sent "The Pelicans, who are welcoming back star
+# point guard Damian Lillard following his trade from Portland". No such trade happened. Every
+# name in it is real and present in the batch, so `validate.py` grounds them all; what is
+# invented is the relationship, which is TASKS.md P5.
+#
+# `[VERIFIED]` The operator chose marking over rejecting on 2026-08-18. Rejecting the sentence
+# rejects the summary, and that run would then have delivered a headline list on all three
+# attempts, which is the outcome he had just asked never to see again. So the claim is
+# delivered and labelled, and the reader decides.
+_UNSUPPORTED_MARK = "⚠️"
+
+
+def _render_news_summary(summary: str, unsupported: list[str]) -> str:
+    """Message 3, written form: one paragraph instead of a headline list.
+
+    Flagged sentences keep their place in the prose and gain a mark, so the paragraph still
+    reads as a paragraph. `[INFERRED]` Moving them to a footnote or dropping them would either
+    break the writing the operator asked for or hide a claim he needs to see.
+    """
+    marked = summary
+    for sentence in unsupported:
+        if sentence and sentence in marked:
+            marked = marked.replace(sentence, f"{sentence} {_UNSUPPORTED_MARK}", 1)
+
+    body = f"📰 NEWS\n\n{marked}"
+    if unsupported:
+        body += (
+            f"\n\n{_UNSUPPORTED_MARK} these names never appear in the same source article, "
+            "so the link between them is not something the sources reported."
+        )
+    return body
 
 
 def _render_story_group(group: list[NewsArticle], summary_limit: int) -> list[str]:
