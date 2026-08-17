@@ -164,6 +164,61 @@ _COMPETITION_VOCABULARY = frozenset(
 )
 
 
+# Other names for the same team. `[VERIFIED]` 2026-08-17 16:00: the run fell back because all
+# three attempts were rejected for `Philadelphia Sixers`, while the feeds wrote `76ers` 11
+# times and `Sixers` once. `76ers` starts with a digit, so `_is_name_word` refuses it on
+# purpose, which means grounding can never see it. A real team was called invented.
+#
+# Every group is one team under the names the feeds actually print. Each was counted across
+# 331 live and fixture articles, and the counts are why some obvious candidates are absent:
+#
+#   sixers (4), sixer (1)     against 76ers (51)
+#   cavs (13)                 against cavaliers (13)
+#   wolves (4), twolves (1)   against timberwolves (11)
+#   knick (4)                 against knicks (30)
+#   mavs (1)                  against mavericks (2)
+#   okc (1)                   against thunder (6)
+#
+# `[VERIFIED]` Deliberately excluded after measuring, because the short form is an ordinary
+# word here rather than a team: `king` occurs 5 times and never means the Sacramento Kings
+# (it is LeBron, and a quarterback named Haynes King); `clips` occurs once and means video;
+# `net` occurs once and is not the Nets. Aliasing any of those would ground a team on a word
+# that has nothing to do with it.
+#
+# Singular forms only need an entry in one direction. A source writing `Lakers` already
+# grounds a summary's `Laker`, because the shorter string occurs inside the longer one. It is
+# the other direction that fails, which is why `knick` is listed and `laker` is not.
+_TEAM_NAME_GROUPS = (
+    frozenset({"76ers", "sixers", "sixer"}),
+    frozenset({"cavaliers", "cavs"}),
+    frozenset({"timberwolves", "wolves", "twolves", "t-wolves"}),
+    frozenset({"mavericks", "mavs"}),
+    frozenset({"knicks", "knick"}),
+    frozenset({"thunder", "okc"}),
+    # `[INFERRED]` Not yet seen in a captured feed, but the same kind of name and unambiguous:
+    # none of these is an ordinary English word, so none can ground a team by accident.
+    frozenset({"nuggets", "nugs"}),
+    frozenset({"grizzlies", "grizz"}),
+    frozenset({"pelicans", "pels"}),
+    frozenset({"warriors", "dubs"}),
+)
+
+_TEAM_ALIASES: dict[str, frozenset[str]] = {
+    name: group - {name} for group in _TEAM_NAME_GROUPS for name in group
+}
+
+
+def _appears(word: str, source: str) -> bool:
+    """Whether a word, or another name for the same team, occurs in the source text.
+
+    Only teams get this. A player has one surname, so there is nothing to alias, and adding
+    people would mean guessing at nicknames rather than reading them off the feeds.
+    """
+    if word in source:
+        return True
+    return any(alias in source for alias in _TEAM_ALIASES.get(word, ()))
+
+
 def _is_competition_term(words: list[str]) -> bool:
     """Whether a name is nothing but the sport's own structural vocabulary.
 
@@ -495,10 +550,10 @@ def _grounded(
         return False
 
     normalised_source = _depossess_text(source_lower)
-    if all(word in normalised_source for word in words):
+    if all(_appears(word, normalised_source) for word in words):
         return True
 
-    return words[-1] in normalised_source
+    return _appears(words[-1], normalised_source)
 
 
 def _name_words(name: str) -> list[str]:
