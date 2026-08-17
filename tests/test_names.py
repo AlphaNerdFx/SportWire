@@ -120,17 +120,35 @@ def test_punctuation_ends_a_name_only_when_the_caller_says_so() -> None:
     `Cavaliers, Heat, Warriors` came to refuse `Golden State Warriors` in the 16:00 run.
     Both presets now end a run on a comma; see `validate._SEPARATES_NAMES`.
 
-    `[VERIFIED]` The presets still differ, and the colon shows it: clustering ends a run on
-    **any** trailing punctuation, grounding only on a separator.
+    ~~`[VERIFIED]` The presets still differ, and the colon shows it: clustering ends a run on
+    **any** trailing punctuation, grounding only on a separator.~~ **The colon moved to the
+    separator list on 2026-08-17, so it no longer shows the difference.** This assertion said
+    grounding should weld `Report:` onto the name after it, which is the same wrong assumption
+    the paragraph above retracts for the comma, one step behind. It is corrected here rather
+    than deleted, because the retraction is the useful part.
+
+    `[VERIFIED]` What made it wrong: a dry run carrying the real title "Report: Sixers hire
+    Tommy Balcetis to front office" rejected `Philadelphia Sixers` on two attempts. `{report,
+    sixers}` was indexed as a source name, and it disagrees with the real team about its other
+    word. Adding the colon dropped false refusals from 2 to 1 across 267 real names and raised
+    blend detection from 84.0% to 85.2%. 61 of 331 titles, 18%, open with a label and a colon.
+
+    `[VERIFIED]` The presets still differ, just not here: clustering keeps one-word names and
+    ends a run on **any** trailing punctuation, grounding needs two words and a separator.
     """
     assert GROUNDING.findall("Cavs, Celtics tip off") == []
     assert CLUSTERING.findall("Cavs, Celtics tip off") == ["Cavs", "Celtics"]
 
-    assert GROUNDING.findall("Report: Kawhi Leonard signs") == ["Report Kawhi Leonard"]
+    # A label before a colon is dropped, and the real name after it survives intact.
+    assert GROUNDING.findall("Report: Kawhi Leonard signs") == ["Kawhi Leonard"]
     assert CLUSTERING.findall("Report: Kawhi Leonard signs") == [
         "Report",
         "Kawhi Leonard",
     ]
+
+    # And a name that *ends* at a colon is still kept, because the run is recorded before it
+    # is cleared. Only one-word labels are lost.
+    assert GROUNDING.findall("Jordan Goodwin: a quiet week") == ["Jordan Goodwin"]
 
 
 def test_a_word_before_punctuation_is_still_part_of_its_name() -> None:
