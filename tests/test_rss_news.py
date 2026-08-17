@@ -19,8 +19,10 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+import requests
 
 from ingestion.rss_news import RssNewsAdapter
+from models.schemas import NewsArticle
 
 # `[VERIFIED]` The exact bytes the live Yahoo feed serves for "Schröder": U+00F6 as UTF-8.
 SCHRODER_UTF8 = b"Schr\xc3\xb6der"
@@ -125,3 +127,49 @@ def test_parse_accepts_the_bytes_the_live_path_now_passes() -> None:
     assert [article.title for article in articles] == [
         "Dennis Schröder traded to the Hornets"
     ]
+
+
+def test_a_failed_fetch_records_why_and_still_returns_nothing() -> None:
+    """`[VERIFIED]` 2026-08-18: Reddit answered HTTP 500 for a whole run.
+
+    The empty list stays the contract (`CLAUDE.md` §5 rule 6), so nothing above the adapter is
+    forced to handle a failure. `last_error` is set alongside it so a caller that wants to
+    *report* the outage can, which is what stopped 25 of 87 articles vanishing silently.
+    """
+
+    class DeadFeed(RssNewsAdapter):
+        def _fetch(self) -> list[NewsArticle]:
+            raise requests.HTTPError("500 Server Error")
+
+    adapter = DeadFeed("r/nba")
+
+    assert adapter.fetch() == [], "a dead source must still degrade, never raise"
+    assert adapter.last_error == "HTTPError"
+
+
+def test_a_healthy_fetch_leaves_no_error_behind() -> None:
+    """The complement, and it must survive a *previous* failure on the same adapter.
+
+    `[INFERRED]` `last_error` is a class attribute so no adapter author can forget to set it
+    up. That makes clearing it at the start of every `fetch` the thing that must not be
+    forgotten instead, which is what this asserts.
+    """
+
+    class FlakyFeed(RssNewsAdapter):
+        def __init__(self, source_name: str) -> None:
+            super().__init__(source_name)
+            self.calls = 0
+
+        def _fetch(self) -> list[NewsArticle]:
+            self.calls += 1
+            if self.calls == 1:
+                raise requests.HTTPError("500 Server Error")
+            return []
+
+    adapter = FlakyFeed("r/nba")
+
+    adapter.fetch()
+    assert adapter.last_error == "HTTPError"
+
+    adapter.fetch()
+    assert adapter.last_error is None, "a recovered source must stop being reported"
