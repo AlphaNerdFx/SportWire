@@ -580,6 +580,39 @@ what each turned into, since several changed shape on contact with real data.
   failure. `[UNKNOWN]` Whether this is causal. It is a correlation over 8 runs with two
   exceptions in it (29 → prose, 46 → fallback), and it is the thing P4's soak must settle.
 
+  **2026-08-18 00:00, the first scheduled run after P25, P26 and P27. Prose, on attempt 3.**
+  `[VERIFIED]` The six-run fallback streak ends here. 15 new articles, 7 stories, and the
+  batch is reconstructed exactly rather than guessed: `seen_articles` recorded 15 ids at
+  `2026-08-17T16:04` UTC, all 15 matched against a capture taken minutes later.
+
+  `[VERIFIED]` **Every rejection was a genuine fabrication, and that is the new part.** All
+  seven names across attempts 1 and 2 occur **zero** times in that batch, in any spelling:
+  `Zion Williamson`, `Brandon Ingram`, `Ben McLemore`, `Dennis Schröder`, `Pat Connaughton`,
+  `PJ Tucker`, `Bobby Portis`. No false accusation in the run at all, which has not been true
+  of any earlier logged run.
+
+  `[VERIFIED]` **The model is completing rosters from team names**, which is ADR-012's
+  substitution failure with a mechanism attached:
+
+  | in the batch | invented from it |
+  |---|---|
+  | `Watford, Pels agree to 1-yr, $2.9M deal`, `Trendon Watford signs with the Pelicans` | Zion Williamson, Brandon Ingram, Ben McLemore |
+  | `Bucks Reacts Survey: How many ex-Heat players should the Bucks start?` | Pat Connaughton, PJ Tucker, Bobby Portis |
+  | `Report: Cavaliers actively searching to move key contributor` | Dennis Schröder |
+
+  `[VERIFIED]` `Dennis Schröder` is worth singling out because it looks like a P22 diacritic
+  failure and is not. He appears 3 times in full and 6 times by surname across the 104-article
+  capture, but **0 times in this batch**: the Cavaliers traded him in the previous day's news,
+  which was already delivered and deduplicated out. The model knew the team and supplied the
+  player. `[INFERRED]` This is the same effect P4 recorded as `[UNKNOWN]` for `Klay Thompson`
+  and `Kawhi Leonard` on 2026-08-16, and it is now confirmed with a reconstructed batch.
+
+  `[INFERRED]` Retry works on this failure where it did not on the fixed-prior ones, because
+  which roster the model reaches for varies between attempts. Attempt 1 invented Pelicans,
+  attempt 2 invented Bucks, attempt 3 invented nobody.
+
+  `[UNKNOWN]` The pass rate still. One run is one run, and this one needed all three attempts.
+
   `[VERIFIED]` **This retracts the "ordinary bad luck" reading recorded above.** That reading
   assumed roughly 87% end-to-end; three consecutive failures at that rate has a 0.2% chance.
   Whatever the real rate is, it is not 87%.
