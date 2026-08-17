@@ -102,34 +102,137 @@ Also folds in the small independent defect found alongside it: a rate-limited or
 source currently returns an empty list and vanishes from the brief with only a log line.
 `[VERIFIED]` CBS did exactly that at 16:00, contributing 0 articles after a read timeout.
 
-### `v0.4.0` — the operator chooses the interval
+### `v0.4.0` — the operator chooses the interval **and the scheduler**
 
-**Done when the delivery schedule is configuration, not a cron line.**
+**Done when both the delivery schedule and the thing that triggers it are configuration, not a
+cron line someone edited by hand.**
 
 Depends on `v0.3.0` and cannot be started before it — an interval feature built on
 fetch-per-brief is the design ADR-014 exists to prevent. Resolves the `[UNKNOWN]` in §2 about
 scheduling by making it explicit rather than discovered.
 
+The scheduler half was added on 2026-08-17 at the operator's request, and it is a real choice
+rather than a preference, because the two options fail in opposite directions.
+
+`[VERIFIED]` Today the trigger is `0 */8 * * *` in WSL's crontab. Cron inside WSL only runs
+while WSL is running, which is why `TASKS.md` P4 records that runs are skipped while the
+machine sleeps and warns against inferring a rate from elapsed days.
+
+So the operator picks, and the two answers are for two different wants:
+
+| what you want | what schedules it |
+|---|---|
+| Delivery that does not stop, including while WSL is down or the machine has just woken | An OS level scheduler outside WSL: Windows Task Scheduler, or `launchd` on macOS, or a systemd timer on Linux, or something running on a phone |
+| Control over when the instance is alive, so shutting it down really does stop it | Cron inside WSL, as now |
+
+`[INFERRED]` This is the same adapter boundary the project already uses three times, for
+ingestion sources, delivery channels and summarisers: one interface, several implementations,
+and the pipeline never learns which one it got. A scheduler is a fourth instance of it, so the
+work is a small module plus documentation rather than a new architecture.
+
+`[UNKNOWN]` What the mobile option actually is. Naming it now would be filling a gap with
+plausible prose. It needs its own investigation, and `TASKS.md` L10 already holds the phone
+port as deferred pending a concrete definition.
+
+### `v0.5.0` — NFL
+
+Promoted from after the line to before it on 2026-08-17, see the note under `v1.0.0`.
+`[VERIFIED]` `TASKS.md` records the L1 trigger as already fired, so this is held back by
+sequencing rather than by its own condition.
+
+### `v0.6.0` — MLB and NHL
+
+The remaining two of the four major American leagues. Grouped into one milestone because the
+work is the same shape twice and the second one should cost much less than the first.
+
+`[UNKNOWN]` The data sources. Nothing has been researched for either league, and ADR-003 is the
+precedent for how much that research matters: the NBA answer took two reversals and a
+contradicted `[VERIFIED]` claim before it settled on balldontlie. Do not assume an equivalent
+exists for MLB or NHL until someone has made the request and seen the response.
+
+`[VERIFIED]` A concrete cost this milestone inherits, which is easy to miss: two of the lists
+shipped on 2026-08-17 are NBA only. `_COMPETITION_VOCABULARY` in `processing/validate.py` holds
+conferences, divisions and honours; `_TEAM_NAME_GROUPS` holds ten groups of NBA team names.
+Four leagues means four of each, or one structure keyed by league. `processing/priority.py` team
+keywords are NBA only in the same way.
+
+### `v0.7.0` — delivery beyond Telegram, through OpenClaw
+
+**Done when the operator can receive the brief on a channel other than Telegram without this
+repository containing a line of channel specific code.**
+
+Added 2026-08-17 at the operator's request. `[VERIFIED]` OpenClaw is real, MIT licensed,
+self hosted and local first, and it carries channels for Discord, Google Chat, iMessage,
+Matrix, Microsoft Teams, Signal, Slack, Telegram, WhatsApp and Zalo. That fits C1, C2 and C3
+on its face: no API fees, nothing to sign up for, open source.
+
+**The design that makes it work, and it matters.** SportWire delivers *to OpenClaw*, and
+OpenClaw decides which messaging app that becomes. The channel choice therefore lives in the
+operator's own OpenClaw configuration, outside this tree. `[INFERRED]` That is what keeps C3
+intact: this repository stays publishable because it contains no bridge, no reverse engineered
+protocol and no credentials, only one more `DeliveryChannel` implementation pointing at a local
+process the operator runs.
+
+`[VERIFIED]` **Two corrections to the request, both researched on 2026-08-17 rather than
+assumed.**
+
+- **WhatsApp through OpenClaw does not avoid the WhatsApp problem, it repackages it.** The
+  channel uses Baileys, an unofficial WhatsApp Web client that links a real personal number by
+  QR code. That is the same category `CLAUDE.md` §4 records as a ToS violation with a permanent
+  ban risk, and independent write ups say to pair a number you would not mind losing and that
+  Baileys clients still get banned in 2026 on usage that looks clean. Nothing here changes
+  ADR-002's reasoning; what changes is that the risk now sits in a process outside this repo,
+  and taking it is the operator's informed call rather than something the code decides.
+- **Facebook Messenger is not supported.** It appears nowhere in OpenClaw's documentation or
+  README. `[UNKNOWN]` Whether any free and publishable route to Messenger exists. Treat it as
+  unresearched, not as available.
+
+`[INFERRED]` The channels that are both free and low risk here are Signal, Discord, Slack and
+Matrix, since none of them requires impersonating a web client. Those are the ones worth
+demonstrating first, and a working second channel is what proves the boundary regardless of
+which one it is.
+
+Adopting this needs an ADR amending ADR-002, written when the work starts rather than now.
+`[UNKNOWN]` Whether OpenClaw is stable enough to depend on. It appeared in late 2025 and moves
+quickly, so pin a version and record which one was tested.
+
 ### `v1.0.0` — the line
 
-**A trustworthy single-user NBA brief.** Specifically, all of:
+~~**A trustworthy single-user NBA brief.**~~ **Widened 2026-08-17 at the operator's request:**
+*"4 major-american sport integration before v1.0.0"* and *"Integration with Windows task
+scheduling or other before v1.0.0"*. Recorded as a move rather than a quiet rewrite, per §5.
 
-1. The NBA brief arrives on schedule, unattended, from a scheduler this repository documents.
+**A trustworthy single-user brief across the four major American leagues.** Specifically, all
+of:
+
+1. Briefs for NBA, NFL, MLB and NHL arrive on schedule, unattended, from a scheduler this
+   repository documents, with the operator's choice of scheduler honoured (`v0.4.0`).
 2. The summarisation pass rate is a **measured** number, published in the release notes.
-3. No known false-accusation bug in `processing/validate.py`. `[VERIFIED]` Three were fixed on
-   2026-08-15 alone, so this condition is doing real work.
+3. No known false-accusation bug in `processing/validate.py`. `[VERIFIED]` Six were fixed
+   between 2026-08-15 and 2026-08-17, so this condition is doing real work.
 4. `make check` green, and the README sufficient to run it.
 
-`[INFERRED]` This is deliberately narrower than `CLAUDE.md` §1, which names NBA **and** NFL.
+~~`[INFERRED]` This is deliberately narrower than `CLAUDE.md` §1, which names NBA **and** NFL.
 The reasoning is goal ranking: §1 ranks *ship a working system* first, and a measured, reliable
 one-league brief is a working system, while two unmeasured leagues is twice the surface with
-the same unknown. NFL is the first thing after the line, not part of it.
+the same unknown. NFL is the first thing after the line, not part of it.~~
+
+**Superseded 2026-08-17, and the reasoning it replaced is worth keeping visible.** The old line
+argued that one measured league beats four unmeasured ones. That argument is not wrong, and the
+operator has decided anyway, which is his call. What it means in practice is that condition 2
+now has to hold across four leagues rather than one, so the honest risk is that `v1.0.0`
+arrives much later rather than that it arrives worse. `[INFERRED]` The way to keep it from
+arriving worse is that each league ships as its own milestone with its own measurement, which
+is why `v0.5.0` and `v0.6.0` are separate rather than one "add three leagues" step.
+
+`[INFERRED]` OpenClaw at `v0.7.0` sits before the line but is not one of its conditions.
+Delivery already works through Telegram, so a second channel is a widening of the product
+rather than a requirement for calling it finished, and it depends on an outside project whose
+stability is unknown. If it slips, the line should not slip with it.
 
 ### After 1.0, in this order
 
-- **`v1.1.0` — NFL (L1).** `[VERIFIED]` `TASKS.md` records the L1 trigger as already fired, so
-  this is held back by sequencing rather than by its own condition.
-- **`v1.2.0` — multi-user routing (L8).** Only meaningful once `v0.3.0` and `v0.4.0` exist.
+- **`v1.1.0` — multi-user routing (L8).** Only meaningful once `v0.3.0` and `v0.4.0` exist.
 - **`v2.0.0`** — reserved for a change that breaks how the operator runs it. Nothing currently
   planned qualifies.
 
@@ -144,6 +247,12 @@ project has already been damaged once by a document describing work that was not
 
 **An L-item enters this roadmap only when its trigger has fired**, and then it takes a version
 number of its own rather than riding along inside another milestone.
+
+`[VERIFIED]` Two entered on 2026-08-17 by the operator's decision rather than by a trigger, and
+both are named above: L1, NFL, became `v0.5.0`, and L6, WhatsApp delivery, is partly answered by
+`v0.7.0`. L6 stays open regardless, because its trigger was the operator accepting a recurring
+per message cost through an official provider, and the OpenClaw route is a different thing: free,
+unofficial, and carrying a ban risk instead of a bill.
 
 ---
 
