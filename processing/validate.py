@@ -507,7 +507,10 @@ def _grounded(
     """Whether a proper name is traceable to the sources.
 
     Three ways to be grounded, in increasing generosity: the whole phrase appears, every
-    word appears, or the **last** word appears.
+    word appears, or ~~the **last** word appears.~~ **either end appears, since 2026-08-17.**
+    A name is identified by its last word often enough that the rule worked for a week, but
+    the feeds name players by first name constantly, so both ends now count. The refutation
+    index keys both ends too, and that pairing is what keeps it safe: see P25 below.
 
     `[VERIFIED]` 2026-08-11 the last-word rule is what makes this usable. Requiring every
     word rejected three live summaries for names that were entirely correct — "New York
@@ -546,14 +549,29 @@ def _grounded(
     if _is_competition_term(words):
         return True
 
-    if _contradicted(words, source_names):
+    # Either end can be the word the sources disagree about, so both are asked.
+    if _contradicted(words, source_names, words[-1]) or _contradicted(
+        words, source_names, words[0]
+    ):
         return False
 
     normalised_source = _depossess_text(source_lower)
     if all(_appears(word, normalised_source) for word in words):
         return True
 
-    return _appears(words[-1], normalised_source)
+    # And either end can be the word that identifies the name. `[VERIFIED]` 2026-08-17
+    # (TASKS.md P25): the feeds name players by first name constantly. In the 127 articles
+    # captured that day, `Ja` occurs 33 times and `Ja Morant` none, `LeBron` 26 against 15,
+    # `Wemby` 4 against none, `Giannis` and `Luka` twice each against none. Grounding on the
+    # last word alone means a brief writing the full name is accused of inventing the player
+    # it is reporting on, which is how the 08:00 run lost its prose to `LeBron James`.
+    #
+    # `[INFERRED]` This is the mirror of the bug the last-word rule was added to fix. P11
+    # fixed `Knicks` written out as `New York Knicks`, where the last word identifies. Here
+    # the first word does, and one rule caused both.
+    return _appears(words[-1], normalised_source) or _appears(
+        words[0], normalised_source
+    )
 
 
 def _name_words(name: str) -> list[str]:
@@ -639,14 +657,26 @@ def _index_source_names(articles: list[NewsArticle]) -> dict[str, list[frozenset
                     # answer "who else shares this last name", and a bare surname agrees with
                     # every expansion of it.
                     if len(words) >= 2:
+                        # Keyed under both ends, because either can be the word that
+                        # identifies a person. `[VERIFIED]` 2026-08-17 (TASKS.md P25): keying
+                        # only the last word is what let `Anthony Edwards` pass against
+                        # sources naming Anthony Davis, once the first word could ground a
+                        # name. Indexing both ends closed that at no measured cost, and it
+                        # raised blend detection from 65.2% to 87.6% on the P20 population,
+                        # because a fabricated first name now has somewhere to be caught.
                         index.setdefault(words[-1], []).append(frozenset(words))
+                        index.setdefault(words[0], []).append(frozenset(words))
     return index
 
 
 def _contradicted(
-    words: list[str], source_names: dict[str, list[frozenset[str]]]
+    words: list[str], source_names: dict[str, list[frozenset[str]]], key: str
 ) -> bool:
-    """Whether every source name sharing this last word disagrees about the rest.
+    """Whether every source name sharing `key` disagrees about the rest of this name.
+
+    `key` is the word to look the name up under, and it is always either the first word or
+    the last. Passing it in rather than assuming the last word is what lets one function serve
+    both ends of a name. See `_grounded` for why both ends are needed (TASKS.md P25).
 
     "Every" and not "any": a feed carrying both "Jaylen Brown" and "Jayson Tatum" must still
     ground "Jaylen Brown", so one agreeing source name is enough to acquit.
@@ -656,7 +686,7 @@ def _contradicted(
     long name ending in "exit", so it contributes nothing under "brown". The captured feeds
     are sentence case, so this is a latent weakness rather than a current one.
     """
-    others = source_names.get(words[-1])
+    others = source_names.get(key)
     if not others:
         return False
 
