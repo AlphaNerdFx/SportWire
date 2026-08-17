@@ -1567,9 +1567,10 @@ what each turned into, since several changed shape on contact with real data.
   `wolves` occurs inside it. Tightening to word boundaries would turn that into a false
   accusation. Do not fix this without fixing P26 first.
 
-- [ ] **P26. The feeds and the model use different short forms of the same team.**
+- [x] **P26. The feeds and the model use different short forms of the same team.**
   Found 2026-08-17 16:00, which fell back after all three attempts were rejected for
-  `Philadelphia Sixers`. Open, measured, and the biggest known cause left alongside P25.
+  `Philadelphia Sixers`. ~~Open, measured, and the biggest known cause left alongside P25.~~
+  **Closed 2026-08-17** by an alias table, commits `25e2906` and `5e666a8`.
 
   `[VERIFIED]` The live feeds write `76ers` 11 times and `Sixers` once. `76ers` starts with a
   digit, so `_is_name_word` deliberately refuses it, and grounding never sees it. When the
@@ -1594,11 +1595,33 @@ what each turned into, since several changed shape on contact with real data.
   The fix is an alias table mapping each short form to the team it names, consulted when the
   last word test fails. It is a hardcoded list, the same shape approved for P23, but a plainer
   one: `Cavs` and `Cavaliers` are the same team as a matter of fact, not of judgement.
-  `[UNKNOWN]` Not yet written, and not measured against the blend population.
 
-- [ ] **P25. A player the sources name by first name alone cannot be written in full.**
-  Found 2026-08-17 while diagnosing that morning's fallback. **Open — measured, and the fix
-  needs the operator's decision because it changes `_grounded`'s central rule.**
+  **What shipped.** Ten groups, each one team under the names the feeds actually print. Six
+  were counted in the corpus, four are the same kind of name and unambiguous but not yet seen.
+
+  `[VERIFIED]` Alias pairs rejected went from 5 of 10 to **0 of 10**. On the P20 population of
+  267 real names and 3,000 blends the table costs nothing measurable: real names refused stays
+  at 1, blends detected stays at 1761, and **0** fabrications stop being caught. Both teams the
+  model actually invented that day, `Miami Heat` and `Dallas Mavericks`, are still caught.
+
+  `[VERIFIED]` **Three candidates were measured and left out**, because the short form is an
+  ordinary word rather than a team here: `king` occurs 5 times and never means the Kings (it is
+  LeBron, and a quarterback named Haynes King), `clips` occurs once and means video, `net`
+  occurs once and is a safety net. Each has a test asserting it does not ground a team.
+
+  `[INFERRED]` The table opens no new class of hole. Grounding on the last word already accepts
+  any city in front of a correct nickname, which is what P11 decided when it let `Knicks`
+  become `New York Knicks`. This only makes `Cavs` behave the way `Knicks` already did.
+
+  `[VERIFIED]` Mutation-tested three ways, each verified applied by printing the table size:
+  emptying it (0 entries) gave 8 failures; adding `king` as an alias for the Kings (25 entries)
+  gave 1; skipping the table on the last-word test (23 entries) gave 8.
+
+- [x] **P25. A player the sources name by first name alone cannot be written in full.**
+  Found 2026-08-17 while diagnosing that morning's fallback. ~~**Open — measured, and the fix
+  needs the operator's decision because it changes `_grounded`'s central rule.**~~
+  **Closed 2026-08-17 by reading (c), on the operator's instruction** *"go ahead with fixes for
+  P25, P23 and P26"*. Commits `8a508dc` and `7ac0a1f`.
 
   `[VERIFIED]` The 08:00 run was rejected for `LeBron James` on all three attempts. Grounding
   ends on the **last** word, so a name is grounded by its surname; when the feeds write only
@@ -1641,6 +1664,34 @@ what each turned into, since several changed shape on contact with real data.
 
   `[UNKNOWN]` Whether (c) accepts anything a *model* would really write that the synthetic
   blends do not represent. Resolve by replaying captured batches, not by reasoning.
+
+  **What shipped.** Grounding now accepts either end of a name, and `_index_source_names` keys
+  both ends so refutation can answer at either end too. `_contradicted` takes the key word as
+  an argument instead of assuming the last one. Those two halves are one change and must not be
+  separated: the first without the second is reading (b), which invents people.
+
+  `[VERIFIED]` Measured on 331 live and fixture articles, 267 real names and 3,000 blends,
+  with the P26 alias table also in place:
+
+  | | before | after |
+  |---|---|---|
+  | real names refused | 1/267 | 2/267 |
+  | blends detected | 1761 (58.7%) | **2520 (84.0%)** |
+  | mononym expansions accepted | 0/8 | **7/8** |
+  | fabricated surnames missed | 0/6 | **0/6** |
+
+  `[VERIFIED]` The one extra refusal is not a real name. Before, the single refusal was
+  `Edit I've`; after, it is `Edit Curry` and `Redick On`. All three are extraction artifacts
+  from Reddit posts, not players or teams, so the count moved but nothing real was lost.
+  `[INFERRED]` Refusals rose because a wider index gives `_contradicted` more to disagree with,
+  which is the same mechanism that raised detection by 25 points.
+
+  `[VERIFIED]` The 8th expansion, `Wemby` to `Victor Wembanyama`, is still refused and should
+  be: neither word matches, because it is a nickname rather than a first name. Handling those
+  would need a player alias table, which is guesswork rather than something the feeds state.
+
+  `[VERIFIED]` Mutation-tested three ways: reverting grounding to the last word only gave 7
+  failures; not indexing the first word gave 6; not refuting on the first word gave 6.
 
 ---
 
