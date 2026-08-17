@@ -1103,3 +1103,28 @@ def test_a_team_is_never_exempt_from_grounding(
     result = validate_summary(f"The {team} were quiet on Sunday.", articles)
 
     assert not result.is_safe, f"{team} was exempted from grounding"
+
+
+def test_one_vocabulary_word_does_not_exempt_the_whole_name(
+    make_article: ArticleFactory,
+) -> None:
+    """The exemption needs **every** word, and this is the test that proves it.
+
+    `[VERIFIED]` 2026-08-17, found by mutation: changing `all` to `any` in
+    `_is_competition_term` left the entire suite green. `Joe Dumars` standing *beside*
+    `Eastern Conference` does not exercise the rule, because a lowercase word between them
+    ends the first name and starts a second — the two never share a run.
+
+    A model writing a title does put them in one run, and that is the case that matters:
+    `Western Conference MVP Joe Dumars` is a single capitalised run whose last word is
+    fabricated. Under `any`, one real structural word would have bought the whole phrase a
+    pass — which is exactly the hole a hardcoded list is supposed not to open.
+    """
+    articles = [make_article("The Detroit Pistons are exploring a sign-and-trade")]
+
+    result = validate_summary(
+        "Western Conference MVP Joe Dumars is leading the negotiations.", articles
+    )
+
+    assert not result.is_safe, "a fabricated name rode in on a vocabulary word"
+    assert "Dumars" in " ".join(result.invented_names)
