@@ -281,9 +281,17 @@ def _is_community_opinion(article: NewsArticle, ordinary: frozenset[str]) -> boo
         return False
 
     title = _strip_invisible(article.title).strip()
-    if _LEADING_TAG.match(title):
-        return False
 
+    # ~~A reporter tag exempts the post.~~ **Removed 2026-08-18, before it ever shipped.**
+    # `[VERIFIED]` It cannot change a verdict here. This rule only runs when
+    # `rejection_reason` returned None, and of the 22 distinct tag tokens in the corpus only
+    # `highlight` and `highlights` are ordinary words — both already in `REJECTED_TAGS`, so
+    # those posts never reach this line. Every other tag is a reporter's name, which is
+    # distinctive by definition and so fails the ordinary-word test anyway.
+    # `[INFERRED]` Kept out for the reason P6 exists: a guard that cannot alter an outcome
+    # reads as protection, survives review, and costs a mutation campaign to disprove. This
+    # one was caught by a surviving mutant rather than by review, which is the point.
+    # **Restore it** if a reporter tag is ever added whose lower-case form is ordinary English.
     words = title.split()
     if not words or len(words) > MAX_COMMUNITY_OPINION_WORDS:
         return False
