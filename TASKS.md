@@ -873,8 +873,14 @@ what each turned into, since several changed shape on contact with real data.
   by not hiding a known gap. If the trade is ever revisited, that test is the specification.
   - Proof:
 
-- [ ] **P6. `_drop_leading_stopword` no longer affects any verdict.** Found 2026-08-13 while
+- [x] **P6. `_drop_leading_stopword` no longer affects any verdict.** Found 2026-08-13 while
   writing `tests/test_validate.py`, **by mutation testing rather than by reading code**.
+  **Resolved as a decision, box reconciled 2026-08-18:** the mechanism is kept for its
+  diagnostic value and that purpose is asserted in
+  `test_sentence_initial_preposition_is_stripped_from_the_reported_name`. Nothing is pending.
+  `[INFERRED]` It has since earned its keep twice over as a *name*, not a mechanism: P6 is the
+  rule invoked to delete a redundant normalisation (`31a2eb8`) and a dead reporter-tag guard
+  in `newsworthy.py` (P34).
   `[VERIFIED]` Disabling it changes no pass/fail outcome in the suite.
   `[INFERRED]` It cannot, by construction. It strips only the **first** word of a name, and
   `_grounded` returns True whenever the **last** word appears in the sources. Stripping the
@@ -1679,8 +1685,18 @@ what each turned into, since several changed shape on contact with real data.
   **survived the first campaign** and its test is `6d0c57a`; see that commit for why the
   obvious test did not exercise the rule.
 
-- [ ] **P24. Grounding matches substrings, so one name can ground another.** Found
-  2026-08-17 while writing P23's team-safety test. **Open, not yet costing anything.**
+- [x] **P24. Grounding matches substrings, so one name can ground another.** Found
+  2026-08-17 while writing P23's team-safety test. ~~**Open, not yet costing anything.**~~
+  **Closed 2026-08-18** as a side effect of P21, commit `5f35e55`. Its own example is now
+  caught: against `Sources: Cavs deal Schroder for Hornets' Mann`, `Brooklyn Nets` is refused.
+
+  `[VERIFIED]` **The "leave it alone" conclusion below was wrong, and dated evidence is why.**
+  That measurement ran before P25 let the *first* word ground a name. While only the last word
+  counted, an accidental substring had to land on a surname and never did; afterwards every
+  short first name was exposed, and `Ayo Dosunmu` grounded against a batch that never mentions
+  him because "ayo" sits inside **playoffs** and **layoffs**. Word boundaries went in with P21.
+  `[INFERRED]` The lesson is about the shelf life of a measurement, not about substrings: a
+  result that says "changes nothing" is only true of the code it was measured against.
   `[VERIFIED]` `_grounded` ends in `words[-1] in normalised_source`, a plain substring test.
   Against the source `Sources: Cavs deal Schroder for Hornets' Mann`, the summary name
   `Brooklyn Nets` is **grounded** — because `"nets"` occurs inside `"Hornets"`. The test that
@@ -1916,6 +1932,12 @@ what each turned into, since several changed shape on contact with real data.
 
 - [ ] **P30. The brief interleaves unrelated stories.** Open, reported by the operator
   2026-08-18 and **not fixed**.
+  **Same root as P18, and they should be worked together.** `[VERIFIED]` P18 recorded on
+  2026-08-15 that every story classifies to the same tier, so `sort_by_priority` degenerates
+  to fetch order. P30 is what that order looks like once the summariser chunks it: related
+  stories land in different chunks and the reduced narrative interleaves them. `[INFERRED]`
+  One is the cause and the other the symptom, so fixing the ordering is likely to close both.
+  Do not fix them separately.
   `[VERIFIED]` In the delivered brief, two Clippers/Kawhi items are separated by the Jokic
   thread, and the Jeanie Buss items are separated by the San Antonio arena vote. The operator's
   words: *"why is jeanie buss section separated by vote in san antonio"*.
