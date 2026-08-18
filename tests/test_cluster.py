@@ -36,6 +36,7 @@ from processing.cluster import (
     SOURCE_LIMITS,
     group_related,
     limit_per_source,
+    order_by_relatedness,
 )
 
 ArticleFactory = Callable[..., NewsArticle]
@@ -391,3 +392,97 @@ def test_a_zero_default_disables_the_general_ceiling(
 def test_capping_nothing_returns_nothing(make_article: ArticleFactory) -> None:
     """The nothing-to-report path."""
     assert limit_per_source([]) == []
+
+
+def test_reports_of_one_story_from_four_feeds_end_up_adjacent(
+    make_article: ArticleFactory,
+) -> None:
+    """`[VERIFIED]` The defect the operator reported twice, from a real 15-story brief.
+
+    That brief carried the same Schröder trade at positions 1, 5, 9 and 14, once per feed,
+    with unrelated stories between them. P18 measured why: every story classifies to the same
+    priority tier in the offseason, so `sort_by_priority` degenerates to the identity and the
+    surviving order is fetch order, which is ESPN, then CBS, then Yahoo, then r/nba.
+
+    Note the spellings. Two of these say `Schröder` and two say `Schroder`, which is how the
+    feeds really print them, so the key has to fold accents or they never meet.
+    """
+    groups = [
+        [make_article("Cavs deal Schroder for Hornets' Mann", source="ESPN")],
+        [make_article("Beal stays with Clippers", source="ESPN")],
+        [
+            make_article(
+                "Dennis Schröder trade grades: Cavaliers eye a bigger move",
+                source="CBS Sports",
+            )
+        ],
+        [
+            make_article(
+                "Kawhi Leonard investigation drags on for the Clippers",
+                source="CBS Sports",
+            )
+        ],
+        [
+            make_article(
+                "Dennis Schröder has now been traded nine times", source="Yahoo Sports"
+            )
+        ],
+        [
+            make_article(
+                "Schroder is one team away from tying Ish Smith", source="r/nba"
+            )
+        ],
+    ]
+
+    ordered = order_by_relatedness(groups)
+    titles = [group[0].title for group in ordered]
+    positions = [index for index, title in enumerate(titles) if "chr" in title]
+
+    assert positions == list(range(positions[0], positions[0] + 4)), (
+        f"the four Schroder reports are not adjacent: {titles}"
+    )
+
+
+def test_the_best_ranked_story_still_leads(make_article: ArticleFactory) -> None:
+    """Ordering must not promote a story over the one the caller ranked first."""
+    groups = [
+        [make_article("Beal stays with Clippers", source="ESPN")],
+        [make_article("Cavs deal Schroder for Hornets' Mann", source="ESPN")],
+        [make_article("Dennis Schröder trade grades", source="CBS Sports")],
+    ]
+
+    assert order_by_relatedness(groups)[0][0].title == "Beal stays with Clippers"
+
+
+def test_unrelated_stories_keep_the_order_they_arrived_in(
+    make_article: ArticleFactory,
+) -> None:
+    """A batch where nothing is related must come back untouched.
+
+    `[INFERRED]` This is what makes the change safe to add to the pipeline: it can only move
+    a story when there is a shared name to justify it.
+    """
+    titles = [
+        "Wolves retire Garnett's 21",
+        "Jeanie Buss opposes the sale",
+        "San Antonio council votes on arena funding",
+        "Haliburton returns from injury",
+    ]
+    groups = [[make_article(title, source="ESPN")] for title in titles]
+
+    assert [g[0].title for g in order_by_relatedness(groups)] == titles
+
+
+def test_ordering_never_adds_or_loses_a_story(make_article: ArticleFactory) -> None:
+    """A permutation, never a filter. The same guarantee `sort_by_priority` gives."""
+    groups = [
+        [make_article("Cavs deal Schroder for Hornets' Mann", source="ESPN")],
+        [make_article("Beal stays with Clippers", source="ESPN")],
+        [make_article("Dennis Schröder trade grades", source="CBS Sports")],
+        [make_article("Kawhi Leonard and the Clippers", source="CBS Sports")],
+    ]
+
+    ordered = order_by_relatedness(groups)
+
+    assert len(ordered) == len(groups)
+    assert {g[0].article_id for g in ordered} == {g[0].article_id for g in groups}
