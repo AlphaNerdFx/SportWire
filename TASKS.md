@@ -1942,6 +1942,45 @@ what each turned into, since several changed shape on contact with real data.
 
 ---
 
+- [ ] **P32. A headline label or sentence is indexed as a rival entity.** Open, found
+  2026-08-18 16:00, which fell back on all three attempts. **Not fixed.**
+  `[VERIFIED]` Two of that run's three rejections come from this. `Toronto Raptors` was
+  refuted by `{raptors, reacts}`, from *"Raptors Reacts: Which player needs to elevate their
+  game next to Kawhi?"*. `Commissioner Adam Silver` was refuted by `{adam, fire, silver}`,
+  from the r/nba post *"Fire Adam Silver"*. Neither refuter is an entity: one is a recurring
+  section label, the other is a sentence beginning with a verb.
+  `[VERIFIED]` **P27's colon fix does not reach this.** A colon ends the run, but the run is
+  recorded first when it already has two words, so `Raptors Reacts` is still indexed. The
+  colon only ever discarded one-word labels.
+  `[VERIFIED]` **P20's `_ordinary_words` does not reach it either**, for the reason P27
+  recorded: it only learns a word is vocabulary when the batch writes it in lower case, and
+  this batch never wrote "reacts" or "fire" that way.
+  `[UNKNOWN]` The fix. At least three defensible answers and none measured: discard a run that
+  a separator terminated regardless of length; require a refuter to look like a name rather
+  than a sentence; or drop leading imperatives the way `_SENTENCE_STARTERS` drops prepositions.
+  Resolve by measuring each against the P20 population before choosing.
+
+- [ ] **P33. A source's misspelling refutes the correct spelling.** Open, found 2026-08-18
+  16:00. **Not fixed, and it is a consequence of P25.**
+  `[VERIFIED]` `Steve Ballmer` was rejected on all three attempts. The batch spells it
+  **"Steve Balmer"**, one L, in *"Pablo Torre on ESPN's report regarding negotiations between
+  Steve Balmer and the NBA"*. Indexed as `{balmer, steve}`, which shares the first word with
+  `{steve, ballmer}` and disagrees about the rest.
+  `[VERIFIED]` **P25 caused it.** With last-word-only indexing the two names key on `balmer`
+  and `ballmer`, different buckets, and no refutation happens. Keying both ends is what puts
+  them in the same bucket. That change is still worth its keep — it raised blend detection
+  from 65.2% to 87.6% — so this is a cost to pay down, not a reason to revert it.
+  `[INFERRED]` A near-match test would separate these cleanly. Measured on six pairs with
+  `difflib.SequenceMatcher`: typos score 0.923 (`balmer`/`ballmer`) and 0.933
+  (`schroder`/`schrder`), while genuinely different players score 0.667 (`jayson`/`jaylen`)
+  and 0.545 (`doncic`/`jokic`).
+  `[UNKNOWN]` Whether that gap holds beyond six hand-picked pairs. **Six examples is not a
+  measurement**, and adding fuzzy matching to the one check protecting the phone on that
+  basis is exactly the under-measured change that produced P24's wrong closure and the
+  substring hole. Resolve against the P20 population and the curated blends first.
+
+---
+
 ## LOW — deferred; each requires a trigger condition
 
 - [ ] **L1. NFL sources (`nflreadpy`).** Trigger: NBA path stable across several real runs.
