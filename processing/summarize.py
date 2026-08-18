@@ -181,6 +181,7 @@ class Summarizer(ABC):
         articles: list[NewsArticle],
         max_chars: int = DEFAULT_SUMMARY_CHARS,
         attempts: int = DEFAULT_ATTEMPTS,
+        vocabulary_sample: list[NewsArticle] | None = None,
     ) -> str | None:
         """Summarise articles, retrying until the result survives validation.
 
@@ -230,7 +231,10 @@ class Summarizer(ABC):
                 logger.warning("%s returned empty text", self.summarizer_name)
                 continue
 
-            result = validate_summary(cleaned, articles)
+            # `vocabulary_sample` widens only the evidence for which capitalised words are
+            # ordinary English. Names are still grounded against `articles`, the stories the
+            # brief actually summarised. `[VERIFIED]` TASKS.md P32.
+            result = validate_summary(cleaned, articles, vocabulary_sample)
             if result.is_safe:
                 # `[VERIFIED]` 2026-08-14: this was guarded by `if attempt > 1`, so a summary
                 # accepted first try logged nothing at all and the run read as
