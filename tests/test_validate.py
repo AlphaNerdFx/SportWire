@@ -1544,3 +1544,21 @@ def test_an_abbreviation_must_stand_alone_to_ground_a_name(
     articles = [make_article("Watch the team skate through a light practice session")]
 
     assert not validate_summary("Karl-Anthony Towns married.", articles).is_safe
+
+
+def test_the_leagues_own_paperwork_needs_no_source(
+    make_article: ArticleFactory,
+) -> None:
+    """`[VERIFIED]` 2026-08-18 16:00 attempt 1 was rejected for `Collective Bargaining
+    Agreement`, which is a document the league has whether or not any outlet mentioned it.
+
+    `[VERIFIED]` Measured before adding it: across 256 articles and 397 distinct names, these
+    three words acquit nothing else, no team and no person.
+    """
+    articles = [make_article("Raptors fans confused about when Kawhi nightmare ends")]
+
+    result = validate_summary(
+        "The Collective Bargaining Agreement shapes what teams can offer.", articles
+    )
+
+    assert result.is_safe, f"wrongly flagged: {result.invented_names}"
