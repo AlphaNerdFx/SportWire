@@ -230,12 +230,68 @@ _TEAM_ALIASES: dict[str, frozenset[str]] = {
 def _appears(word: str, source: str) -> bool:
     """Whether a word, or another name for the same team, occurs in the source text.
 
-    Only teams get this. A player has one surname, so there is nothing to alias, and adding
-    people would mean guessing at nicknames rather than reading them off the feeds.
+    Only teams get an alias. A player has one surname, so there is nothing to alias, and
+    adding people would mean guessing at nicknames rather than reading them off the feeds.
+
+    **Matched on word boundaries, and P25 is why that became necessary.** `[VERIFIED]`
+    2026-08-18: with plain substring matching, `Ayo Dosunmu` grounds against a batch that
+    never mentions him, because `ayo` occurs inside "playoffs" and "layoffs". That is the
+    fabrication this module was built to catch.
+
+    ~~P24 measured word boundaries as changing nothing and was closed on that basis.~~
+    **Corrected 2026-08-18.** That measurement was taken *before* P25 let the first word
+    ground a name. While only the last word counted, a short accidental match had to land on
+    a surname to matter and it never did; once the first word counts, every short first name
+    is exposed, and "ayo" inside "playoffs" is not an exotic case.
+    `[VERIFIED]` P24 also recorded substring matching as load-bearing, because a source
+    writing `Timberwolves` grounded a summary's `Wolves` only by containment. P26's alias
+    table now states that relationship outright, so the containment is no longer carrying it.
     """
-    if word in source:
+    if re.search(rf"(?<![a-z0-9]){re.escape(word)}(?![a-z0-9])", source):
         return True
-    return any(alias in source for alias in _TEAM_ALIASES.get(word, ()))
+    return any(
+        re.search(rf"(?<![a-z0-9]){re.escape(alias)}(?![a-z0-9])", source)
+        for alias in _TEAM_ALIASES.get(word, ())
+    )
+
+
+# Names the feeds write only as an abbreviation. `[VERIFIED]` 2026-08-18 this class has cost
+# two briefs, not the one P21 recorded:
+#
+#   `Madison Square Garden` rejected 3 times, while the feeds print `MSG` 7 times and
+#   "Madison", "Square" and "Garden" appear nowhere.
+#   `Karl-Anthony Towns` rejected on all three attempts of the 2026-08-17 08:00 run, whose
+#   batch carried "KAT, Jordyn Woods tie the knot in Malibu". That run was recorded here as
+#   the model inventing a player. It was not; it expanded an abbreviation correctly.
+#
+# **A table, not a rule, and the measurement is why.** The obvious general version is to take
+# a name's initials and look for them in the sources. `[VERIFIED]` That acquits `Ayo Dosunmu`,
+# the fabrication this module was built to catch, because its initials spell `AD` and the
+# feeds print `AD`. It would also acquit `Anthony Davis` on the same letters. A rule that
+# cannot tell those apart is worse than no rule.
+#
+# `[VERIFIED]` Matched on **word boundaries**, never as a substring, and that is not
+# defensive: measured across 239 articles, `ad` occurs 181 times as a substring against 1 as
+# a word, `la` 352 against 9, and `kat` 3 against 2 because "skate" contains it. Only `msg`
+# happens to be safe either way.
+_ABBREVIATIONS: dict[str, tuple[str, ...]] = {
+    "madison square garden": ("msg",),
+    "karl-anthony towns": ("kat",),
+}
+
+
+def _written_as_an_abbreviation(name: str, source_lower: str) -> bool:
+    """Whether the sources name this thing, but only in short form.
+
+    Keyed on the whole name rather than one of its words, so `garden` cannot ground every
+    name ending in "Garden". `[INFERRED]` That precision is what makes a hand-written table
+    acceptable here where an initials rule is not: each entry states one fact about one name,
+    and getting it wrong cannot spill onto anything else.
+    """
+    for short in _ABBREVIATIONS.get(name, ()):
+        if re.search(rf"(?<![a-z0-9]){re.escape(short)}(?![a-z0-9])", source_lower):
+            return True
+    return False
 
 
 def _is_competition_term(words: list[str]) -> bool:
@@ -558,7 +614,12 @@ def _grounded(
     source because it is not a claim about anyone. See `_is_competition_term` for what that
     covers and what it costs (TASKS.md P23).
     """
-    if _comparable(name).lower() in source_lower:
+    comparable = _comparable(name).lower()
+    if comparable in source_lower:
+        return True
+
+    # The sources may name this only in short form, which is writing rather than invention.
+    if _written_as_an_abbreviation(comparable, source_lower):
         return True
 
     words = _name_words(name)
