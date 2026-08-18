@@ -1851,6 +1851,57 @@ what each turned into, since several changed shape on contact with real data.
 
 ---
 
+- [x] **P29. A fan speculation thread became a claim in the brief.** Closed 2026-08-18,
+  reported by the operator from a delivered brief.
+  `[VERIFIED]` The brief said *"speculation swirls around Nikola Jokic's potential contract,
+  suggesting he cannot sign for the veteran minimum while still receiving an additional
+  $300M"*. The whole thing traces to one r/nba post: *"Can Nikola Jokic now sign for veteran
+  minimum and get 300 million on the side for planting few trees?"*, a reader being sarcastic.
+  `[VERIFIED]` **Nothing downstream could have caught it, and the validator was right.**
+  `$300M` grounded because the post contains "300 million"; `Nikola Jokic` grounded because the
+  post names him. The summary is a faithful reading of a source that should never have been in
+  the batch. `[INFERRED]` This is the clearest case yet that grounding answers "did a source
+  say this", not "is this true", and that the filter upstream is what decides which sources
+  get to say things.
+  **Fixed by one structural signal, scoped three ways:** an untagged, question-shaped title on
+  the community feed. `[VERIFIED]` This is title-based classification of r/nba, which
+  `SESSION.md` §11 records failing twice, so it was measured before shipping rather than
+  reasoned about. Across 239 unique articles from four captures it drops **exactly one**, and
+  it is that post. r/nba writes 1 question title in 64; the editorial outlets write 18 in 175
+  and every one is reporting, which is why the rule cannot apply to them. A reporter tag
+  exempts an item, so `[Charania] Will X sign?` survives.
+  `[VERIFIED]` Mutation-tested four ways, all caught: never dropping, applying to every source,
+  ignoring the reporter tag, and dropping untagged community posts regardless of punctuation
+  (9 failures, the widest). Commits `b986a1e`, `159958f`.
+
+- [ ] **P30. The brief interleaves unrelated stories.** Open, reported by the operator
+  2026-08-18 and **not fixed**.
+  `[VERIFIED]` In the delivered brief, two Clippers/Kawhi items are separated by the Jokic
+  thread, and the Jeanie Buss items are separated by the San Antonio arena vote. The operator's
+  words: *"why is jeanie buss section separated by vote in san antonio"*.
+  `[INFERRED]` The likely mechanism, not yet confirmed: `processing/summarize.py` chunks at
+  `CHUNK_SIZE = 5` and the 12 stories went to 3 chunks. Notes are extracted per chunk and then
+  reduced, so two articles about one story land in different chunks whenever priority order
+  separates them. `processing/cluster.py` groups related coverage, but the order handed to the
+  summariser is priority order, and nothing keeps a group contiguous across a chunk boundary.
+  `[UNKNOWN]` Whether that is the whole cause, and whether ordering stories by group before
+  chunking fixes it without disturbing priority. Resolve by replaying a captured batch with
+  the two orderings and comparing, not by reasoning.
+
+- [ ] **P31. `_figure_grounded` compares digits against the whole batch.** Open, found
+  2026-08-18 while checking whether `$300M` was invented.
+  `[VERIFIED]` It strips every non-digit from the entire source text and asks whether the
+  figure's digits appear as a substring of that stream. On the 42-article reconstruction the
+  stream is 111 digits long, so `$489M` and `$10B` ground while `$300M`, `$999M` and `$7777`
+  do not. `[INFERRED]` The looseness scales with batch size: a longer digit stream makes any
+  short number likelier to appear by coincidence, and a two-digit figure like `$10B` is
+  already near-certain to match something.
+  `[UNKNOWN]` Whether it has ever produced a false acquittal. It did **not** cause the Jokic
+  case, which is why this is recorded rather than fixed: that figure was genuinely in a source.
+  Resolve by measuring how many invented figures a real batch would ground before changing it.
+
+---
+
 ## LOW — deferred; each requires a trigger condition
 
 - [ ] **L1. NFL sources (`nflreadpy`).** Trigger: NBA path stable across several real runs.
