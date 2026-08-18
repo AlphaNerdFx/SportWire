@@ -160,7 +160,49 @@ def rejection_reason(article: NewsArticle, now: datetime | None = None) -> str |
     if _posted_by_a_moderator(article.author):
         return f"subreddit business, posted by {article.author}"
 
+    # Rule 4 — an untagged question on the community feed, which is a discussion prompt.
+    if _is_community_discussion(article, title):
+        return "community discussion, an untagged question"
+
     return None
+
+
+# Feeds where readers post, not reporters. `[VERIFIED]` `processing/cluster.py` names the
+# same feed in `SOURCE_LIMITS`, for the same underlying reason: its volume and its shape are
+# unrelated to how much news there is.
+COMMUNITY_SOURCES = frozenset({"r/nba"})
+
+
+def _is_community_discussion(article: NewsArticle, title: str) -> bool:
+    """Whether a community item is a reader asking a question rather than reporting.
+
+    `[VERIFIED]` 2026-08-18 the operator's brief carried *"speculation swirls around Nikola
+    Jokic's potential contract, suggesting he cannot sign for the veteran minimum while still
+    receiving an additional $300M"*. The source is one r/nba post: *"Can Nikola Jokic now sign
+    for veteran minimum and get 300 million on the side for planting few trees?"*, which is a
+    reader being sarcastic. Nothing downstream could have saved it. `processing/validate.py`
+    grounded `$300M` correctly, because the thread really does say "300 million".
+
+    **This is title-based classification of r/nba, which has failed twice**, and the warnings
+    are recorded in `_posted_by_a_moderator` and in `cluster.SOURCE_LIMITS`: a blacklist
+    missed untagged chatter, and a whitelist dropped the biggest story of the day. So this is
+    deliberately not a keyword rule. It is one structural signal, scoped three ways.
+
+    `[VERIFIED]` Measured across 64 r/nba titles and 175 editorial ones captured 2026-08-17
+    and 2026-08-18: **exactly one r/nba title ends in a question mark, and it is this one.**
+    Editorial outlets write 18, all of them real analysis pieces, which is why the rule cannot
+    be applied to them: "Grades for Schroder trade to Hornets: Which team gets a B-?" and "The
+    Spurs have a lot of wings. How will they play them all?" are reporting.
+
+    A reporter tag exempts the item, so `[Charania] Will X sign?` survives. `[INFERRED]` The
+    tag means a named journalist is being quoted, and that is the same evidence the existing
+    rules already trust in the opposite direction when they reject `[Highlight]`.
+    """
+    if article.source not in COMMUNITY_SOURCES:
+        return False
+    if _LEADING_TAG.match(title):
+        return False
+    return title.rstrip().endswith("?")
 
 
 def _posted_by_a_moderator(author: str | None) -> bool:
