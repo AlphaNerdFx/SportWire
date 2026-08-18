@@ -770,7 +770,7 @@ what each turned into, since several changed shape on contact with real data.
   - `[UNKNOWN]` The real rate. Re-count after ~2 weeks of dated logs.
   - Proof:
 
-- [ ] **P5. The validator grounds entities, not claims — a bug class not in `SESSION.md` §8.**
+- [x] **P5. The validator grounds entities, not claims — a bug class not in `SESSION.md` §8.**
   Found 2026-08-13 by reading the two delivered briefs the operator supplied. **This one
   reached the phone**, which the eleven recorded bugs' whole point is to prevent.
   `[VERIFIED]` The 08:00 brief passed validation **on attempt 1** and contains: *"His
@@ -864,6 +864,13 @@ what each turned into, since several changed shape on contact with real data.
 
   `[UNKNOWN]` The false-flag rate over time. One brief flagged correctly and one flagged
   nothing is not a rate. The log now names every flagged sentence, so a soak can count it.
+
+  **The xfail stays xfail, and that is correct rather than unfinished.** It asserts that a
+  sentence asserting a false relationship is *rejected*. The operator chose marking over
+  rejecting, so that assertion is now a description of a road not taken rather than a pending
+  fix. `[INFERRED]` Deleting it would erase the record of the choice; leaving it as a declared
+  expected failure keeps the alternative visible, which is what `OPERATING_RULES.md` §4 means
+  by not hiding a known gap. If the trade is ever revisited, that test is the specification.
   - Proof:
 
 - [ ] **P6. `_drop_leading_stopword` no longer affects any verdict.** Found 2026-08-13 while
