@@ -1612,3 +1612,73 @@ def test_the_wider_sample_never_grounds_a_name_by_itself(
 
     assert not result.is_safe, "an article outside the batch must not ground a name"
     assert "Joe Dumars" in result.invented_names
+
+
+# --- one name spelled wrongly by the source --------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("headline", "written_out"),
+    [
+        # `[VERIFIED]` Both are real headlines, and each cost a brief.
+        (
+            (
+                "Pablo Torre on ESPN's report regarding negotiations between "
+                "Steve Balmer and the NBA"
+            ),
+            "Steve Ballmer",
+        ),
+        (
+            "Anthony Edwards meets Lebwrong James and company in the Philippines",
+            "LeBron James",
+        ),
+    ],
+)
+def test_a_source_spelling_a_name_wrongly_does_not_refute_it(
+    make_article: ArticleFactory, headline: str, written_out: str
+) -> None:
+    """`[VERIFIED]` TASKS.md P33. Two briefs lost to this, on 2026-08-18 and 2026-08-19.
+
+    The first is a typo, one L in Ballmer. The second is a reddit user's deliberate joke
+    spelling. Both are indexed as names, both share a word with the correct spelling, and both
+    disagree about the other word, so the refutation rule read each as a rival entity.
+    """
+    articles = [make_article(headline)]
+
+    result = validate_summary(f"{written_out} was in the news.", articles)
+
+    assert result.is_safe, f"wrongly flagged: {result.invented_names}"
+
+
+@pytest.mark.parametrize(
+    ("real_name", "blend"),
+    [
+        # `[VERIFIED]` The near-match threshold has to keep these refuted. Ratios measured:
+        # jayson/jaylen 0.667, edwards/davis 0.500, durant/garnett 0.462.
+        ("Jaylen Brown", "Jayson Brown"),
+        ("Anthony Davis", "Anthony Edwards"),
+        ("Kevin Durant", "Kevin Garnett"),
+    ],
+)
+def test_two_different_players_are_not_near_matches(
+    make_article: ArticleFactory, real_name: str, blend: str
+) -> None:
+    """The expensive direction: a fabricated name is built from a *different* real one.
+
+    `[VERIFIED]` This is what bounds the exemption. All three pairs score at or below 0.667,
+    while the two spellings that must merge score 0.857 and 0.923.
+    """
+    articles = [make_article(f"{real_name} spoke to reporters after the game")]
+
+    assert not validate_summary(f"{blend} signed on Sunday.", articles).is_safe
+
+
+def test_a_near_match_must_not_bridge_names_of_different_lengths(
+    make_article: ArticleFactory,
+) -> None:
+    """Equal length only. A difference in how many words a name has is handled by the subset
+    tests, and letting a near-match cross that boundary would blur expansion with substitution.
+    """
+    articles = [make_article("Karl-Anthony Towns and Julius Randle were traded")]
+
+    assert validate_summary("Anthony Towns was traded.", articles).is_safe
