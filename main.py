@@ -36,7 +36,7 @@ from delivery.telegram import TelegramChannel
 from ingestion.nba_games import BallDontLieGamesAdapter
 from ingestion.rss_news import FEEDS, RssNewsAdapter
 from models.schemas import NewsArticle, SeriesContext
-from processing.cluster import group_related, limit_per_source
+from processing.cluster import group_related, limit_per_source, order_by_relatedness
 from processing.dedup import deduplicate_articles, deduplicate_games
 from processing.highlights import find_notable_games
 from processing.newsworthy import drop_non_news
@@ -169,6 +169,16 @@ def main(argv: list[str] | None = None) -> int:
         # filtering could not separate its reporting from its chatter. A story it shares
         # with an outlet is unaffected: those merged above, and the outlet leads them.
         story_groups = limit_per_source(story_groups)
+
+        # Put stories about the same subject next to each other. Order only: nothing is
+        # merged, dropped or added, and the best-ranked story stays first.
+        #
+        # `[VERIFIED]` After the cap, because the cap keeps the highest-ranked stories and
+        # reordering first would change which ones that is. `[VERIFIED]` TASKS.md P18 and
+        # P30: one 15-story brief carried the same Schröder trade at positions 1, 5, 9 and
+        # 14, once per feed, because every story ties on priority and the surviving order is
+        # fetch order.
+        story_groups = order_by_relatedness(story_groups)
 
         # On by default since 2026-08-10. It was off while validation passed 0/3; what
         # changed is the input, not the model — filtering retrospectives and capping per
