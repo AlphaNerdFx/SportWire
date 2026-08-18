@@ -335,3 +335,34 @@ def test_every_article_reaches_some_chunk(make_article: ArticleFactory) -> None:
     combined = " ".join(prompt for _, prompt in summarizer.prompts)
     for article in articles:
         assert article.title in combined, f"{article.title} reached no chunk"
+
+
+def test_the_vocabulary_sample_reaches_the_validator(
+    make_article: Callable[..., NewsArticle],
+) -> None:
+    """`[VERIFIED]` 2026-08-18, and this test exists because a mutation demanded it.
+
+    Deleting the pass-through left all 331 tests green: nothing checked that `summarise`
+    forwards the sample, so the widening could have been silently inert in production while
+    every unit test of the validator still passed.
+
+    The batch below refuses `Toronto Raptors`, because "Raptors Reacts:" is indexed as a rival
+    entity. One extra article writing "reacts" in lower case is enough to teach the validator
+    that it is an ordinary word, and it can only do so if the sample actually arrives.
+    TASKS.md P32.
+    """
+    batch = [
+        make_article(
+            "Raptors Reacts: Which player needs to elevate their game next to Kawhi?"
+        ),
+        make_article("Raptors fans confused about when Kawhi nightmare ends"),
+    ]
+    claim = "Toronto Raptors have options."
+
+    assert StubSummarizer(claim).summarise(batch) is None, (
+        "without the wider sample this batch must still refuse the team"
+    )
+
+    wider = [*batch, make_article("The crowd reacts to a late three in Denver")]
+
+    assert StubSummarizer(claim).summarise(batch, vocabulary_sample=wider) == claim
