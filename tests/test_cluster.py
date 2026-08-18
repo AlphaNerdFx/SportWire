@@ -486,3 +486,42 @@ def test_ordering_never_adds_or_loses_a_story(make_article: ArticleFactory) -> N
 
     assert len(ordered) == len(groups)
     assert {g[0].article_id for g in ordered} == {g[0].article_id for g in groups}
+
+
+def test_the_pipeline_groups_caps_and_orders_in_that_sequence(
+    make_article: ArticleFactory,
+) -> None:
+    """`[VERIFIED]` 2026-08-18, and this test exists because a mutation demanded it.
+
+    Deleting the ordering step from the pipeline left all 341 tests green, because the call
+    sat inline in `main` where nothing could reach it without the network. That is the third
+    wiring mutant to survive in one day, after `fetch_news` and the vocabulary pass-through.
+
+    Asserts the observable consequence rather than the call: reports of one trade arriving
+    from four different feeds come out adjacent.
+    """
+    from main import build_story_groups
+
+    articles = [
+        make_article("Cavs deal Schroder for Hornets' Mann", source="ESPN"),
+        make_article("Beal stays with Clippers", source="ESPN"),
+        make_article(
+            "Dennis Schröder trade grades: Cavaliers eye a bigger move",
+            source="CBS Sports",
+        ),
+        make_article(
+            "Kawhi Leonard investigation drags on for the Clippers", source="CBS Sports"
+        ),
+        make_article(
+            "Dennis Schröder has now been traded nine times", source="Yahoo Sports"
+        ),
+        make_article("Schroder is one team away from tying Ish Smith", source="r/nba"),
+    ]
+
+    titles = [group[0].title for group in build_story_groups(articles)]
+    positions = [index for index, title in enumerate(titles) if "chr" in title]
+
+    assert positions, f"no Schroder story survived: {titles}"
+    assert positions == list(range(positions[0], positions[0] + len(positions))), (
+        f"reports of one trade are not adjacent: {titles}"
+    )
