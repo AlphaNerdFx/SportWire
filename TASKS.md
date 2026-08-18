@@ -1981,6 +1981,34 @@ what each turned into, since several changed shape on contact with real data.
 
 ---
 
+- [ ] **P34. An opinion rant on the community feed reaches the brief.** Open, reported by the
+  operator 2026-08-18 from the delivered headline list. **Measured and ready, not implemented.**
+  `[VERIFIED]` The 16:00 brief carried *"Fire Adam Silver"* by `/u/FineCan8373`, whose body
+  begins *"Adam Silver is either a coward, corrupt, or both"*. That is an opinion piece, not
+  reporting. P29's rule only catches questions, and this is an imperative.
+  `[VERIFIED]` **The obvious rule fails, and this is the third time title classification of
+  r/nba has.** Dropping untagged posts that do not lead with a name catches all 3 rants in the
+  sample but also drops **11 real items**, including the breaking *"Lakers controlling owner
+  Jeanie Buss opposes sale of family's stake to Bob Iger, Joshua Kushner"*. Unusable alone.
+  `[VERIFIED]` **Two weak signals combine into a usable one.** Across 36 untagged r/nba posts
+  from five captures, "does not lead with a name **and** is 12 words or fewer" drops exactly
+  two, both rants — `Fire Adam Silver` (3 words) and `Take away their picks or stop pretending
+  the cap exists` (10) — and no real item. The gap is comfortable: the shortest real item that
+  does not lead with a name is 15 words, so 12 sits between them rather than on an edge.
+  `[INFERRED]` "Leads with a name" is corpus-derived, not a verb list: it asks whether the
+  first word is one the batch also writes in lower case, which is P20's `_ordinary_words`
+  mechanism. That is the shape this project chose over a hand-written list once already.
+  `[UNKNOWN]` **Where the shared helper should live**, and this is why it is not built.
+  `_ordinary_words` is currently private to `processing/validate.py`. `processing/newsworthy.py`
+  importing from the validator inverts the sensible layering; the tidier home is
+  `processing/names.py`, which is already the shared text module. Either way it touches
+  `validate.py`, `names.py`, `newsworthy.py` and tests, which is `OPERATING_RULES.md` §7's
+  four-file tripwire, so it needs the operator's go-ahead rather than a quiet refactor.
+  `[UNKNOWN]` Whether 2 positives in 36 posts is enough. It is a small sample and the rule
+  should be re-measured on a wider capture before it ships.
+
+---
+
 ## LOW — deferred; each requires a trigger condition
 
 - [ ] **L1. NFL sources (`nflreadpy`).** Trigger: NBA path stable across several real runs.
