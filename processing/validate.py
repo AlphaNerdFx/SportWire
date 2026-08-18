@@ -21,6 +21,7 @@ from __future__ import annotations
 import logging
 import re
 import unicodedata
+from difflib import SequenceMatcher
 
 from models.schemas import NewsArticle
 from processing.names import NameScanner
@@ -803,6 +804,49 @@ def _index_source_names(
     return index
 
 
+# How alike two words must be before they are read as one name spelled two ways.
+#
+# `[VERIFIED]` This class has cost two briefs. On 2026-08-18 16:00 `Steve Ballmer` was refused
+# because the batch spelled it "Steve **Balmer**" with one L. On 2026-08-19 00:00
+# `LeBron James` was refused because an r/nba headline reads "Anthony Edwards meets
+# **Lebwrong** James and company in the Philippines" — a deliberate joke spelling, indexed as
+# a rival entity.
+#
+# `[VERIFIED]` 0.80 is measured, not chosen for roundness. The pairs that must merge score
+# 0.923 (`balmer`/`ballmer`) and 0.857 (`lebwrong`/`lebron`); the pairs that must stay refuted
+# score 0.667 (`jayson`/`jaylen`), 0.545 (`doncic`/`jokic`), 0.500 (`edwards`/`davis`) and
+# 0.462 (`durant`/`garnett`). The threshold sits in the gap rather than on an edge.
+#
+# `[VERIFIED]` Cost on the P20 population of 318 real names and 3,000 synthetic blends across
+# 288 articles: real names refused unchanged at 3, and blend detection falls by **one**, from
+# 2593 to 2592. That one is `Stephen Steph's`, a nonsense synthetic string matched through
+# `steph`/`stephen` at 0.833 — which is one person. All six curated real-player blends survive.
+_SAME_NAME_RATIO = 0.80
+
+
+def _effectively_the_same_name(mine: frozenset[str], other: frozenset[str]) -> bool:
+    """Whether two names differ only in how a word is spelled.
+
+    Equal length only, because a difference in *how many* words a name has is expansion or
+    contraction, which the subset tests in `_contradicted` already handle.
+
+    `[INFERRED]` This reads a near-match as evidence of one name rather than two, which is the
+    same judgement `comparable` makes about accents and apostrophes. The difference is that
+    those foldings are exact and this one is a guess, so it is deliberately strict: a fabricated
+    name is built from a *different* real name, and different names are not near-matches.
+    """
+    if len(mine) != len(other):
+        return False
+    return all(
+        word in other
+        or any(
+            SequenceMatcher(None, word, alternative).ratio() >= _SAME_NAME_RATIO
+            for alternative in other
+        )
+        for word in mine
+    )
+
+
 def _contradicted(
     words: list[str], source_names: dict[str, list[frozenset[str]]], key: str
 ) -> bool:
@@ -853,7 +897,10 @@ def _contradicted(
     if not eligible:
         return False
 
-    return all(not (mine <= other or other <= mine) for other in eligible)
+    return all(
+        not (mine <= other or other <= mine or _effectively_the_same_name(mine, other))
+        for other in eligible
+    )
 
 
 # Entities that share an article, used to spot a claim joining two that never met.
