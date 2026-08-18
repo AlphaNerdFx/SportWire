@@ -54,7 +54,7 @@ _TRAILING_PUNCTUATION = ',;:!?()[]{}"“”«»…'
 # That was read as the name `{report, sixers}`, which is two words sharing a last word with
 # `Philadelphia Sixers` and disagreeing about the other, so it refuted a real team.
 #
-# P20 was supposed to have handled this, and its fix does not reach here: `_ordinary_words`
+# P20 was supposed to have handled this, and its fix does not reach here: `ordinary_words`
 # only knows a word is vocabulary if the batch writes it in lower case somewhere, and a
 # 12-story batch never wrote "report". `[VERIFIED]` Confirmed by adding one article containing
 # "per report" to the same batch, after which the team grounded.
@@ -114,8 +114,8 @@ def _comparable(text: str) -> str:
 # The competition's own vocabulary: structures, rounds and honours that exist whether or not
 # any outlet mentioned them today. **This is a hardcoded list, which this repository has twice
 # refused to write** — rejected for P13, avoided for P20 in favour of the corpus-derived
-# `_ordinary_words`. It is written here deliberately and with the operator's approval, because
-# the corpus cannot derive it: `_ordinary_words` learns from words the sources write in *lower*
+# `ordinary_words`. It is written here deliberately and with the operator's approval, because
+# the corpus cannot derive it: `ordinary_words` learns from words the sources write in *lower*
 # case, and "Eastern Conference" is capitalised everywhere or absent entirely.
 #
 # `[VERIFIED]` 2026-08-17, from `logs/sportwire.log`: of 55 distinct names ever rejected as
@@ -689,8 +689,15 @@ def _name_words(name: str) -> list[str]:
     ]
 
 
-def _ordinary_words(articles: list[NewsArticle]) -> frozenset[str]:
+def ordinary_words(articles: list[NewsArticle]) -> frozenset[str]:
     """Words the sources also write in lower case — vocabulary, not parts of a name.
+
+    **Public, and imported by `processing/newsworthy.py` as well** (TASKS.md P34). It lives
+    here rather than in `processing/names.py`, which is the tidier home on layering grounds,
+    because it depends on `_depossess` and `_TRAILING_PUNCTUATION` and moving all three
+    through this module is more churn than the layering is worth. `[INFERRED]` Recorded as a
+    judgement rather than an oversight: if a third caller ever appears, move all three.
+
 
     **The corpus decides this, not a list**, and that is the whole point (TASKS.md P20
     option (b)). `[VERIFIED]` 2026-08-15 the alternative was a hand-written stop-word list
@@ -715,9 +722,20 @@ def _ordinary_words(articles: list[NewsArticle]) -> frozenset[str]:
             for token in field.split():
                 if not token[:1].islower():
                     continue
-                if cleaned := _depossess(token.strip(_TRAILING_PUNCTUATION).lower()):
+                if cleaned := normalise_word(token):
                     ordinary.add(cleaned)
     return frozenset(ordinary)
+
+
+def normalise_word(token: str) -> str:
+    """Reduce one raw token to the form `ordinary_words` records.
+
+    **Public so that a caller can look a word up without reinventing this.** `[INFERRED]`
+    Two copies of a normalisation are worse than a shared one precisely because they fail
+    quietly: a lookup against a set built with different rules simply never matches, and
+    nothing raises. `processing/newsworthy.py` uses both together (TASKS.md P34).
+    """
+    return _depossess(token.strip(_TRAILING_PUNCTUATION).lower())
 
 
 def _index_source_names(
@@ -753,7 +771,7 @@ def _index_source_names(
     # `[INFERRED]` The sample must stay separate from `articles` rather than simply passing
     # more of them, because `articles` is what a name is *grounded* against. Widening that
     # would let a story the brief never summarised vouch for a name in it.
-    ordinary = _ordinary_words(vocabulary_sample or articles)
+    ordinary = ordinary_words(vocabulary_sample or articles)
     index: dict[str, list[frozenset[str]]] = {}
     for article in articles:
         for field in (article.title, article.summary):
