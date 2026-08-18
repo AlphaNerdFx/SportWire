@@ -570,9 +570,17 @@ what each turned into, since several changed shape on contact with real data.
   There is no single commit whose reversion restores the prose runs; reverting would restore
   four already-retired bugs.
 
-  `[VERIFIED]` **The 08:00 fallback was the check working, not failing.** `Karl-Anthony
+  ~~`[VERIFIED]` **The 08:00 fallback was the check working, not failing.** `Karl-Anthony
   Towns` appears **0 times** across all 127 live articles captured that day — as do `Towns`
-  and `NBA TV`. The model invented a player on all three attempts.
+  and `NBA TV`. The model invented a player on all three attempts.~~
+  **Retracted 2026-08-18. This was wrong, and it was reported to the operator as fact.**
+  `[VERIFIED]` The search was for "karl-anthony towns", "karl-anthony" and "towns", all of
+  which are genuinely absent. It never looked for the abbreviation. That batch carries
+  *"💍 KAT, Jordyn Woods tie the knot in Malibu"*, confirmed by reconstructing the 23 recorded
+  ids. `Karl-Anthony Towns` was a **correct expansion of KAT**, so the 08:00 run was a false
+  accusation after all, and it is P21 rather than a fabrication. `NBA TV` is unaffected and
+  stays a genuine invention. `[INFERRED]` The lesson is narrower than "check harder": a name
+  absent in full is not absent, because the feeds abbreviate.
 
   `[INFERRED]` The one variable that tracks the outcome is volume: the prose runs averaged
   **49** new articles, the five fallback runs **23**. Mid-August feeds are quiet, so each
@@ -1549,7 +1557,8 @@ what each turned into, since several changed shape on contact with real data.
     artefact is discarded; a real person named repeatedly still refutes. `[UNKNOWN]` Effect
     unmeasured.
 
-- [ ] **P21. Expanding an abbreviation reads as invention.** Found the same way. **Open.**
+- [x] **P21. Expanding an abbreviation reads as invention.** Found the same way.
+  ~~**Open.**~~ **Closed 2026-08-18**, commits `5f35e55` and `0003b67`.
   `[VERIFIED]` The 16:00 run was rejected in part for `Madison Square Garden`, whose sources
   say only `MSG` — twice, in the title and the body. Nothing in the sources contains
   "Madison", "Square" or "Garden", so every grounding rule correctly fails, and the index is
@@ -1561,6 +1570,30 @@ what each turned into, since several changed shape on contact with real data.
   Resolve by counting abbreviation expansions across a week of rejected attempts before
   building anything — `[INFERRED]` a rule mapping abbreviations to expansions is a lookup
   table, which is the shape this project keeps deciding it does not want.
+
+  **Counted first, as that instruction required, and the count changed the answer twice.**
+
+  `[VERIFIED]` **It has cost two briefs, not one.** Besides `Madison Square Garden` (rejected
+  3 times, against `MSG` printed 7 times in the corpus), the 2026-08-17 08:00 run was rejected
+  for `Karl-Anthony Towns` on all three attempts while its own batch carried *"💍 KAT, Jordyn
+  Woods tie the knot in Malibu"*. Batch reconstructed from `seen_articles`, 19 of 23 ids
+  matched. **That run is recorded elsewhere in this file, and was reported to the operator, as
+  the model inventing a player. It was not.** See the correction under P4.
+
+  `[VERIFIED]` **The general version is unsafe, which settles the lookup-table objection with
+  evidence rather than taste.** Deriving initials from a name and looking for them in the
+  sources acquits `Ayo Dosunmu` — the fabrication this module was built to catch — because its
+  initials spell `AD` and the feeds print `AD`. `Anthony Davis` collides on the same letters.
+
+  `[VERIFIED]` **Matching must respect word boundaries.** Across 239 articles: `ad` occurs 181
+  times as a substring against 1 as a word, `la` 352 against 9, `kat` 3 against 2 because
+  "skate" contains it. Only `msg` is safe either way, at 7 and 7.
+
+  **Fixed** with a two-entry phrase table keyed on the whole name, so `garden` cannot ground
+  every name ending in "Garden". `[VERIFIED]` Mutation-tested six ways, all caught. One
+  mutation *survived* on the first attempt and was a false negative in my own harness:
+  `{} or {...}` is textually applied but evaluates to the second dict, so the table was never
+  emptied. Verifying the table's *size* rather than the edit is what caught it.
 
 - [x] **P22. One name spelled two ways is read as two names.** Found 2026-08-17 00:10 by an
   autonomous check watching the pipeline log, then generalised on the operator's instruction
