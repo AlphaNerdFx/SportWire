@@ -206,7 +206,17 @@ def main(argv: list[str] | None = None) -> int:
                 len(to_summarise),
                 summarizer.summarizer_name,
             )
-            news_summary = summarizer.summarise(to_summarise)
+            # Everything fetched this run is handed over as the vocabulary sample, while
+            # the summary is still validated against `to_summarise` alone.
+            #
+            # `[VERIFIED]` TASKS.md P32: a twelve-story batch is too small a sample of
+            # English. On 2026-08-18 16:00 it never wrote "reacts" or "fire" in lower case,
+            # so "Raptors Reacts:" and "Fire Adam Silver" were indexed as entities and
+            # refuted the Raptors and the commissioner. Across 258 articles both words are
+            # plainly ordinary.
+            news_summary = summarizer.summarise(
+                to_summarise, vocabulary_sample=articles
+            )
 
             if news_summary is None:
                 logger.info("using the headline list")
