@@ -29,6 +29,7 @@ import re
 from collections import Counter
 
 from models.schemas import NewsArticle
+from processing.validate import comparable
 
 logger = logging.getLogger(__name__)
 
@@ -302,3 +303,60 @@ def group_related(
         )
 
     return groups
+
+
+def order_by_relatedness(groups: list[list[NewsArticle]]) -> list[list[NewsArticle]]:
+    """Reorder stories so that ones about the same subject sit next to each other.
+
+    **This changes order only.** No story is merged, dropped or added, so a caller's ranking
+    and per-source caps survive it, and the best-ranked story stays first.
+
+    `[VERIFIED]` 2026-08-15 (P18) and again 2026-08-18 (P30), the second time from the
+    operator reading a delivered brief: *"why is jeanie buss section separated by vote in san
+    antonio and 2 clippers separated by reddit fan-thread"*. One 15-story brief carried the
+    **same Schröder trade at positions 1, 5, 9 and 14**, once per feed.
+
+    `[VERIFIED]` Grouping cannot fix that and should not try. `group_related` needs
+    `MIN_SHARED_NAMES` = 2, and four reports of one trade share only the player's name, so
+    they are correctly four stories. Lowering that threshold would merge any two articles that
+    happen to mention one player. Relatedness is a weaker relation than sameness, and ordering
+    is where it belongs.
+
+    `[VERIFIED]` The order was previously fetch order in practice: P18 measured that every
+    story classifies to the same priority tier in the offseason, so `sort_by_priority`
+    degenerates to the identity and the brief reads ESPN, then CBS, then Yahoo, then r/nba.
+
+    Greedy chaining rather than a similarity sort. `[INFERRED]` It reads in one sentence —
+    after each story, take whichever remaining story shares the most names with it — and that
+    matters more here than optimality (`CLAUDE.md` C5). Ties keep the caller's ranking, so a
+    batch where nothing is related comes back unchanged.
+    """
+    if len(groups) <= 2:
+        return list(groups)
+
+    keys = [_relatedness_key(group) for group in groups]
+    remaining = list(range(1, len(groups)))
+    order = [0]
+
+    while remaining:
+        current = keys[order[-1]]
+        # `-index` keeps the caller's order among stories that share nothing.
+        nearest = max(remaining, key=lambda index: (len(current & keys[index]), -index))
+        order.append(nearest)
+        remaining.remove(nearest)
+
+    return [groups[index] for index in order]
+
+
+def _relatedness_key(group: list[NewsArticle]) -> frozenset[str]:
+    """Every word of every name in a story, folded so two spellings meet.
+
+    Words rather than whole names, because the feeds write `Dennis Schröder` and bare
+    `Schroder` for one person and those never match as strings. Folded for the same reason
+    P22 folds them in the validator: the sources disagree with themselves about accents.
+    """
+    words: set[str] = set()
+    for article in group:
+        for name in _names(article):
+            words.update(comparable(name).lower().split())
+    return frozenset(words)
