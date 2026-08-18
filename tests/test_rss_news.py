@@ -173,3 +173,46 @@ def test_a_healthy_fetch_leaves_no_error_behind() -> None:
 
     adapter.fetch()
     assert adapter.last_error is None, "a recovered source must stop being reported"
+
+
+def test_the_pipeline_reports_which_feeds_failed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`[VERIFIED]` 2026-08-18, and this test exists because a mutation demanded it.
+
+    Deleting the failure collection from the fetch loop left all 315 tests green, because
+    nothing exercised it: the brief tests call `build_messages` directly and never reach the
+    loop. That is a mechanism which reads as protection and proves nothing, the shape
+    `TASKS.md` P6 was opened for.
+
+    Two feeds, one dead. The dead one must be named and must not end the run.
+    """
+    import main
+
+    class Fake(RssNewsAdapter):
+        def _fetch(self) -> list[NewsArticle]:
+            if self.source_name == "r/nba":
+                raise requests.HTTPError("500 Server Error")
+            return []
+
+    monkeypatch.setattr(main, "RssNewsAdapter", Fake)
+
+    articles, failed = main.fetch_news(["ESPN", "r/nba"])
+
+    assert articles == []
+    assert failed == ["r/nba"], "the dead feed must be named, the healthy one must not"
+
+
+def test_the_pipeline_reports_nothing_when_every_feed_is_healthy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The complement, so the note cannot quietly become permanent."""
+    import main
+
+    class Healthy(RssNewsAdapter):
+        def _fetch(self) -> list[NewsArticle]:
+            return []
+
+    monkeypatch.setattr(main, "RssNewsAdapter", Healthy)
+
+    assert main.fetch_news(["ESPN", "r/nba"]) == ([], [])
