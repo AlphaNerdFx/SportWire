@@ -436,3 +436,76 @@ def test_a_community_statement_is_not_dropped_for_being_untagged(
         ),
     ):
         assert is_newsworthy(make_article(title, source="r/nba")), title
+
+
+def test_a_short_untagged_community_rant_is_dropped(
+    make_article: ArticleFactory, now: datetime
+) -> None:
+    """`[VERIFIED]` 2026-08-18 the operator's brief carried "Fire Adam Silver", whose body
+    opens "Adam Silver is either a coward, corrupt, or both".
+
+    It also did damage beyond taking a slot: indexed as the name `{adam, fire, silver}`, it
+    refused the actual commissioner (TASKS.md P32).
+
+    The batch has to supply the vocabulary, so the rule is applied in `drop_non_news` rather
+    than in `rejection_reason`, which only ever sees one article.
+    """
+    batch = [
+        make_article("Fire Adam Silver", source="r/nba"),
+        make_article(
+            "Chicago will fire the coach if the slide continues", source="ESPN"
+        ),
+    ]
+
+    kept = drop_non_news(batch, now=now)
+
+    assert [a.title for a in kept] == [
+        "Chicago will fire the coach if the slide continues"
+    ]
+
+
+def test_a_long_community_post_survives_even_without_a_name_up_front(
+    make_article: ArticleFactory, now: datetime
+) -> None:
+    """`[VERIFIED]` The expensive direction, and the reason length is half the rule.
+
+    Dropping untagged posts that do not open with a name catches all three rants in the
+    sample and also drops **11 real items**. This is the shortest of them at 15 words, and it
+    was the biggest story in the feed that day.
+    """
+    batch = [
+        make_article(
+            "Lakers controlling owner Jeanie Buss opposes sale of family's stake to "
+            "Bob Iger, Joshua Kushner",
+            source="r/nba",
+        ),
+        make_article("The owner opposes the sale, sources say", source="ESPN"),
+    ]
+
+    assert len(drop_non_news(batch, now=now)) == 2
+
+
+def test_a_short_community_post_led_by_a_name_survives(
+    make_article: ArticleFactory, now: datetime
+) -> None:
+    """The other half. A short post is fine when it opens with who it is about."""
+    batch = [
+        make_article("Wemby dominates the fourth quarter again", source="r/nba"),
+        make_article("A quiet night otherwise around the league", source="ESPN"),
+    ]
+
+    kept = drop_non_news(batch, now=now)
+
+    assert "Wemby dominates the fourth quarter again" in [a.title for a in kept]
+
+
+def test_the_opinion_rule_does_not_touch_editorial_sources(
+    make_article: ArticleFactory, now: datetime
+) -> None:
+    """Outlets write short headlines that open with a verb, and they are still reporting."""
+    batch = [
+        make_article("Fire Adam Silver", source="CBS Sports"),
+        make_article("The league will fire back at the report", source="ESPN"),
+    ]
+
+    assert len(drop_non_news(batch, now=now)) == 2
