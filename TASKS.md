@@ -833,6 +833,29 @@ what each turned into, since several changed shape on contact with real data.
   checking delivers prose more often and lets a false relationship through occasionally, while
   pair checking catches the false relationship and falls back more often. `[INFERRED]` No
   amount of measurement dissolves that; it is a choice about which error is worse.
+
+  **Resolved 2026-08-18: mark, do not reject.** The operator chose visibility over a stricter
+  check. `unsupported_sentences` in `processing/validate.py` is additive and never touches
+  `is_safe`, the brief appends a mark to a flagged sentence plus one legend line, and `main.py`
+  logs the sentences so they can be counted over a soak. Commits `f966313`, `2bd436e`,
+  `535fbfb`, `90ed113`.
+
+  `[VERIFIED]` On the 00:00 brief, reconstructed from the database: 1 of 5 sentences flagged,
+  and it is the false one. On a separately accepted 11-sentence brief: 0 flagged.
+
+  `[VERIFIED]` **Two wrong versions were built first, and both were caught only by running the
+  real string rather than a tidied one.** Reading source entities with grounding's two-word
+  rule contributes no `pelicans` from "signs with the Pelicans", where it is a lone capitalised
+  word, so the true Watford sentence was flagged. Then the opener "In NBA news" extracts as
+  `In NBA` and keys on `nba`, which shares no article with `watford`, flagging it again. The
+  first measurement reported 5 of 5 correct and was **wrong**, because it was run on sentences
+  with the opener already stripped.
+
+  `[VERIFIED]` Mutation-tested four ways, all caught: two-word source scanner, no opener trim,
+  no vocabulary filter, and never flagging.
+
+  `[UNKNOWN]` The false-flag rate over time. One brief flagged correctly and one flagged
+  nothing is not a rate. The log now names every flagged sentence, so a soak can count it.
   - Proof:
 
 - [ ] **P6. `_drop_leading_stopword` no longer affects any verdict.** Found 2026-08-13 while
@@ -1809,6 +1832,22 @@ what each turned into, since several changed shape on contact with real data.
   `[VERIFIED]` Mutation-tested per file, each verified applied by printing both separator
   strings: removing the colon from `validate.py` alone gave 2 failures, and from
   `processing/names.py` alone gave 2.
+
+---
+
+- [x] **P28. A dead source vanished from the brief with only a log line.** Closed 2026-08-18.
+  `[VERIFIED]` Reddit answered HTTP 500 for the whole 00:00 run and again five minutes later,
+  costing 25 of 87 articles. The brief carried on and said nothing, because `fetch()` returns
+  `[]` on failure and a dead feed is then indistinguishable from a quiet one. Second observed
+  case, after CBS timed out on 2026-08-15 and contributed 0 stories.
+  The empty list stays the contract (`CLAUDE.md` §5 rule 6). `last_error` is set alongside it,
+  as a **class attribute** so no adapter author has to remember to initialise it, and the brief
+  names any source that failed. Commits `c4be9cf`, `c19aa31`, `a135368`, `cad0990`, `115d14e`.
+  `[VERIFIED]` **A mutation deleting the collection entirely left all 315 tests green**, because
+  the loop lived inline in `main` and nothing could reach it without the network. The loop is
+  now `main.fetch_news`, extracted for that reason alone, and the mutant now fails.
+  `[INFERRED]` This is part of what `ROADMAP.md` v0.3.0 folds in, but the visibility half was
+  cheap and independent of ADR-014, so it shipped early rather than waiting.
 
 ---
 
