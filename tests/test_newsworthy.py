@@ -485,6 +485,27 @@ def test_a_long_community_post_survives_even_without_a_name_up_front(
     assert len(drop_non_news(batch, now=now)) == 2
 
 
+def test_a_long_community_post_survives_when_it_opens_with_an_ordinary_word(
+    make_article: ArticleFactory, now: datetime
+) -> None:
+    """The half of the rule the leading-word test alone cannot reach.
+
+    `[VERIFIED]` This is a real r/nba post. It opens with "The", which the batch also writes
+    in lower case, so the leading-word signal fires. Only the 12-word ceiling saves it, and a
+    mutation deleting that ceiling left the whole suite green until this existed.
+    """
+    batch = [
+        make_article(
+            "The National Association of Black Journalists gives Stephen A. Smith the "
+            "Thumbs Down award for his remarks",
+            source="r/nba",
+        ),
+        make_article("The award was announced on Monday", source="ESPN"),
+    ]
+
+    assert len(drop_non_news(batch, now=now)) == 2
+
+
 def test_a_short_community_post_led_by_a_name_survives(
     make_article: ArticleFactory, now: datetime
 ) -> None:
