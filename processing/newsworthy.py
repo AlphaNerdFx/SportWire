@@ -23,6 +23,7 @@ import re
 from datetime import datetime, timezone
 
 from models.schemas import NewsArticle
+from processing.validate import normalise_word, ordinary_words
 
 logger = logging.getLogger(__name__)
 
@@ -164,6 +165,10 @@ def rejection_reason(article: NewsArticle, now: datetime | None = None) -> str |
     if _is_community_discussion(article, title):
         return "community discussion, an untagged question"
 
+    # Rule 5 — a short untagged community post that does not open with a name. Needs the
+    # whole batch to know what an ordinary word looks like, so it is applied in
+    # `drop_non_news` rather than here, where only one article is in scope.
+
     return None
 
 
@@ -240,6 +245,53 @@ def _posted_by_a_moderator(author: str | None) -> bool:
     return author.strip().lower().endswith(("_mod", "moderator"))
 
 
+# A community post this short that does not open with a name is a reader's opinion.
+#
+# `[VERIFIED]` 2026-08-18 the operator's brief carried *"Fire Adam Silver"*, whose body opens
+# "Adam Silver is either a coward, corrupt, or both". That is a rant. It also did real damage
+# beyond taking a slot: indexed as the name `{adam, fire, silver}`, it refused the actual
+# commissioner (P32).
+#
+# **Two weak signals, because neither works alone.** `[VERIFIED]` Dropping untagged posts that
+# do not open with a name catches all three rants in the sample and also drops **11 real
+# items**, including the breaking "Lakers controlling owner Jeanie Buss opposes sale of
+# family's stake to Bob Iger, Joshua Kushner". Length alone is no better: real news appears at
+# 11 words. Together they are clean.
+#
+# `[VERIFIED]` Measured across 36 untagged r/nba posts from five captures, the pair drops
+# exactly two, both rants — "Fire Adam Silver" (3 words) and "Take away their picks or stop
+# pretending the cap exists" (10) — and no real item. The shortest real post that does not
+# open with a name is 15 words, so this sits in the gap rather than on an edge.
+#
+# `[UNKNOWN]` Two positives in 36 is a small sample. Re-measure on a wider capture before
+# trusting the threshold, and watch the drop log.
+MAX_COMMUNITY_OPINION_WORDS = 12
+
+
+def _is_community_opinion(article: NewsArticle, ordinary: frozenset[str]) -> bool:
+    """Whether a community post is short, untagged, and does not open with a name.
+
+    "Opens with a name" is decided by the corpus, not by a list of verbs. `[INFERRED]` That
+    matters because `SESSION.md` §11 records keyword classification of r/nba failing twice,
+    and a verb blacklist would be a third attempt at the same thing. Asking whether the batch
+    also writes the first word in lower case is P20's mechanism, which this project already
+    chose over a hand-written list once.
+    """
+    if article.source not in COMMUNITY_SOURCES:
+        return False
+
+    title = _strip_invisible(article.title).strip()
+    if _LEADING_TAG.match(title):
+        return False
+
+    words = title.split()
+    if not words or len(words) > MAX_COMMUNITY_OPINION_WORDS:
+        return False
+
+    first = normalise_word(words[0])
+    return bool(first) and first in ordinary
+
+
 def is_newsworthy(article: NewsArticle, now: datetime | None = None) -> bool:
     """Whether an item is reporting rather than community content."""
     return rejection_reason(article, now) is None
@@ -256,8 +308,13 @@ def drop_non_news(
     """
     kept: list[NewsArticle] = []
 
+    # Learned from the whole batch, because one article cannot say what an ordinary word is.
+    ordinary = ordinary_words(articles)
+
     for article in articles:
         reason = rejection_reason(article, now)
+        if reason is None and _is_community_opinion(article, ordinary):
+            reason = "community opinion, short and not led by a name"
         if reason is None:
             kept.append(article)
         else:
