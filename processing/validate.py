@@ -84,8 +84,13 @@ _APOSTROPHE_SHAPES = str.maketrans(
 )
 
 
-def _comparable(text: str) -> str:
+def comparable(text: str) -> str:
     """Fold the spellings of one name onto a single form, **for comparison only**.
+
+    **Public, and used by `processing/cluster.py` too** (TASKS.md P30). `[VERIFIED]` The feeds
+    print `Schröder` and `Schroder` in the same batch, so without folding, clustering treats
+    two reports of one trade as unrelated.
+
 
     Never used for display or for extraction — `_is_name_word` still reads the real Unicode,
     because P13 established that enumerating characters is how this module goes stale. This
@@ -478,7 +483,7 @@ def validate_summary(
     useless in practice. The measured failures are wholesale substitutions, not paraphrases,
     and those are caught either way.
     """
-    source = _comparable(" ".join(f"{a.title} {a.summary}" for a in articles))
+    source = comparable(" ".join(f"{a.title} {a.summary}" for a in articles))
     source_lower = source.lower()
     source_names = _index_source_names(articles, vocabulary_sample or articles)
 
@@ -625,12 +630,12 @@ def _grounded(
     source because it is not a claim about anyone. See `_is_competition_term` for what that
     covers and what it costs (TASKS.md P23).
     """
-    comparable = _comparable(name).lower()
-    if comparable in source_lower:
+    folded = comparable(name).lower()
+    if folded in source_lower:
         return True
 
     # The sources may name this only in short form, which is writing rather than invention.
-    if _written_as_an_abbreviation(comparable, source_lower):
+    if _written_as_an_abbreviation(folded, source_lower):
         return True
 
     words = _name_words(name)
@@ -684,7 +689,7 @@ def _name_words(name: str) -> list[str]:
     """
     return [
         cleaned
-        for word in _comparable(name).split()
+        for word in comparable(name).split()
         if (cleaned := _depossess(word.lower()))
     ]
 
