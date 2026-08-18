@@ -1331,7 +1331,7 @@ what each turned into, since several changed shape on contact with real data.
     r/nba capture**, so the only community feed in the pipeline was covered entirely by
     hand-written titles.
 
-- [ ] **P18. The brief's paragraph order is fetch order, because every story is the same
+- [x] **P18. The brief's paragraph order is fetch order, because every story is the same
   tier.** Found 2026-08-15 from the operator reading the 08:00 brief — *"a bit weird that
   Demar is at the end with transactions… I would like the ordering to be less random."*
   **Open — measured, needs a decision.**
@@ -1930,8 +1930,33 @@ what each turned into, since several changed shape on contact with real data.
   ignoring the reporter tag, and dropping untagged community posts regardless of punctuation
   (9 failures, the widest). Commits `b986a1e`, `159958f`.
 
-- [ ] **P30. The brief interleaves unrelated stories.** Open, reported by the operator
-  2026-08-18 and **not fixed**.
+- [x] **P30. The brief interleaves unrelated stories.** Reported by the operator
+  2026-08-18. ~~**Not fixed.**~~ **Closed with P18 on 2026-08-18**, commits `100bc24`,
+  `56653be`, `99eb88f`, `c575530`, `891d964`, `25823d8`.
+
+  **Fixed by ordering, not by grouping, and the distinction is the finding.** `[VERIFIED]`
+  `group_related` requires `MIN_SHARED_NAMES` = 2, and four reports of one trade share only
+  the player's name, so they are correctly four stories. Lowering that threshold would merge
+  any two articles mentioning one player. Relatedness is weaker than sameness, and ordering is
+  where it belongs.
+
+  `processing/cluster.order_by_relatedness` chains greedily: after each story, take whichever
+  remaining story shares the most names with it. Ties keep the caller's ranking, so a batch
+  where nothing is related comes back unchanged, and the top-ranked story always leads. It
+  runs **after** the per-source cap, because the cap keeps the highest-ranked stories and
+  reordering first would change which ones those are.
+
+  `[VERIFIED]` Names are compared as **folded words**, not whole strings. The feeds print
+  `Dennis Schröder` and bare `Schroder` for one person; without folding they never meet, which
+  is why `validate.comparable` became public.
+
+  `[VERIFIED]` On the live feeds, the three Schröder stories moved from positions 4, 5 and 8
+  to 4, 5 and 6, with the two NBA-statement items landing together at 7 and 8. On P18's
+  recorded 15-story brief the four reports of one trade go from 1, 5, 9, 14 to adjacent.
+
+  `[VERIFIED]` Mutation-tested five ways, all caught after one survived: deleting the call
+  from the pipeline left all 341 tests green, the **third** wiring mutant of the day. The
+  sequence is now `main.build_story_groups` and a test asserts the consequence.
   **Same root as P18, and they should be worked together.** `[VERIFIED]` P18 recorded on
   2026-08-15 that every story classifies to the same tier, so `sort_by_priority` degenerates
   to fetch order. P30 is what that order looks like once the summariser chunks it: related
@@ -2080,6 +2105,36 @@ what each turned into, since several changed shape on contact with real data.
   nothing else. Mutation-tested five ways. **Two survived** the first campaign — the word
   ceiling, because the long-post test opened with "Lakers" and never reached it, and the tag
   guard, which was inert. One has a test now; the other is deleted.
+
+---
+
+- [ ] **P35. NFL stories reach the NBA brief.** Open, noticed 2026-08-18 in two separate
+  runs. **Not investigated.**
+  `[VERIFIED]` A dry run's prose carried *"Za'Darius Smith may choose the Falcons over the
+  Browns due to Stefanski connection, but football news is for another day"*, and the live
+  ordering check showed *"Za'Darius Smith free agency update: Could spurn Browns for..."* as
+  story 12 of 12. Earlier the same day, `newsworthy.py` dropped *"Rookie QBs Carson Beck,
+  Haynes King shine in Hall of Fame Game; MLB playoff predictions"* only because it was stale,
+  not because it was football.
+  `[INFERRED]` The cause is the feeds, not the pipeline: CBS and Yahoo publish league-wide
+  sports RSS, and nothing downstream asks which sport an item is about.
+  `[UNKNOWN]` How often, and what the rule should be. It matters more than it looks, because
+  `ROADMAP.md` v0.5.0 and v0.6.0 add NFL, MLB and NHL, at which point "is this NBA" stops
+  being a filter and becomes **routing**. `[INFERRED]` Worth solving once, in that shape,
+  rather than twice.
+
+- [ ] **P36. Pipeline wiring in `main.py` is invisible to the suite.** Open, and it is a
+  pattern rather than a defect. **Recorded 2026-08-18 after it happened three times in a day.**
+  `[VERIFIED]` Three mutations that deleted a whole pipeline step left the entire suite green,
+  because the calls sat inline in `main` where no test can reach them without the network:
+  the failed-source collection, the vocabulary pass-through, and the relatedness ordering.
+  Each was closed individually, two by extracting a named function (`fetch_news`,
+  `build_story_groups`) and one by a pass-through test.
+  `[INFERRED]` Extracting a function per defect works but is reactive, and the next inline
+  step will be just as invisible. The question worth answering is whether `main.run` should be
+  a sequence of named, individually testable steps by construction.
+  `[UNKNOWN]` Whether that is worth the churn. Resolve by counting how much of `main` is
+  currently unreachable from the suite before restructuring anything.
 
 ---
 
