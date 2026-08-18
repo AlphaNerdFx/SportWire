@@ -1942,8 +1942,9 @@ what each turned into, since several changed shape on contact with real data.
 
 ---
 
-- [ ] **P32. A headline label or sentence is indexed as a rival entity.** Open, found
-  2026-08-18 16:00, which fell back on all three attempts. **Not fixed.**
+- [x] **P32. A headline label or sentence is indexed as a rival entity.** Found
+  2026-08-18 16:00, which fell back on all three attempts. ~~**Not fixed.**~~
+  **Fixed the same day**, commits `fb2e8c1`, `8e1b9cd`, `365c54d`, `8e8daa2`, `f1a…` (tests).
   `[VERIFIED]` Two of that run's three rejections come from this. `Toronto Raptors` was
   refuted by `{raptors, reacts}`, from *"Raptors Reacts: Which player needs to elevate their
   game next to Kawhi?"*. `Commissioner Adam Silver` was refuted by `{adam, fire, silver}`,
@@ -1955,9 +1956,36 @@ what each turned into, since several changed shape on contact with real data.
   `[VERIFIED]` **P20's `_ordinary_words` does not reach it either**, for the reason P27
   recorded: it only learns a word is vocabulary when the batch writes it in lower case, and
   this batch never wrote "reacts" or "fire" that way.
-  `[UNKNOWN]` The fix. At least three defensible answers and none measured: discard a run that
-  a separator terminated regardless of length; require a refuter to look like a name rather
-  than a sentence; or drop leading imperatives the way `_SENTENCE_STARTERS` drops prepositions.
+  ~~`[UNKNOWN]` The fix. At least three defensible answers and none measured: discard a run
+  that a separator terminated regardless of length; require a refuter to look like a name
+  rather than a sentence; or drop leading imperatives the way `_SENTENCE_STARTERS` drops
+  prepositions.~~ **None of those was needed.**
+
+  **The cause was the sample size, not the rule.** `[VERIFIED]` P20's `_ordinary_words` only
+  learns that a capitalised word is ordinary when the same batch writes it in lower case, and
+  it was being given the **twelve summarised stories**. That is too small a sample of English:
+  in that batch neither "reacts" nor "fire" appears in lower case, while across 258 captured
+  articles both plainly do.
+
+  So the vocabulary is now learned from a **wider sample** than the names are indexed from.
+  `main.py` hands over everything newsworthy it fetched, roughly 90 articles against the 12
+  summarised. `[INFERRED]` The two must stay separate arguments: `articles` is what a name is
+  *grounded* against, so widening that would let a story the brief never summarised vouch for
+  a name in it. A test asserts exactly that, and a mutation swapping one for the other fails.
+
+  `[VERIFIED]` On the real 16:00 batch it takes the rejections from
+  `['Toronto Raptors', 'Commissioner Adam Silver', 'Steve Ballmer']` down to
+  `['Steve Ballmer']`, which is P33 and a different cause. Measured cost on the P20 population:
+  **none** — 3 of 292 names refused and 2620 of 3000 blends detected either way.
+
+  `[VERIFIED]` Mutation-tested three ways. One **survived**: deleting the pass-through in
+  `processing/summarize.py` left all 331 tests green, so the widening could have been inert in
+  production while every validator unit test still passed. That is the second surviving mutant
+  of the day from the same cause, a branch that only exists in wiring, and it now has a test.
+
+  `[INFERRED]` Recorded because it generalises: three of this module's bugs have now been
+  "the rule is fine, the evidence was too thin" rather than a wrong rule. P20's fix, P27's
+  colon, and this. The pattern to watch is any rule that learns from one batch.
   Resolve by measuring each against the P20 population before choosing.
 
 - [ ] **P33. A source's misspelling refutes the correct spelling.** Open, found 2026-08-18
