@@ -77,6 +77,30 @@ def fetch_news(feed_names: Iterable[str]) -> tuple[list[NewsArticle], list[str]]
     return articles, failed
 
 
+def build_story_groups(articles: list[NewsArticle]) -> list[list[NewsArticle]]:
+    """Turn ranked articles into the ordered list of stories the brief shows.
+
+    Three steps whose **order matters**, which is the reason they live in one named function
+    rather than three lines inside `main`:
+
+    1. **Group** articles covering one story, so a widely-reported event takes one slot rather
+       than seven. `[VERIFIED]` 2026-08-08: a single Kawhi Leonard story produced seven r/nba
+       posts in one capture. Nothing is dropped — grouping is a view, and every article in a
+       group is still recorded as delivered.
+    2. **Cap** how many stories a community feed may lead. `[VERIFIED]` r/nba posts dozens of
+       items a day regardless of how much news there is, and title-pattern filtering could not
+       separate its reporting from its chatter. A story it shares with an outlet is
+       unaffected: those merged in step 1, and the outlet leads them.
+    3. **Order** by relatedness, after the cap. `[VERIFIED]` The cap keeps the highest-ranked
+       stories, so reordering first would change which ones those are.
+
+    Extracted 2026-08-18 for the same reason `fetch_news` was: a mutation deleting step 3
+    entirely left all 341 tests green, because nothing could reach these lines without the
+    network. That is the third pipeline-wiring mutant to survive in one day.
+    """
+    return order_by_relatedness(limit_per_source(group_related(articles)))
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run one pipeline pass. Returns a process exit code."""
     args = _parse_args(argv)
@@ -158,27 +182,7 @@ def main(argv: list[str] | None = None) -> int:
         # the pipeline already has, at no extra cost.
         fresh_articles = sort_by_priority(fresh_articles, fresh_games)
 
-        # Group articles covering one story, so a widely-reported event takes one slot
-        # rather than seven. `[VERIFIED]` 2026-08-08: a single Kawhi Leonard story produced
-        # seven r/nba posts in one capture. Nothing is dropped here — grouping is a view,
-        # and every article in a group is still recorded as delivered.
-        story_groups = group_related(fresh_articles)
-
-        # Bound how many stories a community feed may lead. `[VERIFIED]` r/nba posts
-        # dozens of items a day regardless of how much news there is, and title-pattern
-        # filtering could not separate its reporting from its chatter. A story it shares
-        # with an outlet is unaffected: those merged above, and the outlet leads them.
-        story_groups = limit_per_source(story_groups)
-
-        # Put stories about the same subject next to each other. Order only: nothing is
-        # merged, dropped or added, and the best-ranked story stays first.
-        #
-        # `[VERIFIED]` After the cap, because the cap keeps the highest-ranked stories and
-        # reordering first would change which ones that is. `[VERIFIED]` TASKS.md P18 and
-        # P30: one 15-story brief carried the same Schröder trade at positions 1, 5, 9 and
-        # 14, once per feed, because every story ties on priority and the surviving order is
-        # fetch order.
-        story_groups = order_by_relatedness(story_groups)
+        story_groups = build_story_groups(fresh_articles)
 
         # On by default since 2026-08-10. It was off while validation passed 0/3; what
         # changed is the input, not the model — filtering retrospectives and capping per
