@@ -164,6 +164,13 @@ _COMPETITION_VOCABULARY = frozenset(
         "in-season",
         "tournament",
         "cup",
+        # the league's own paperwork. `[VERIFIED]` 2026-08-18 16:00 attempt 1 was rejected
+        # for `Collective Bargaining Agreement`, which appears nowhere in that batch and is
+        # not a claim about anyone. Measured across 256 articles and 397 distinct names,
+        # adding these three acquits nothing else at all, and no team or person.
+        "collective",
+        "bargaining",
+        "agreement",
         # the calendar
         "summer",
         "draft",
