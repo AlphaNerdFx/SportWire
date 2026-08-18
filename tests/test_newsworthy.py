@@ -362,3 +362,77 @@ def test_an_article_with_no_author_is_kept(
     article = make_article("Clippers sign Bradley Beal", author=None)
 
     assert rejection_reason(article, now) is None
+
+
+def test_an_untagged_question_on_the_community_feed_is_dropped(
+    make_article: Callable[..., NewsArticle],
+) -> None:
+    """`[VERIFIED]` 2026-08-18: this exact post produced a false claim in a delivered brief.
+
+    The brief said Nikola Jokic "cannot sign for the veteran minimum while still receiving an
+    additional $300M". The source is one reader being sarcastic. Nothing downstream could have
+    caught it: `processing/validate.py` grounded `$300M` correctly, because the post really
+    does contain "300 million".
+    """
+    article = make_article(
+        "Can Nikola Jokic now sign for veteran minimum and get 300 million on the "
+        "side for planting few trees?",
+        source="r/nba",
+    )
+
+    assert not is_newsworthy(article)
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        # `[VERIFIED]` Real editorial headlines from the captured feeds. Outlets write
+        # question headlines constantly and they are reporting, which is why this rule cannot
+        # apply to them. 18 such titles across 175 editorial articles.
+        "Grades for Schroder trade to Hornets (and more): Which team gets a B-?",
+        "The Spurs have a lot of wings. How will they play them all?",
+        (
+            "Kawhi Leonard investigation lingering questions: How bad can things get "
+            "for Steve Ballmer and the Clippers?"
+        ),
+    ],
+)
+def test_an_editorial_question_headline_is_kept(
+    make_article: Callable[..., NewsArticle], title: str
+) -> None:
+    """The expensive direction. An outlet asking a question in a headline is still reporting."""
+    assert is_newsworthy(make_article(title, source="CBS Sports"))
+
+
+def test_a_reporter_tag_exempts_a_community_question(
+    make_article: Callable[..., NewsArticle],
+) -> None:
+    """A named journalist quoted on the community feed is reporting, whatever the punctuation.
+
+    `[INFERRED]` The tag is the same evidence the existing rules already trust in the other
+    direction when they reject `[Highlight]`.
+    """
+    article = make_article(
+        "[Charania] Will Nikola Jokic sign an extension this summer?", source="r/nba"
+    )
+
+    assert is_newsworthy(article)
+
+
+def test_a_community_statement_is_not_dropped_for_being_untagged(
+    make_article: Callable[..., NewsArticle],
+) -> None:
+    """`[VERIFIED]` Only the question mark triggers this, never the absence of a tag.
+
+    Real untagged r/nba posts carry genuine news: "NBA blasts ESPN for 'inaccuracies' in
+    report on Kawhi Leonard-Clippers investigation" and "Lakers controlling owner Jeanie Buss
+    opposes sale of family's stake to Bob Iger, Joshua Kushner". Both must survive.
+    """
+    for title in (
+        "NBA blasts ESPN for 'inaccuracies' in report on Kawhi Leonard-Clippers investigation",
+        (
+            "Lakers controlling owner Jeanie Buss opposes sale of family's stake to "
+            "Bob Iger, Joshua Kushner"
+        ),
+    ):
+        assert is_newsworthy(make_article(title, source="r/nba")), title
