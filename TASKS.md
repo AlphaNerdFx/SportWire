@@ -2009,8 +2009,10 @@ what each turned into, since several changed shape on contact with real data.
 
 ---
 
-- [ ] **P34. An opinion rant on the community feed reaches the brief.** Open, reported by the
-  operator 2026-08-18 from the delivered headline list. **Measured and ready, not implemented.**
+- [x] **P34. An opinion rant on the community feed reaches the brief.** Reported by the
+  operator 2026-08-18 from the delivered headline list. ~~**Measured and ready, not
+  implemented.**~~ **Closed the same day** on the operator's go-ahead, commits `e40f99b`,
+  `caed8dd`, `21d6e26`, plus `refactor`/`test` follow-ups.
   `[VERIFIED]` The 16:00 brief carried *"Fire Adam Silver"* by `/u/FineCan8373`, whose body
   begins *"Adam Silver is either a coward, corrupt, or both"*. That is an opinion piece, not
   reporting. P29's rule only catches questions, and this is an imperative.
@@ -2033,7 +2035,29 @@ what each turned into, since several changed shape on contact with real data.
   `validate.py`, `names.py`, `newsworthy.py` and tests, which is `OPERATING_RULES.md` §7's
   four-file tripwire, so it needs the operator's go-ahead rather than a quiet refactor.
   `[UNKNOWN]` Whether 2 positives in 36 posts is enough. It is a small sample and the rule
-  should be re-measured on a wider capture before it ships.
+  should be re-measured on a wider capture. It shipped anyway, because the failure direction
+  is a lost community post rather than a lost brief, and the drop log names every one.
+
+  **What shipped**, and two decisions changed along the way.
+
+  `[VERIFIED]` The helper did **not** move to `processing/names.py` as proposed. It also
+  depends on `_depossess` and `_TRAILING_PUNCTUATION`, so the move would drag three functions
+  through a module already regressed twice that day. Instead `ordinary_words` became public
+  where it lives, and a new public `normalise_word` is shared by both callers. `[INFERRED]`
+  Sharing the normalisation is the part that matters: two copies fail *quietly*, because a
+  lookup against a set built by different rules simply never matches and nothing raises.
+
+  `[VERIFIED]` **A reporter-tag exemption was written and then deleted before shipping**, on
+  the P6 rule. A surviving mutant showed it cannot change a verdict: this rule only runs when
+  `rejection_reason` returned None, and of 22 distinct tag tokens only `highlight` and
+  `highlights` are ordinary words, both already in `REJECTED_TAGS`. Every other tag is a
+  reporter's name, distinctive by definition. Restore it if a reporter tag is ever added whose
+  lower-case form is ordinary English.
+
+  `[VERIFIED]` Final measurement on 256 articles: drops **exactly two**, both rants, and
+  nothing else. Mutation-tested five ways. **Two survived** the first campaign — the word
+  ceiling, because the long-post test opened with "Lakers" and never reached it, and the tag
+  guard, which was inert. One has a test now; the other is deleted.
 
 ---
 
