@@ -1461,3 +1461,86 @@ def test_competition_vocabulary_is_not_an_entity_for_this_check(
         )
         == []
     )
+
+
+# --- a name the sources only ever abbreviate -------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("headline", "written_out"),
+    [
+        # `[VERIFIED]` Both cost a real brief. The KAT one is from the 2026-08-17 08:00 batch,
+        # which was recorded at the time as the model inventing a player. It was not.
+        ("💍 KAT, Jordyn Woods tie the knot in Malibu", "Karl-Anthony Towns"),
+        ("Ex-Knick Oakley's assault case vs. MSG dismissed", "Madison Square Garden"),
+    ],
+)
+def test_writing_out_an_abbreviation_is_not_inventing_a_name(
+    make_article: ArticleFactory, headline: str, written_out: str
+) -> None:
+    """`[VERIFIED]` TASKS.md P21, and it has cost two briefs rather than the one it recorded.
+
+    Nothing in "MSG" contains "Madison", "Square" or "Garden", so every grounding rule fails
+    correctly and the refutation index is empty. The model expanded a well-known abbreviation
+    and the brief lost its prose for it.
+    """
+    articles = [make_article(headline)]
+
+    result = validate_summary(f"{written_out} was in the news.", articles)
+
+    assert result.is_safe, f"wrongly flagged: {result.invented_names}"
+
+
+def test_initials_alone_do_not_ground_a_name(make_article: ArticleFactory) -> None:
+    """The reason P21 is a table and not a rule, asserted so nobody generalises it later.
+
+    `[VERIFIED]` Taking a name's initials and looking for them in the sources acquits
+    `Ayo Dosunmu`, the fabrication this module exists to catch, because its initials spell
+    `AD` and the feeds print `AD`. `Anthony Davis` collides on the same two letters. A rule
+    that cannot separate those is worse than no rule.
+    """
+    articles = [make_article("AD headlined a quiet night in the Eastern Conference")]
+
+    assert not validate_summary("Ayo Dosunmu was central.", articles).is_safe
+    assert not validate_summary("Anthony Davis signed.", articles).is_safe
+
+
+def test_a_name_is_not_grounded_by_letters_inside_another_word(
+    make_article: ArticleFactory,
+) -> None:
+    """`[VERIFIED]` 2026-08-18, and this is a regression guard for a hole P25 opened.
+
+    Grounding used to ask whether a word occurred anywhere in the source text, as a plain
+    substring. While only the *last* word could ground a name, an accidental match had to land
+    on a surname and never did. Once P25 let the *first* word ground a name, every short first
+    name became exposed: `Ayo Dosunmu` grounds against a batch that never mentions him,
+    because "ayo" sits inside **playoffs** and **layoffs**.
+
+    Measured across 239 articles, the exposure is not marginal: `ad` occurs 181 times as a
+    substring against 1 as a word, `la` 352 against 9, and `kat` 3 against 2, since "skate"
+    contains it.
+    """
+    articles = [
+        make_article(
+            "Mark Walter's Lakers sale memorialized by mass layoffs, price hikes"
+        ),
+        make_article("Nuggets look ahead to the playoffs after a quiet week"),
+    ]
+
+    result = validate_summary("Ayo Dosunmu was central to the plan.", articles)
+
+    assert not result.is_safe, "'ayo' inside 'playoffs' must not ground a player"
+    assert "Ayo Dosunmu" in result.invented_names
+
+
+def test_an_abbreviation_must_stand_alone_to_ground_a_name(
+    make_article: ArticleFactory,
+) -> None:
+    """The same boundary rule, on the abbreviation side.
+
+    `[VERIFIED]` "skate" contains "kat". An abbreviation buried inside a longer word says
+    nothing about the name it stands for.
+    """
+    articles = [make_article("Watch the team skate through a light practice session")]
+
+    assert not validate_summary("Karl-Anthony Towns married.", articles).is_safe
