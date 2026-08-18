@@ -464,7 +464,11 @@ class ValidationResult:
         return "; ".join(parts) or "clean"
 
 
-def validate_summary(summary: str, articles: list[NewsArticle]) -> ValidationResult:
+def validate_summary(
+    summary: str,
+    articles: list[NewsArticle],
+    vocabulary_sample: list[NewsArticle] | None = None,
+) -> ValidationResult:
     """Check every proper name and figure in `summary` against the source articles.
 
     Matching is deliberately generous — a claim is only reported as invented when neither the
@@ -476,7 +480,7 @@ def validate_summary(summary: str, articles: list[NewsArticle]) -> ValidationRes
     """
     source = _comparable(" ".join(f"{a.title} {a.summary}" for a in articles))
     source_lower = source.lower()
-    source_names = _index_source_names(articles)
+    source_names = _index_source_names(articles, vocabulary_sample or articles)
 
     candidates: list[str] = []
     for sentence in _SENTENCE_BREAK.split(summary):
@@ -716,7 +720,10 @@ def _ordinary_words(articles: list[NewsArticle]) -> frozenset[str]:
     return frozenset(ordinary)
 
 
-def _index_source_names(articles: list[NewsArticle]) -> dict[str, list[frozenset[str]]]:
+def _index_source_names(
+    articles: list[NewsArticle],
+    vocabulary_sample: list[NewsArticle] | None = None,
+) -> dict[str, list[frozenset[str]]]:
     """The sources' own proper names, keyed by the last word that identifies them.
 
     Built per field rather than from the joined blob so that a title running into the next
@@ -729,7 +736,24 @@ def _index_source_names(articles: list[NewsArticle]) -> dict[str, list[frozenset
     headline's first word. Measured: **2 of 11** teams named by their short form were refused
     when a summary expanded them, and **0 of 11** after this.
     """
-    ordinary = _ordinary_words(articles)
+    # Vocabulary is learned from a **wider** sample than the names are indexed from, because
+    # a twelve-story batch is too small a sample of English.
+    #
+    # `[VERIFIED]` 2026-08-18 16:00 fell back on all three attempts. `Toronto Raptors` was
+    # refused because the batch carried "Raptors Reacts: Which player needs to elevate their
+    # game next to Kawhi?", indexed as the name `{raptors, reacts}`. `Commissioner Adam Silver`
+    # was refused because of the post "Fire Adam Silver", indexed as `{adam, fire, silver}`.
+    # Neither refuter is an entity; both are ordinary words that this batch never wrote in
+    # lower case. Across 258 captured articles, "reacts" and "fire" are both ordinary.
+    #
+    # `[VERIFIED]` Measured on the P20 population before shipping: widening the sample fixes
+    # two of that run's three rejections and costs **nothing**, 3 of 292 names refused and
+    # 2620 of 3000 blends detected either way.
+    #
+    # `[INFERRED]` The sample must stay separate from `articles` rather than simply passing
+    # more of them, because `articles` is what a name is *grounded* against. Widening that
+    # would let a story the brief never summarised vouch for a name in it.
+    ordinary = _ordinary_words(vocabulary_sample or articles)
     index: dict[str, list[frozenset[str]]] = {}
     for article in articles:
         for field in (article.title, article.summary):
