@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from collections.abc import Iterable
 from datetime import date, datetime, timezone
 
 from config.settings import Settings, SettingsError
@@ -46,6 +47,34 @@ from processing.validate import unsupported_sentences
 from storage.db import SeenStore
 
 logger = logging.getLogger("sportwire")
+
+
+def fetch_news(feed_names: Iterable[str]) -> tuple[list[NewsArticle], list[str]]:
+    """Every configured feed in one list, plus the names of the ones that failed.
+
+    Each adapter swallows its own failures, so one dead outlet shortens the brief rather than
+    ending the run. But a failure and a quiet feed both return [], so the adapter is asked
+    which happened rather than the count being used to guess.
+
+    `[VERIFIED]` 2026-08-18: Reddit answered HTTP 500 for the whole 00:00 run. The brief lost
+    25 of its 87 articles and said nothing, because nothing distinguished that from a slow
+    news morning. Second observed case, after CBS timed out on 2026-08-15.
+
+    Pulled out of `main` on 2026-08-18 for one reason, recorded because it is the only thing
+    that justifies moving code out of the pipeline: a mutation deleting the failure collection
+    entirely left all 315 tests green. Inline, this branch could not be tested without the
+    network.
+    """
+    articles: list[NewsArticle] = []
+    failed: list[str] = []
+    for source_name in feed_names:
+        adapter = RssNewsAdapter(source_name)
+        fetched = adapter.fetch()
+        logger.info("  %s: %d articles", source_name, len(fetched))
+        if adapter.last_error:
+            failed.append(source_name)
+        articles.extend(fetched)
+    return articles, failed
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -96,20 +125,7 @@ def main(argv: list[str] | None = None) -> int:
             target_date.isoformat(),
         )
 
-    # Every configured feed, in one list. Each adapter swallows its own failures, so one
-    # dead outlet shortens the brief rather than ending the run.
-    articles: list[NewsArticle] = []
-    failed_sources: list[str] = []
-    for source_name in FEEDS:
-        adapter = RssNewsAdapter(source_name)
-        fetched = adapter.fetch()
-        logger.info("  %s: %d articles", source_name, len(fetched))
-        # A failure and a quiet feed both return [], so the adapter is asked which happened.
-        # `[VERIFIED]` 2026-08-18: Reddit answered HTTP 500 for the whole 00:00 run, the brief
-        # lost 25 of 87 articles, and nothing outside the log said so.
-        if adapter.last_error:
-            failed_sources.append(source_name)
-        articles.extend(fetched)
+    articles, failed_sources = fetch_news(FEEDS)
 
     # Remove items that are not reporting at all — highlight clips, retrospectives,
     # discussion threads. `[VERIFIED]` A community feed carries these alongside news and
