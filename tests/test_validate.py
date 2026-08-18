@@ -1562,3 +1562,53 @@ def test_the_leagues_own_paperwork_needs_no_source(
     )
 
     assert result.is_safe, f"wrongly flagged: {result.invented_names}"
+
+
+def test_a_wider_vocabulary_sample_stops_a_label_refuting_a_team(
+    make_article: ArticleFactory,
+) -> None:
+    """`[VERIFIED]` 2026-08-18 16:00 fell back on all three attempts, and two of its three
+    rejections were this.
+
+    `Toronto Raptors` was refused because the batch carried "Raptors Reacts: Which player
+    needs to elevate their game next to Kawhi?", which is indexed as the name
+    `{raptors, reacts}` and disagrees with the real team about its other word. "Reacts" is a
+    section label, not an entity, and P20's vocabulary rule missed it only because a
+    twelve-story batch never happened to write the word in lower case.
+
+    The wider sample is where the evidence lives: across 258 captured articles, "reacts" is
+    ordinary. Nothing else changes, and in particular the names are still grounded against
+    `articles` alone.
+    """
+    batch = [
+        make_article(
+            "Raptors Reacts: Which player needs to elevate their game next to Kawhi?"
+        ),
+        make_article("Raptors fans confused about when Kawhi nightmare ends"),
+    ]
+
+    assert not validate_summary("Toronto Raptors have options.", batch).is_safe
+
+    wider = [*batch, make_article("The crowd reacts to a late three in Denver")]
+
+    result = validate_summary("Toronto Raptors have options.", batch, wider)
+
+    assert result.is_safe, f"wrongly flagged: {result.invented_names}"
+
+
+def test_the_wider_sample_never_grounds_a_name_by_itself(
+    make_article: ArticleFactory,
+) -> None:
+    """The sample teaches vocabulary only. It must not vouch for a name.
+
+    `[INFERRED]` This is the whole reason it is a separate argument rather than simply passing
+    more articles: `articles` is what a name is grounded against, and a story the brief never
+    summarised has no business supporting a claim in it.
+    """
+    batch = [make_article("Raptors fans confused about when Kawhi nightmare ends")]
+    wider = [*batch, make_article("Joe Dumars is leading the negotiations in Detroit")]
+
+    result = validate_summary("Joe Dumars led the talks.", batch, wider)
+
+    assert not result.is_safe, "an article outside the batch must not ground a name"
+    assert "Joe Dumars" in result.invented_names
