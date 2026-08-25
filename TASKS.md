@@ -2238,8 +2238,9 @@ what each turned into, since several changed shape on contact with real data.
 
 ---
 
-- [ ] **P38. The reproduction captures live in `/tmp` and were lost.** Open, and it has now
-  actually happened. **Not fixed.**
+- [x] **P38. The reproduction captures live in `/tmp` and were lost.** ~~Open, and it has now
+  actually happened. **Not fixed.**~~ **Fixed 2026-08-25** on the operator's instruction,
+  commits `456c73b`, `2c1664c`, `ead9c51`, `053a679`.
   `[VERIFIED]` 2026-08-25: the operator shut the machine down for a break, `/tmp` was cleared,
   and every live feed capture from 2026-08-17 to 2026-08-19 is gone. Six days of batches, the
   only assets that could reproduce a validation failure against real data.
@@ -2250,10 +2251,35 @@ what each turned into, since several changed shape on contact with real data.
   `[INFERRED]` The risk was flagged early and never acted on, which is the whole finding: the
   captures were treated as scratch because they lived in a scratch directory, while in practice
   they were the evidence base for a dozen decisions.
-  `[UNKNOWN]` What to keep. Committing every capture would add megabytes of feed XML to a repo
-  that is meant to be publishable; committing none loses reproducibility. `[INFERRED]` The
-  narrow answer is probably to promote only the batches that a task cites as evidence, the way
-  `tests/fixtures/` already holds three, and to say so in the task when it happens.
+  ~~`[UNKNOWN]` What to keep.~~ **Answered: keep the batch, not the feeds.**
+
+  `[VERIFIED]` Every diagnosis this week needed the same thing, and it was never the feeds: it
+  was **the dozen articles that were actually summarised**. Reconstructing that took two steps
+  each time, reading delivered ids out of `seen_articles` and matching them against a whole
+  feed capture, and both halves broke within a week.
+
+  `storage/evidence.py` writes one JSON record per run into `evidence/`, holding the batch, the
+  accepted prose or `null`, any flagged claims and any failed sources. `[VERIFIED]` Measured on
+  a real run: **6,414 bytes for 12 articles**, against roughly 400 KB for the four feeds it came
+  from. At three runs a day that is under 6 MB a year, and it is pruned to the newest 120
+  records, about six weeks.
+
+  `[VERIFIED]` `load_batch` reads it back as real `NewsArticle` objects rather than
+  dictionaries, so a replay exercises the same schema the pipeline does. Verified end to end:
+  a live run wrote a record and it round-tripped into 12 articles.
+
+  `evidence/` is git-ignored. `[INFERRED]` Feed text is the C3 exposure ADR-009 exists to avoid
+  and the directory grows with every run, so the promotion path stands: move a specific batch
+  into `tests/fixtures/` when a task cites it, which is what the three fixtures there already
+  are.
+
+  `[VERIFIED]` Recording never raises. A failed write is logged and swallowed, because losing a
+  delivered brief to protect its evidence would be an absurd trade. Mutation-tested four ways
+  including letting the exception escape, and all four fail.
+
+  `[INFERRED]` This does not recover what was lost. The 288-article measurements behind P33 and
+  P4 remain unreproducible, and the six purged days of delivery history are gone. It stops the
+  next one.
 
 ---
 
