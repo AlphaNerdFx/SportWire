@@ -1673,11 +1673,16 @@ def test_two_different_players_are_not_near_matches(
     assert not validate_summary(f"{blend} signed on Sunday.", articles).is_safe
 
 
-def test_a_near_match_must_not_bridge_names_of_different_lengths(
+def test_a_contraction_is_still_grounded_alongside_the_near_match_rule(
     make_article: ArticleFactory,
 ) -> None:
-    """Equal length only. A difference in how many words a name has is handled by the subset
-    tests, and letting a near-match cross that boundary would blur expansion with substitution.
+    """A shortened name must stay grounded once near-matching exists.
+
+    `[VERIFIED]` This was written to cover an equal-length guard inside
+    `_effectively_the_same_name`, and it did not: a mutation deleting that guard left the suite
+    green, and measurement then showed the guard changes 0 of 4,000 verdicts because
+    `_contradicted` already filters candidates by length. The guard is gone; this case is real
+    on its own, so it is kept and relabelled rather than deleted.
     """
     articles = [make_article("Karl-Anthony Towns and Julius Randle were traded")]
 
