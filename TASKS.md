@@ -2305,6 +2305,42 @@ what each turned into, since several changed shape on contact with real data.
 
 ---
 
+- [ ] **P40. Two reports of one story at different stages are blended into the wrong tense.**
+  Open, found 2026-08-26 by the operator reading a delivered brief. **Not fixed.**
+  `[VERIFIED]` The brief said *"Thompson signed a two-year deal with the Heat and is expected
+  to clear waivers soon."* He had already cleared them. The batch carried both stages:
+
+  - CBS, earlier: *"Klay Thompson **expected to sign** with Heat after agreeing to buyout"*
+  - ESPN, later: *"Thompson **clears waivers**... officially agreed to a two-year deal... after
+    clearing waivers on Sunday"*
+
+  The model took the completed fact from the later report and the pending tense from the
+  earlier one. `[VERIFIED]` Every other claim in that brief is correct, including four separate
+  reports of the Brandon Williams signing reconciled into one accurate paragraph, so this is
+  narrow rather than general.
+
+  `[VERIFIED]` **Nothing currently detects it and the existing checks cannot.** Grounding sees
+  real names, and the P5 pair check sees `thompson`, `heat` and `waivers` co-occurring in one
+  article, which they do. Both are about *entities*; this is about *time*.
+
+  `[INFERRED]` **P30's relatedness ordering may make it likelier**, which is worth stating
+  plainly rather than defending. Before ordering, two reports of one story arrived scattered
+  and were summarised separately; now they sit adjacent and get merged, which is the intended
+  behaviour and also the condition for this failure. The readability fix and this defect share
+  a cause.
+
+  `[UNKNOWN]` The fix, and it may not be worth one. Options, none measured: prefer the most
+  recently published article when two in a group describe the same event; tell the prompt to
+  take the latest state when reports disagree; or accept it, since the error is a stale tense
+  on a true story rather than an invention. `[INFERRED]` The first is mechanical and testable
+  and does not need the model to cooperate, which is the shape this project keeps choosing.
+
+  Also seen in the same brief, and smaller: *"James Harden returned to the Cleveland Cavaliers
+  **after a brief stint away**"*. The clause is not in any source. `[INFERRED]` Unsupported
+  embellishment rather than a false claim, and the kind of thing a length limit encourages.
+
+---
+
 ## LOW — deferred; each requires a trigger condition
 
 - [ ] **L1. NFL sources (`nflreadpy`).** Trigger: NBA path stable across several real runs.
