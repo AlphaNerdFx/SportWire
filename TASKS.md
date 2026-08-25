@@ -2329,15 +2329,34 @@ what each turned into, since several changed shape on contact with real data.
   behaviour and also the condition for this failure. The readability fix and this defect share
   a cause.
 
-  `[UNKNOWN]` The fix, and it may not be worth one. Options, none measured: prefer the most
-  recently published article when two in a group describe the same event; tell the prompt to
-  take the latest state when reports disagree; or accept it, since the error is a stale tense
-  on a true story rather than an invention. `[INFERRED]` The first is mechanical and testable
-  and does not need the model to cooperate, which is the shape this project keeps choosing.
+  **Addressed 2026-08-26 by giving the model the information it never had**, on the operator's
+  instruction to add a time signal so newer news is favoured.
 
-  Also seen in the same brief, and smaller: *"James Harden returned to the Cleveland Cavaliers
-  **after a brief stint away**"*. The clause is not in any source. `[INFERRED]` Unsupported
-  embellishment rather than a false claim, and the kind of thing a length limit encourages.
+  `[VERIFIED]` The root cause was simpler than any of the options first listed: `build_prompt`
+  sent **title and summary only**. There was no timestamp, no ordering hint, nothing. The model
+  was not ignoring recency, it was never given any. Each item now carries a relative age, and
+  `NOTES_PROMPT` says to state a shared event as the newest item does.
+
+  `[VERIFIED]` On the real batch the signal is unambiguous: the CBS report reads `[3d ago]` and
+  the ESPN one `[just now]`, three days apart.
+
+  `[INFERRED]` Relative age rather than a timestamp, because the question is "which of these is
+  later" and an age asks it directly, while an ISO timestamp turns it into a subtraction that a
+  7B model does badly. Under an hour reads "just now" so a flurry of reports on one story does
+  not collapse to "0h" and become indistinguishable again.
+
+  `[UNKNOWN]` **Whether it works.** This is a prompt change, and `TASKS.md` P6 records one that
+  was measured to move nothing. The difference is that this adds *information* rather than
+  *instruction*, but that is an argument, not a measurement. Watch the next few runs where a
+  batch carries two stages of one story.
+
+  **The Harden clause has an explanation, from the operator 2026-08-26.** *"James Harden
+  returned to the Cleveland Cavaliers **after a brief stint away**"* traces to the source
+  headline saying Harden *"returns to Cavaliers"*. `[INFERRED]` So the model is elaborating on
+  the word "returns" rather than inventing an event, and Harden had in fact signed a new
+  contract. That reclassifies it: not a fabrication, but unsupported colour added to a true
+  statement, which no entity check can see and which is a much smaller problem than a wrong
+  tense on a completed transaction.
 
 ---
 
