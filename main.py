@@ -188,12 +188,18 @@ def main(argv: list[str] | None = None) -> int:
         # were older than the window and still being published, so they were re-delivered
         # every cycle. Anything older than `MAX_ARTICLE_AGE_HOURS` is dropped as non-news
         # before dedup is consulted at all, so forgetting it cannot resurrect it.
-        forget_after = forget_window(settings.dedup_window_hours)
-        purged = store.purge_delivered_before(forget_after)
-        if purged:
-            logger.info(
-                "forgot %d articles delivered over %dh ago", purged, forget_after
-            )
+        #
+        # Never on a dry run. `[VERIFIED]` 2026-08-25 this shipped without that guard and a
+        # `--dry-run` deleted six days of dedup state while logging "nothing sent, nothing
+        # recorded". A dry run that mutates the database is worse than none, because its
+        # whole purpose is inspecting the pipeline without consequences.
+        if not args.dry_run:
+            forget_after = forget_window(settings.dedup_window_hours)
+            purged = store.purge_delivered_before(forget_after)
+            if purged:
+                logger.info(
+                    "forgot %d articles delivered over %dh ago", purged, forget_after
+                )
 
         fresh_games = deduplicate_games(games, store.seen_game_hashes())
         fresh_articles = deduplicate_articles(articles, store.seen_article_ids())
