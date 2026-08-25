@@ -205,3 +205,78 @@ def test_tonight_is_not_counted_in_its_own_history(
     store.record_games([tonight])
 
     assert store.head_to_head(tonight) == (0, 0, 0)
+
+
+def test_an_old_delivery_is_forgotten(
+    store: SeenStore, make_article: ArticleFactory
+) -> None:
+    """The store must not grow forever. GitHub issue #10."""
+    article = make_article("Cavs deal Schroder for Hornets' Mann")
+    store.record_articles([article])
+
+    assert store.purge_delivered_before(hours=0) == 1
+    assert store.seen_article_ids() == set()
+
+
+def test_a_recent_delivery_survives_a_purge(
+    store: SeenStore, make_article: ArticleFactory
+) -> None:
+    """The expensive direction, and the one the issue warns about.
+
+    `[VERIFIED]` Forgetting an article a feed is still publishing makes it look new again on
+    the next run. At an 8-hour window, 3 of 17 ESPN items were older than the window and
+    still listed, so they were re-delivered every cycle.
+    """
+    article = make_article("Cavs deal Schroder for Hornets' Mann")
+    store.record_articles([article])
+
+    assert store.purge_delivered_before(hours=168) == 0
+    assert store.seen_article_ids() == {article.article_id}
+
+
+def test_purging_keeps_the_series_history(
+    store: SeenStore, make_game: GameFactory
+) -> None:
+    """`game_results` is what `head_to_head` reads, and it is meant to accumulate.
+
+    `[INFERRED]` Purging it would make the brief worse the longer SportWire runs, which is
+    the opposite of what that table exists for.
+    """
+    earlier = _played_on(
+        make_game(home_score=120, away_score=99, game_id=1), days_ago=7
+    )
+    store.record_games([earlier])
+
+    store.purge_delivered_before(hours=0)
+
+    assert store.head_to_head(make_game(game_id=2)) == (1, 0, 1)
+
+
+@pytest.mark.parametrize("configured", [1, 8, 24, 167, 168, 500])
+def test_the_pipeline_never_forgets_faster_than_it_filters(configured: int) -> None:
+    """The floor that makes purging safe at all, asserted against the real function.
+
+    `[VERIFIED]` An article delivered longer ago than `MAX_ARTICLE_AGE_HOURS` was published
+    at least that long ago too, so `drop_non_news` removes it before dedup is ever consulted.
+    That is what makes forgetting it harmless, and it stops being true the moment the window
+    drops below that limit.
+
+    ~~An earlier version of this test computed `max()` itself and asserted the result.~~
+    **That asserted nothing**: a mutation deleting the floor from `main` left all 371 tests
+    green, because the test never called the code. Rewritten to call `forget_window`.
+    """
+    from main import forget_window
+    from processing.newsworthy import MAX_ARTICLE_AGE_HOURS
+
+    assert forget_window(configured) >= MAX_ARTICLE_AGE_HOURS
+
+
+def test_a_generous_window_is_honoured_rather_than_clamped() -> None:
+    """The floor raises a short window; it must not lower a long one.
+
+    `[INFERRED]` Someone who sets a fortnight wants a fortnight, and quietly shortening it
+    would re-send stories that are still in the feed on a slow news week.
+    """
+    from main import forget_window
+
+    assert forget_window(500) == 500
