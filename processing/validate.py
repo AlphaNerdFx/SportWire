@@ -987,7 +987,21 @@ def _entity_pairs(articles: list[NewsArticle]) -> set[tuple[str, str]]:
     """
     pairs: set[tuple[str, str]] = set()
     for article in articles:
-        keys = _entity_keys(f"{article.title} {article.summary}", _SOURCE_ENTITIES)
+        # Per field, never the joined text. `[VERIFIED]` 2026-08-26 this shipped joined and
+        # produced the marker's first production false flag. The CBS title ends "...James
+        # Harden returns to Cavaliers" and its summary opens "Plus, the best pitching
+        # prospect...", so the concatenation welded them into the name `Cavaliers Plus`,
+        # keyed on `plus`. `cavaliers` then appeared in no article, and a true sentence about
+        # Harden and the Cavaliers was flagged as unsupported.
+        #
+        # `[INFERRED]` `_index_source_names` already documents this exact trap and avoids it
+        # the same way. The lesson was written down and not copied across, which is the more
+        # useful thing to record than the bug.
+        keys: list[str] = []
+        for field in (article.title, article.summary):
+            for key in _entity_keys(field, _SOURCE_ENTITIES):
+                if key not in keys:
+                    keys.append(key)
         for first in keys:
             for second in keys:
                 pairs.add((first, second))
