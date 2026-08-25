@@ -2257,6 +2257,28 @@ what each turned into, since several changed shape on contact with real data.
 
 ---
 
+- [x] **P39. A dry run deleted six days of dedup state.** Found and fixed 2026-08-25, the
+  same day the cause was introduced.
+  `[VERIFIED]` The seen-store purge added for GitHub #10 sits inside the `with SeenStore(...)`
+  block at `main.py:185`, and the `--dry-run` early return is at line 328. So the purge ran
+  first, on every dry run, while the log said *"dry run: nothing sent, nothing recorded"*.
+  `[VERIFIED]` It cost real state. A `--date 2026-01-15 --dry-run` issued while investigating
+  #3 removed every article delivered before 2026-08-18, leaving one day of 45 rows where six
+  days had been. Those rows were the record used to reconstruct batches for P32, P33 and P4.
+  `[INFERRED]` No article was put at risk of re-delivery, because everything purged was past
+  `MAX_ARTICLE_AGE_HOURS` and would be dropped as non-news anyway. The damage was to
+  **evidence**, not to behaviour, which is why it was invisible.
+  Fixed in `54336c2` by guarding the purge, with a regression test in `505b838` asserted
+  against `main` rather than the store: the store was right either way, and the bug was in who
+  called it. Mutation-tested, and the mutant fails.
+  `[INFERRED]` Two lessons worth keeping. A command that promises to change nothing must be
+  audited against everything it touches, not just the thing it obviously does. And this is the
+  second time in a week that reproduction evidence has been destroyed by something incidental,
+  after `/tmp` was cleared (P38) — the evidence base is being treated as more durable than it
+  is.
+
+---
+
 ## LOW — deferred; each requires a trigger condition
 
 - [ ] **L1. NFL sources (`nflreadpy`).** Trigger: NBA path stable across several real runs.
