@@ -812,16 +812,26 @@ def _index_source_names(
 # **Lebwrong** James and company in the Philippines" — a deliberate joke spelling, indexed as
 # a rival entity.
 #
-# `[VERIFIED]` 0.80 is measured, not chosen for roundness. The pairs that must merge score
-# 0.923 (`balmer`/`ballmer`) and 0.857 (`lebwrong`/`lebron`); the pairs that must stay refuted
-# score 0.667 (`jayson`/`jaylen`), 0.545 (`doncic`/`jokic`), 0.500 (`edwards`/`davis`) and
-# 0.462 (`durant`/`garnett`). The threshold sits in the gap rather than on an edge.
+# ~~`[VERIFIED]` 0.80 is measured. The pairs that must merge score 0.923 (`balmer`/`ballmer`)
+# and 0.857 (`lebwrong`/`lebron`).~~ **Corrected 2026-08-25 by the operator, and the correction
+# matters: `Lebwrong` is not a misspelling of LeBron at all.** That post is about Anthony
+# Edwards meeting a LeBron *impersonator*, so it names a different person on purpose. Treating
+# it as one name grounded `LeBron James` against a batch where the real LeBron appears **zero**
+# times, turning a correct rejection into a wrong acceptance.
 #
-# `[VERIFIED]` Cost on the P20 population of 318 real names and 3,000 synthetic blends across
-# 288 articles: real names refused unchanged at 3, and blend detection falls by **one**, from
-# 2593 to 2592. That one is `Stephen Steph's`, a nonsense synthetic string matched through
-# `steph`/`stephen` at 0.833 — which is one person. All six curated real-player blends survive.
-_SAME_NAME_RATIO = 0.80
+# `[VERIFIED]` The two cases separate by ratio, so the fix is the threshold. Swept against the
+# committed fixtures, 92 real names and 3,000 blends:
+#
+#   0.80, 0.85  Ballmer grounded, LeBron wrongly ACCEPTED
+#   0.88 - 0.92 Ballmer grounded, LeBron correctly rejected   <- the window
+#   0.95        Ballmer wrongly REJECTED
+#
+# Blend detection is flat at 2821 of 3000 across the whole sweep, so this costs nothing.
+# 0.90 is the middle of the window rather than an edge of it.
+#
+# `[UNKNOWN]` The window is bounded by **two** real observations, one typo and one parody. A
+# third instance should be measured before the number is trusted further than that.
+_SAME_NAME_RATIO = 0.90
 
 
 def _effectively_the_same_name(mine: frozenset[str], other: frozenset[str]) -> bool:
