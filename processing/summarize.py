@@ -42,6 +42,7 @@ from __future__ import annotations
 import logging
 import re
 from abc import ABC, abstractmethod
+from datetime import datetime, timezone
 
 import requests
 
@@ -155,7 +156,9 @@ NOTES_PROMPT = (
     "- Format: who — what happened — any figure that matters.\n"
     "- Keep names, teams, contract values and injury details exactly as given.\n"
     "- Do not add anything the items do not state.\n"
-    "- Do not omit an item, however minor it seems."
+    "- Do not omit an item, however minor it seems.\n"
+    "- Each item is marked with how old it is. When two items describe the same event,"
+    " state it as the newest one does."
 )
 
 
@@ -351,13 +354,27 @@ def _tidy(text: str) -> str:
 
 
 def build_prompt(
-    articles: list[NewsArticle], max_chars: int = DEFAULT_SUMMARY_CHARS
+    articles: list[NewsArticle],
+    max_chars: int = DEFAULT_SUMMARY_CHARS,
+    now: datetime | None = None,
 ) -> str:
-    """Render articles into the user half of the prompt.
+    """Render articles into the user half of the prompt, each marked with its age.
 
     A plain module-level function so it can be tested, inspected and diffed without a model
     running — which is the only part of this module that can currently be verified.
+
+    **The age is why this exists in this shape.** `[VERIFIED]` 2026-08-26 (TASKS.md P40) a
+    brief said *"Thompson signed a two-year deal with the Heat and is expected to clear
+    waivers soon"* when he had already cleared them. The batch held both stages of that story,
+    CBS reporting it as expected and ESPN reporting it as done, and the prompt carried **no
+    time information at all** — so the model could not have preferred the newer one. It was
+    not ignoring recency; it was never given any.
+
+    `now` is injectable rather than read from the clock inside, because `tests/conftest.py`
+    fixes a "now" for exactly this reason and `[VERIFIED]` four tests written on 2026-08-18
+    rotted within a week by reading the real clock (P37).
     """
+    now = now or datetime.now(timezone.utc)
     instruction = (
         f"Summarise the following {len(articles)} NBA news items in at most "
         f"{max_chars} characters."
@@ -365,12 +382,29 @@ def build_prompt(
     lines = [instruction, ""]
 
     for article in articles:
-        lines.append(f"- {article.title}")
+        lines.append(f"- [{_age(article.published_at, now)}] {article.title}")
         summary = " ".join(article.summary.split())
         if summary:
             lines.append(f"  {summary}")
 
     return "\n".join(lines)
+
+
+def _age(published_at: datetime, now: datetime) -> str:
+    """How old an item is, in the coarsest unit that still distinguishes two reports.
+
+    `[INFERRED]` Hours rather than timestamps, because the question the model has to answer is
+    "which of these two is later", and a relative age asks it directly. An ISO timestamp makes
+    the same comparison a subtraction, which is exactly the kind of work a 7B model does
+    badly. Under an hour reads as "just now" so a flurry of reports on one story does not all
+    collapse to "0h".
+    """
+    hours = (now - published_at).total_seconds() / 3600
+    if hours < 1:
+        return "just now"
+    if hours < 48:
+        return f"{int(hours)}h ago"
+    return f"{int(hours // 24)}d ago"
 
 
 def build_reduce_prompt(
