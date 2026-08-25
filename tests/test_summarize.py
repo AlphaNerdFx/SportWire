@@ -22,12 +22,14 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from datetime import datetime
 
 import pytest
 
 from models.schemas import NewsArticle
 from processing.summarize import (
     CHUNK_SIZE,
+    NOTES_PROMPT,
     OllamaSummarizer,
     Summarizer,
     _note_lines,
@@ -366,3 +368,76 @@ def test_the_vocabulary_sample_reaches_the_validator(
     wider = [*batch, make_article("The crowd reacts to a late three in Denver")]
 
     assert StubSummarizer(claim).summarise(batch, vocabulary_sample=wider) == claim
+
+
+def test_each_item_is_marked_with_its_age(
+    make_article: Callable[..., NewsArticle], now: datetime
+) -> None:
+    """`[VERIFIED]` TASKS.md P40: the prompt carried **no time information at all**.
+
+    A brief said Klay Thompson *"is expected to clear waivers soon"* when he had already
+    cleared them, because the batch held both stages of that story and nothing told the model
+    which report was later. The two were three days apart.
+    """
+    articles = [
+        make_article("Thompson expected to sign with Heat", hours_old=72),
+        make_article("Thompson clears waivers, joins Heat", hours_old=0.33),
+    ]
+
+    prompt = build_prompt(articles, now=now)
+
+    assert "[3d ago] Thompson expected to sign with Heat" in prompt
+    assert "[just now] Thompson clears waivers, joins Heat" in prompt
+
+
+@pytest.mark.parametrize(
+    ("hours_old", "expected"),
+    [
+        (0.08, "just now"),
+        (0.98, "just now"),
+        (1.0, "1h ago"),
+        (47.0, "47h ago"),
+        (48.0, "2d ago"),
+        (144.0, "6d ago"),
+    ],
+)
+def test_age_reads_in_the_coarsest_unit_that_still_separates_two_reports(
+    make_article: Callable[..., NewsArticle],
+    now: datetime,
+    hours_old: float,
+    expected: str,
+) -> None:
+    """`[INFERRED]` Hours rather than timestamps, because the question is "which is later" and
+    a relative age asks it directly. An ISO timestamp turns that into a subtraction, which is
+    the kind of work a 7B model does badly.
+
+    Under an hour reads as "just now" so a flurry of reports on one story does not all collapse
+    to "0h" and become indistinguishable again.
+    """
+    prompt = build_prompt([make_article("A story", hours_old=hours_old)], now=now)
+
+    assert f"[{expected}] A story" in prompt
+
+
+def test_the_notes_prompt_tells_the_model_what_the_age_is_for() -> None:
+    """Marking the age is useless if nothing says what to do with it.
+
+    `[INFERRED]` This is information rather than instruction, which is why it is worth trying
+    where a previous prompt tweak was measured to move nothing (TASKS.md P6 precedent): the
+    model was not ignoring recency before, it was never given any.
+    """
+    assert "how old it is" in NOTES_PROMPT
+    assert "newest" in NOTES_PROMPT
+
+
+def test_the_clock_is_injected_so_the_prompt_can_be_diffed(
+    make_article: Callable[..., NewsArticle], now: datetime
+) -> None:
+    """`[VERIFIED]` Four tests written on 2026-08-18 rotted within a week by reading the real
+    clock (TASKS.md P37). A prompt builder that reads `datetime.now()` internally cannot be
+    asserted against a fixed string at all.
+    """
+    article = make_article("A story", hours_old=5)
+
+    assert build_prompt([article], now=now) == build_prompt([article], now=now)
+    assert "[5h ago]" in build_prompt([article], now=now)
