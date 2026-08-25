@@ -262,3 +262,33 @@ def test_settings_cannot_be_mutated_after_loading(clean_env: Path) -> None:
     # immutability.
     with pytest.raises(dataclasses.FrozenInstanceError):
         settings.log_level = "DEBUG"  # type: ignore[misc]
+
+
+def test_the_evidence_directory_is_anchored_to_the_project(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`[VERIFIED]` 2026-08-25 it shipped resolved against the working directory instead.
+
+    This is the same defect that already cost this project once with `.env` and the database:
+    a scheduled run starting from a different directory would write its evidence somewhere
+    else, so the batches would be split across two trees and neither would be complete.
+    """
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("EVIDENCE_PATH", raising=False)
+
+    settings = Settings.from_env(env_file=tmp_path / "absent.env")
+
+    assert settings.evidence_path == PROJECT_ROOT / "evidence"
+    assert settings.evidence_path.is_absolute()
+
+
+def test_an_absolute_evidence_path_is_honoured_as_given(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Anchoring must not override someone who said exactly where they want it."""
+    elsewhere = tmp_path / "somewhere-else"
+    monkeypatch.setenv("EVIDENCE_PATH", str(elsewhere))
+
+    settings = Settings.from_env(env_file=tmp_path / "absent.env")
+
+    assert settings.evidence_path == elsewhere
