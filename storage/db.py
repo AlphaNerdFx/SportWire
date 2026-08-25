@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Iterable
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from models.schemas import GameData, NewsArticle
@@ -143,6 +143,27 @@ class SeenStore:
             ],
         )
 
+        self._connection.commit()
+        return cursor.rowcount
+
+    def purge_delivered_before(self, hours: int) -> int:
+        """Forget articles delivered more than `hours` ago. Returns how many rows went.
+
+        **The caller decides the window, and getting it wrong re-sends stories**, so read
+        `main.py` before changing anything here. `[VERIFIED]` GitHub issue #10: feeds list
+        items for days, so a window shorter than an item's stay in the feed makes it look
+        new again on every run. An 8-hour window left 3 of 17 ESPN items older than the
+        window but still being published, re-delivered every cycle.
+
+        Only `seen_articles` is purged. `[INFERRED]` `seen_games` is nine rows and bounded by
+        the fixture list, and `game_results` is the series history that `head_to_head` reads,
+        which is meant to accumulate — deleting it would make the brief worse over time
+        rather than better.
+        """
+        cursor = self._connection.execute(
+            "DELETE FROM seen_articles WHERE seen_at < ?",
+            ((datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat(),),
+        )
         self._connection.commit()
         return cursor.rowcount
 
