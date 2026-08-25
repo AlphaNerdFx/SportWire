@@ -45,6 +45,7 @@ from processing.priority import sort_by_priority
 from processing.summarize import OllamaSummarizer, Summarizer
 from processing.validate import unsupported_sentences
 from storage.db import SeenStore
+from storage.evidence import record_batch
 
 logger = logging.getLogger("sportwire")
 
@@ -234,12 +235,17 @@ def main(argv: list[str] | None = None) -> int:
         # a fabrication can never reach a phone: the worst case is the headline list.
         news_summary: str | None = None
         unsupported_claims: list[str] = []
-        if story_groups and not args.no_summary:
-            # Only what the brief would actually show. `[VERIFIED]` 2026-08-08: summarising
-            # everything fetched meant 16 chunks and 17 model calls, exceeding the timeout
-            # and falling back to the headline list anyway.
-            to_summarise = [group[0] for group in story_groups[:DEFAULT_MAX_ARTICLES]]
 
+        # Only what the brief would actually show. `[VERIFIED]` 2026-08-08: summarising
+        # everything fetched meant 16 chunks and 17 model calls, exceeding the timeout and
+        # falling back to the headline list anyway.
+        #
+        # Computed here rather than inside the branch below because the recorded batch is
+        # these leads whether or not a summary was attempted, and a run with `--no-summary`
+        # is exactly the kind that is worth being able to replay.
+        to_summarise = [group[0] for group in story_groups[:DEFAULT_MAX_ARTICLES]]
+
+        if story_groups and not args.no_summary:
             # Hosted when a key is configured, local otherwise. `[VERIFIED]` local 7B
             # fabrication repeats identically across attempts -- "Joe Dumars" invented three
             # times from one Pistons story -- so retry cannot rescue it and parameter count
@@ -322,6 +328,18 @@ def main(argv: list[str] | None = None) -> int:
             story_groups,
             news_summary=news_summary,
             series=series,
+            unsupported_claims=unsupported_claims,
+            failed_sources=failed_sources,
+        )
+
+        # Keep the batch before anything else can go wrong with it. `[VERIFIED]` TASKS.md
+        # P38 and P39: this week the reproduction evidence was destroyed twice, once by /tmp
+        # being cleared on shutdown and once by a purge bug, and both times the numbers
+        # measured against it stopped being reproducible. Recording is best-effort and never
+        # raises, because losing a brief to protect its evidence would be an absurd trade.
+        record_batch(
+            to_summarise,
+            summary=news_summary,
             unsupported_claims=unsupported_claims,
             failed_sources=failed_sources,
         )
