@@ -18,7 +18,7 @@ performances are delivered. Individual performances are not, and this ADR record
 | Source | Player box scores | Verdict |
 |---|---|---|
 | balldontlie free tier | `[VERIFIED]` HTTP 401 on `/v1/stats` and `/v1/box_scores/live` | Not available |
-| balldontlie All-Star tier | `[GUESSING]` presumably yes — the pricing page lists tiers, not a feature matrix | **$9.99/month, recurring** — violates C2 without approval |
+| balldontlie All-Star tier | `[VERIFIED]` 2026-08-25 yes, see the confirmation below | **$9.99/month, recurring** — violates C2 without approval |
 | TheSportsDB free | `[VERIFIED]` HTTP 404 on `eventstats.php` | Not available |
 | `stats.nba.com` | `[VERIFIED]` times out (curl exit 28) from a datacenter IP | Works only from the operator's own connection, so anyone cloning the repo gets nothing — violates C3 |
 | ESPN internal JSON (`site.api.espn.com`) | `[VERIFIED]` yes — returns per-game leaders | See below |
@@ -70,7 +70,39 @@ opinion. The 403 *is* the answer.
 
 Revisit after the season starts (2026-09-30) and the brief has run daily for roughly two
 weeks. If the operator can point to specific briefs that felt thin without box-score lines,
-that is real evidence and the $9.99 tier becomes a defensible purchase — **after**
-confirming All-Star actually includes `/v1/stats`, which is currently `[GUESSING]`.
+that is real evidence and the $9.99 tier becomes a defensible purchase — ~~**after**
+confirming All-Star actually includes `/v1/stats`, which is currently `[GUESSING]`.~~
+**Confirmed 2026-08-25, so that precondition is met.**
+
+### Which tier includes `/v1/stats` — confirmed 2026-08-25
+
+`[VERIFIED]` From balldontlie's own API documentation at <https://docs.balldontlie.io/>,
+which does publish a per-endpoint tier table even though the pricing page does not. The
+**Game Player Stats** endpoint is the one this ADR calls `/v1/stats`:
+
+| Tier | Price | Game Player Stats |
+|---|---|---|
+| Free | $0/mo | no |
+| ALL-STAR | $9.99/mo | **yes** |
+| GOAT | $39.99/mo | yes |
+
+`[VERIFIED]` The difference between the two paid tiers is rate limit, not access: 60
+requests/minute on ALL-STAR against 600 on GOAT.
+
+`[INFERRED]` So the assumption this ADR was built on was **correct**, and the feared
+mistake — paying $9.99 and then finding player stats behind the $39.99 tier — would not have
+happened. That is worth stating plainly rather than quietly deleting the `[GUESSING]` tag,
+because the tag was doing its job: the claim was unverified when it was made, and the fact
+that it turned out right is luck rather than evidence.
+
+`[INFERRED]` 60 requests/minute is comfortable for this project's shape. One run summarises
+around a dozen stories; even a per-player stats call for a full slate stays far inside that,
+and `storage/db.py` already answers head-to-head locally rather than over the network
+precisely because the free tier's limit was reached at nine fixtures.
+
+**This changes nothing on its own.** C2 still requires the operator's approval for a
+recurring cost, and the trigger in this ADR is unchanged: player stats become worth paying
+for only once the brief is reliable enough that missing detail is the limiting factor. See
+GitHub issue #4.
 Reversal on ESPN's internal endpoint requires it serving a self-identifying client, which
 would change what the provider is signalling.
