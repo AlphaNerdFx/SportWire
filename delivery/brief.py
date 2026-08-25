@@ -219,7 +219,20 @@ def _describe(highlight: GameHighlight) -> str:
     return ""
 
 
-# Appended to a sentence whose named entities never share a source article.
+# ~~Appended to a sentence whose named entities never share a source article.~~
+# **Removed from the brief 2026-08-26 on the operator's instruction:** *"remove the warning
+# about the names. I don't want it."*
+#
+# The detection stays. `main.py` still computes the flagged sentences and logs them, so
+# `TASKS.md` P5 remains countable over a soak and nothing about the check was weakened. What
+# is gone is the mark and its legend reaching the phone.
+#
+# `[VERIFIED]` The marker's only production firing was a **false** one, on 2026-08-26: a true
+# sentence about James Harden and the Cavaliers, flagged because `_entity_pairs` joined a
+# title to its own summary. So its one real-world contribution was noise, which makes this an
+# easy call rather than a reluctant one.
+#
+# Original note, kept because the reasoning still applies if it ever returns:
 #
 # `[VERIFIED]` 2026-08-18: the operator was sent "The Pelicans, who are welcoming back star
 # point guard Damian Lillard following his trade from Portland". No such trade happened. Every
@@ -230,9 +243,6 @@ def _describe(highlight: GameHighlight) -> str:
 # rejects the summary, and that run would then have delivered a headline list on all three
 # attempts, which is the outcome he had just asked never to see again. So the claim is
 # delivered and labelled, and the reader decides.
-_UNSUPPORTED_MARK = "⚠️"
-
-
 def _render_news_summary(
     summary: str, unsupported: list[str], failed_sources: list[str] | None = None
 ) -> str:
@@ -242,17 +252,7 @@ def _render_news_summary(
     reads as a paragraph. `[INFERRED]` Moving them to a footnote or dropping them would either
     break the writing the operator asked for or hide a claim he needs to see.
     """
-    marked = summary
-    for sentence in unsupported:
-        if sentence and sentence in marked:
-            marked = marked.replace(sentence, f"{sentence} {_UNSUPPORTED_MARK}", 1)
-
-    body = f"📰 NEWS\n\n{marked}"
-    if unsupported:
-        body += (
-            f"\n\n{_UNSUPPORTED_MARK} these names never appear in the same source article, "
-            "so the link between them is not something the sources reported."
-        )
+    body = f"📰 NEWS\n\n{summary}"
     # A source that failed is named, because otherwise the brief is quietly shorter and looks
     # complete. `[VERIFIED]` 2026-08-18: Reddit returned HTTP 500 for a whole run, costing 25
     # of 87 articles, and the only trace was a log line the operator would never see.
