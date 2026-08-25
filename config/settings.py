@@ -31,6 +31,7 @@ from dotenv import load_dotenv
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 DEFAULT_DATABASE_PATH = "sportwire.db"
+DEFAULT_EVIDENCE_PATH = "evidence"
 DEFAULT_LOG_LEVEL = "INFO"
 DEFAULT_POLL_INTERVAL_HOURS = 8
 DEFAULT_DEDUP_WINDOW_HOURS = 168
@@ -61,6 +62,7 @@ class Settings:
     telegram_bot_token: str
     telegram_chat_id: str
     database_path: Path = PROJECT_ROOT / DEFAULT_DATABASE_PATH
+    evidence_path: Path = PROJECT_ROOT / DEFAULT_EVIDENCE_PATH
     log_level: str = DEFAULT_LOG_LEVEL
     poll_interval_hours: int = DEFAULT_POLL_INTERVAL_HOURS
     dedup_window_hours: int = DEFAULT_DEDUP_WINDOW_HOURS
@@ -86,6 +88,7 @@ class Settings:
             telegram_bot_token=_text("TELEGRAM_BOT_TOKEN"),
             telegram_chat_id=_text("TELEGRAM_CHAT_ID"),
             database_path=_database_path(),
+            evidence_path=_anchored("EVIDENCE_PATH", DEFAULT_EVIDENCE_PATH),
             log_level=(_text("LOG_LEVEL") or DEFAULT_LOG_LEVEL).upper(),
             poll_interval_hours=_positive_int(
                 "POLL_INTERVAL_HOURS", DEFAULT_POLL_INTERVAL_HOURS
@@ -135,6 +138,24 @@ class Settings:
 def _text(name: str) -> str:
     """Read an environment variable, trimmed. Empty and unset are the same thing here."""
     return (os.getenv(name) or "").strip()
+
+
+def _anchored(name: str, default: str) -> Path:
+    """Resolve a configured path against the project root rather than the working directory.
+
+    `[VERIFIED]` This is the bug class that already cost this project once: a bare
+    "sportwire.db" resolved against the working directory gave a scheduled run its own
+    database in `$HOME`, separate from the one manual runs used. `[VERIFIED]` 2026-08-25 the
+    evidence directory shipped with the same defect and is now routed through here too, which
+    is why this is a shared helper rather than a second copy of `_database_path`.
+
+    An absolute path in `.env` is still honoured as given.
+    """
+    configured = _text(name)
+    if not configured:
+        return PROJECT_ROOT / default
+    path = Path(configured)
+    return path if path.is_absolute() else PROJECT_ROOT / path
 
 
 def _database_path() -> Path:
