@@ -2035,8 +2035,9 @@ what each turned into, since several changed shape on contact with real data.
   colon, and this. The pattern to watch is any rule that learns from one batch.
   Resolve by measuring each against the P20 population before choosing.
 
-- [ ] **P33. A source's misspelling refutes the correct spelling.** Open, found 2026-08-18
-  16:00. **Not fixed, and it is a consequence of P25.**
+- [x] **P33. A source's misspelling refutes the correct spelling.** Found 2026-08-18
+  16:00. ~~**Not fixed, and it is a consequence of P25.**~~ **Closed 2026-08-19** after a
+  second instance, commits `7cf9306`, `9769bda`, `6a7de74`, `cfb7310`.
   `[VERIFIED]` `Steve Ballmer` was rejected on all three attempts. The batch spells it
   **"Steve Balmer"**, one L, in *"Pablo Torre on ESPN's report regarding negotiations between
   Steve Balmer and the NBA"*. Indexed as `{balmer, steve}`, which shares the first word with
@@ -2049,10 +2050,36 @@ what each turned into, since several changed shape on contact with real data.
   `difflib.SequenceMatcher`: typos score 0.923 (`balmer`/`ballmer`) and 0.933
   (`schroder`/`schrder`), while genuinely different players score 0.667 (`jayson`/`jaylen`)
   and 0.545 (`doncic`/`jokic`).
-  `[UNKNOWN]` Whether that gap holds beyond six hand-picked pairs. **Six examples is not a
-  measurement**, and adding fuzzy matching to the one check protecting the phone on that
-  basis is exactly the under-measured change that produced P24's wrong closure and the
-  substring hole. Resolve against the P20 population and the curated blends first.
+  ~~`[UNKNOWN]` Whether that gap holds beyond six hand-picked pairs.~~ **Measured 2026-08-19,
+  after a second instance made it worth the work.**
+
+  `[VERIFIED]` **The second case is not a typo at all.** The 2026-08-19 00:00 run refused
+  `LeBron James` because an r/nba headline reads *"Anthony Edwards meets **Lebwrong** James
+  and company in the Philippines"* — a reader's deliberate joke spelling, indexed as a rival
+  entity. `[INFERRED]` That widens the class usefully: the sources are not merely careless,
+  they are sometimes playing, and either way a near-identical spelling is one name.
+
+  `[VERIFIED]` **This one is not a P25 regression**, unlike the Ballmer case. Checked against
+  a reconstructed pre-P25 index: `Lebwrong James` ends in "James", so it sits under that key
+  even with last-word-only indexing, and refutes either way.
+
+  `[VERIFIED]` 0.80 is measured. Pairs that must merge: `balmer`/`ballmer` 0.923,
+  `lebwrong`/`lebron` 0.857. Pairs that must stay refuted: `jayson`/`jaylen` 0.667,
+  `doncic`/`jokic` 0.545, `edwards`/`davis` 0.500, `durant`/`garnett` 0.462.
+
+  `[VERIFIED]` Cost on the P20 population, 318 real names and 3,000 blends over 288 articles:
+  real names refused unchanged at 3, blend detection **2593 → 2592**. The single loss is
+  `Stephen Steph's`, a nonsense synthetic string matched through `steph`/`stephen` at 0.833,
+  which is one person. All six curated real-player blends survive.
+
+  `[VERIFIED]` An equal-length guard was written and then deleted before shipping, on P6:
+  removing it changes **0** of 4,000 mixed-length probes, because `_contradicted` already
+  filters candidates by length. Third dead guard caught by a mutant rather than review.
+
+  `[VERIFIED]` **The run this closed was still a correct fallback.** Only `LeBron James` was a
+  false accusation; the other nine rejections (`Yao Ming`, `Chris Webber`, `Tim Duncan`,
+  `Reggie Miller`, `Ben Wallace`, `David Thompson`, `Adrian Dantley`) were the model completing
+  a Hall of Fame roster from a "HOF predictions" story, and none appears in the 11 leads.
 
 ---
 
@@ -2135,6 +2162,24 @@ what each turned into, since several changed shape on contact with real data.
   a sequence of named, individually testable steps by construction.
   `[UNKNOWN]` Whether that is worth the churn. Resolve by counting how much of `main` is
   currently unreachable from the suite before restructuring anything.
+
+---
+
+- [x] **P37. Four tests depended on the wall clock and rotted.** Found and fixed 2026-08-19
+  by the tests failing on their own, six days after they were written.
+  `[VERIFIED]` `test_an_untagged_question_on_the_community_feed_is_dropped`,
+  `test_an_editorial_question_headline_is_kept`, `test_a_reporter_tag_exempts_a_community_question`
+  and `test_a_community_statement_is_not_dropped_for_being_untagged` all called
+  `is_newsworthy(article)` **without a `now`**, so the age rule compared a fixture article
+  fixed at 2026-08-13 14:00 against the real clock. At 2026-08-25 that is 279h against a 168h
+  limit, and all four failed.
+  `[VERIFIED]` `tests/conftest.py` says exactly why this must not happen: *"A fixed `now`, so
+  'is this too old' is arithmetic rather than a race against the clock."* The existing test at
+  line 180 threads `now` correctly; the four added on 2026-08-18 did not.
+  `[INFERRED]` Worth recording rather than quietly fixing, because the failure mode is
+  delayed: these passed for six days and would have passed review, CI and a release. Anything
+  that reads `datetime.now()` in a test is a time bomb with a known fuse length, and here the
+  fuse was `MAX_ARTICLE_AGE_HOURS`.
 
 ---
 
