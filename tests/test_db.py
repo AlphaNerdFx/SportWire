@@ -280,3 +280,39 @@ def test_a_generous_window_is_honoured_rather_than_clamped() -> None:
     from main import forget_window
 
     assert forget_window(500) == 500
+
+
+def test_a_dry_run_does_not_purge(
+    tmp_path: Path, make_article: ArticleFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`[VERIFIED]` 2026-08-25 this shipped broken and cost six days of dedup state.
+
+    The purge sits inside the store block, which runs long before the `--dry-run` early
+    return, so a dry run deleted rows while logging "dry run: nothing sent, nothing recorded".
+    A dry run that mutates the database is worse than no dry run at all, because its entire
+    purpose is inspecting the pipeline without consequences.
+
+    Asserted against `main` rather than the store, because the store is right either way: it
+    purges when told to, and the bug was in who told it.
+    """
+    import main
+
+    path = tmp_path / "dry.db"
+    stale = make_article("A story delivered long ago")
+
+    with SeenStore(path) as store:
+        store.record_articles([stale])
+        # Backdate it well past any window, so a purge would certainly remove it.
+        store._connection.execute(
+            "UPDATE seen_articles SET seen_at = ?", ("2020-01-01T00:00:00+00:00",)
+        )
+        store._connection.commit()
+
+    monkeypatch.setenv("DATABASE_PATH", str(path))
+    monkeypatch.setattr(main, "fetch_news", lambda feeds: ([], []))
+    main.main(["--dry-run", "--no-summary"])
+
+    with SeenStore(path) as after:
+        assert after.seen_article_ids() == {stale.article_id}, (
+            "a dry run must not forget anything"
+        )
