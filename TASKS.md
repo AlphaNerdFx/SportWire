@@ -2063,9 +2063,28 @@ what each turned into, since several changed shape on contact with real data.
   a reconstructed pre-P25 index: `Lebwrong James` ends in "James", so it sits under that key
   even with last-word-only indexing, and refutes either way.
 
-  `[VERIFIED]` 0.80 is measured. Pairs that must merge: `balmer`/`ballmer` 0.923,
-  `lebwrong`/`lebron` 0.857. Pairs that must stay refuted: `jayson`/`jaylen` 0.667,
+  ~~`[VERIFIED]` 0.80 is measured. Pairs that must merge: `balmer`/`ballmer` 0.923,
+  `lebwrong`/`lebron` 0.857.~~ **Corrected 2026-08-25 by the operator, and it reversed the
+  second case.** `Lebwrong James` is not a misspelling: the post is a video of Anthony Edwards
+  meeting a LeBron **impersonator**, so it names a different person on purpose.
+
+  `[VERIFIED]` Merging them was actively harmful, not merely generous. The real LeBron appears
+  **zero** times in that batch, so at 0.80 the summary *"LeBron James signed a new deal"* was
+  **accepted**. The fix converted a correct rejection into a missed fabrication.
+
+  `[VERIFIED]` The two cases separate by ratio, swept against the committed fixtures with 92
+  real names and 3,000 blends: 0.80 and 0.85 wrongly accept LeBron; **0.88 to 0.92** ground the
+  Ballmer typo and reject the parody; 0.95 wrongly rejects Ballmer. Blend detection is flat at
+  2821 of 3000 across the entire sweep. `_SAME_NAME_RATIO` is now **0.90**, the middle of that
+  window. Pairs that must stay refuted are unchanged: `jayson`/`jaylen` 0.667,
   `doncic`/`jokic` 0.545, `edwards`/`davis` 0.500, `durant`/`garnett` 0.462.
+
+  `[UNKNOWN]` The window rests on **two** real observations, one typo and one parody. A third
+  should be measured before the number is trusted further.
+
+  `[INFERRED]` The lesson is not about thresholds. The measurement was sound and the reading of
+  the data was wrong: I classified a deliberate parody as a spelling error because the two are
+  mechanically identical. Domain knowledge set the boundary, not the corpus.
 
   `[VERIFIED]` Cost on the P20 population, 318 real names and 3,000 blends over 288 articles:
   real names refused unchanged at 3, blend detection **2593 → 2592**. The single loss is
@@ -2076,8 +2095,9 @@ what each turned into, since several changed shape on contact with real data.
   removing it changes **0** of 4,000 mixed-length probes, because `_contradicted` already
   filters candidates by length. Third dead guard caught by a mutant rather than review.
 
-  `[VERIFIED]` **The run this closed was still a correct fallback.** Only `LeBron James` was a
-  false accusation; the other nine rejections (`Yao Ming`, `Chris Webber`, `Tim Duncan`,
+  `[VERIFIED]` **The run this closed was a correct fallback in full.** ~~Only `LeBron James`
+  was a false accusation~~ — after the 2026-08-25 correction, `LeBron James` was a correct
+  rejection too, since the real LeBron is absent from that batch. The other nine rejections (`Yao Ming`, `Chris Webber`, `Tim Duncan`,
   `Reggie Miller`, `Ben Wallace`, `David Thompson`, `Adrian Dantley`) were the model completing
   a Hall of Fame roster from a "HOF predictions" story, and none appears in the 11 leads.
 
@@ -2180,6 +2200,25 @@ what each turned into, since several changed shape on contact with real data.
   delayed: these passed for six days and would have passed review, CI and a release. Anything
   that reads `datetime.now()` in a test is a time bomb with a known fuse length, and here the
   fuse was `MAX_ARTICLE_AGE_HOURS`.
+
+---
+
+- [ ] **P38. The reproduction captures live in `/tmp` and were lost.** Open, and it has now
+  actually happened. **Not fixed.**
+  `[VERIFIED]` 2026-08-25: the operator shut the machine down for a break, `/tmp` was cleared,
+  and every live feed capture from 2026-08-17 to 2026-08-19 is gone. Six days of batches, the
+  only assets that could reproduce a validation failure against real data.
+  `[VERIFIED]` The threshold sweep that corrected P33 had to be re-run against
+  `tests/fixtures/` instead, which worked but is a 76-article snapshot rather than the 288
+  articles the original measurement used. Every number in P33 measured on the live corpus is
+  therefore no longer reproducible.
+  `[INFERRED]` The risk was flagged early and never acted on, which is the whole finding: the
+  captures were treated as scratch because they lived in a scratch directory, while in practice
+  they were the evidence base for a dozen decisions.
+  `[UNKNOWN]` What to keep. Committing every capture would add megabytes of feed XML to a repo
+  that is meant to be publishable; committing none loses reproducibility. `[INFERRED]` The
+  narrow answer is probably to promote only the batches that a task cites as evidence, the way
+  `tests/fixtures/` already holds three, and to say so in the task when it happens.
 
 ---
 
