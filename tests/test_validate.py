@@ -1628,10 +1628,6 @@ def test_the_wider_sample_never_grounds_a_name_by_itself(
             ),
             "Steve Ballmer",
         ),
-        (
-            "Anthony Edwards meets Lebwrong James and company in the Philippines",
-            "LeBron James",
-        ),
     ],
 )
 def test_a_source_spelling_a_name_wrongly_does_not_refute_it(
@@ -1648,6 +1644,38 @@ def test_a_source_spelling_a_name_wrongly_does_not_refute_it(
     result = validate_summary(f"{written_out} was in the news.", articles)
 
     assert result.is_safe, f"wrongly flagged: {result.invented_names}"
+
+
+def test_a_parody_spelling_names_someone_else_and_still_refutes(
+    make_article: ArticleFactory,
+) -> None:
+    """~~A joke spelling is one name spelled differently.~~ **Wrong, corrected 2026-08-25.**
+
+    This case was originally written the other way round, asserting that `LeBron James` should
+    be grounded against this headline. The operator pointed out what the post actually is: a
+    video of Anthony Edwards meeting a LeBron **impersonator**. "Lebwrong" is not a
+    misspelling, it names a different person deliberately.
+
+    `[VERIFIED]` The real LeBron appears **zero** times in that batch, so grounding him was a
+    missed fabrication rather than a rescued brief. Raising `_SAME_NAME_RATIO` from 0.80 to
+    0.90 separates it from a genuine typo: `lebwrong`/`lebron` scores 0.857 and no longer
+    merges, while `balmer`/`ballmer` scores 0.923 and still does.
+
+    `[INFERRED]` Worth keeping as a test rather than a deleted mistake, because the lesson is
+    that near-identical spelling is evidence of one name only up to a point, and domain
+    knowledge set that point, not the measurement.
+    """
+    articles = [
+        make_article(
+            "Anthony Edwards meets Lebwrong James and company in the Philippines"
+        ),
+        make_article("James Harden works out ahead of camp"),
+    ]
+
+    result = validate_summary("LeBron James signed a new deal.", articles)
+
+    assert not result.is_safe, "the real LeBron is not in this batch"
+    assert "LeBron James" in result.invented_names
 
 
 @pytest.mark.parametrize(
