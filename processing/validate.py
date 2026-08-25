@@ -827,16 +827,20 @@ _SAME_NAME_RATIO = 0.80
 def _effectively_the_same_name(mine: frozenset[str], other: frozenset[str]) -> bool:
     """Whether two names differ only in how a word is spelled.
 
-    Equal length only, because a difference in *how many* words a name has is expansion or
-    contraction, which the subset tests in `_contradicted` already handle.
-
     `[INFERRED]` This reads a near-match as evidence of one name rather than two, which is the
     same judgement `comparable` makes about accents and apostrophes. The difference is that
     those foldings are exact and this one is a guess, so it is deliberately strict: a fabricated
     name is built from a *different* real name, and different names are not near-matches.
+
+    ~~Equal length only, because a difference in *how many* words a name has is expansion or
+    contraction.~~ **That guard was written and then deleted, 2026-08-19, before it shipped.**
+    `[VERIFIED]` It cannot change a verdict: removing it altered **0** of 4,000 mixed two- and
+    three-word probes and none of the real names. `[INFERRED]` It is redundant by construction,
+    because `_contradicted` only offers names at least as long as `mine`, so the shorter-name
+    case the guard blocked is already acquitted by the `mine <= other` subset test one line
+    above. Caught by a surviving mutant, not by review, which is the P6 pattern again.
+    **Restore it** if `_contradicted` ever stops filtering `eligible` by length.
     """
-    if len(mine) != len(other):
-        return False
     return all(
         word in other
         or any(
