@@ -309,6 +309,11 @@ def test_a_dry_run_does_not_purge(
         store._connection.commit()
 
     monkeypatch.setenv("DATABASE_PATH", str(path))
+    # Point the evidence directory at the temporary tree too. `[VERIFIED]` 2026-08-25 without
+    # this the test wrote into the repository's own `evidence/`, because it drives the real
+    # `main`. A test that leaves files in the project tree is how a fixture quietly becomes
+    # production data.
+    monkeypatch.setenv("EVIDENCE_PATH", str(tmp_path / "evidence"))
     monkeypatch.setattr(main, "fetch_news", lambda feeds: ([], []))
     main.main(["--dry-run", "--no-summary"])
 
