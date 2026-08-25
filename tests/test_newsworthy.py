@@ -365,7 +365,7 @@ def test_an_article_with_no_author_is_kept(
 
 
 def test_an_untagged_question_on_the_community_feed_is_dropped(
-    make_article: Callable[..., NewsArticle],
+    make_article: ArticleFactory, now: datetime
 ) -> None:
     """`[VERIFIED]` 2026-08-18: this exact post produced a false claim in a delivered brief.
 
@@ -380,7 +380,7 @@ def test_an_untagged_question_on_the_community_feed_is_dropped(
         source="r/nba",
     )
 
-    assert not is_newsworthy(article)
+    assert not is_newsworthy(article, now)
 
 
 @pytest.mark.parametrize(
@@ -398,14 +398,14 @@ def test_an_untagged_question_on_the_community_feed_is_dropped(
     ],
 )
 def test_an_editorial_question_headline_is_kept(
-    make_article: Callable[..., NewsArticle], title: str
+    make_article: ArticleFactory, title: str, now: datetime
 ) -> None:
     """The expensive direction. An outlet asking a question in a headline is still reporting."""
-    assert is_newsworthy(make_article(title, source="CBS Sports"))
+    assert is_newsworthy(make_article(title, source="CBS Sports"), now)
 
 
 def test_a_reporter_tag_exempts_a_community_question(
-    make_article: Callable[..., NewsArticle],
+    make_article: ArticleFactory, now: datetime
 ) -> None:
     """A named journalist quoted on the community feed is reporting, whatever the punctuation.
 
@@ -416,11 +416,11 @@ def test_a_reporter_tag_exempts_a_community_question(
         "[Charania] Will Nikola Jokic sign an extension this summer?", source="r/nba"
     )
 
-    assert is_newsworthy(article)
+    assert is_newsworthy(article, now)
 
 
 def test_a_community_statement_is_not_dropped_for_being_untagged(
-    make_article: Callable[..., NewsArticle],
+    make_article: ArticleFactory, now: datetime
 ) -> None:
     """`[VERIFIED]` Only the question mark triggers this, never the absence of a tag.
 
@@ -435,7 +435,7 @@ def test_a_community_statement_is_not_dropped_for_being_untagged(
             "Bob Iger, Joshua Kushner"
         ),
     ):
-        assert is_newsworthy(make_article(title, source="r/nba")), title
+        assert is_newsworthy(make_article(title, source="r/nba"), now), title
 
 
 def test_a_short_untagged_community_rant_is_dropped(
