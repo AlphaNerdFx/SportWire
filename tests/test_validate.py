@@ -1715,3 +1715,37 @@ def test_a_contraction_is_still_grounded_alongside_the_near_match_rule(
     articles = [make_article("Karl-Anthony Towns and Julius Randle were traded")]
 
     assert validate_summary("Anthony Towns was traded.", articles).is_safe
+
+
+def test_a_title_running_into_its_own_summary_does_not_hide_an_entity(
+    make_article: ArticleFactory,
+) -> None:
+    """`[VERIFIED]` 2026-08-26, the claim marker's first production false flag.
+
+    The delivered brief said *"James Harden returned to the Cleveland Cavaliers"*, which the
+    batch supports outright: CBS carried "...James Harden returns to Cavaliers". It was
+    flagged anyway, because `_entity_pairs` scanned title and summary as one joined string, so
+    "Cavaliers" welded onto the summary's opening "Plus," and became the name `Cavaliers Plus`
+    keyed on `plus`. `cavaliers` then appeared in no article at all.
+
+    `_index_source_names` already documents this trap and scans per field for exactly this
+    reason. Both real strings are used below rather than a reduction, because the weld only
+    happens when the title ends on a name and the summary opens on a capital.
+    """
+    articles = [
+        make_article(
+            "NFL players enter ... college football transfer portal???; "
+            "James Harden returns to Cavaliers",
+            summary=(
+                "Plus, the best pitching prospect in baseball will make his major league "
+                "debut this weekend"
+            ),
+        )
+    ]
+
+    flagged = unsupported_sentences(
+        "James Harden returned to the Cleveland Cavaliers after a brief stint away.",
+        articles,
+    )
+
+    assert flagged == [], f"wrongly flagged: {flagged}"
