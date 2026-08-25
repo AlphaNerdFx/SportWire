@@ -342,6 +342,7 @@ def main(argv: list[str] | None = None) -> int:
             summary=news_summary,
             unsupported_claims=unsupported_claims,
             failed_sources=failed_sources,
+            directory=settings.evidence_path,
         )
 
         if not messages:
