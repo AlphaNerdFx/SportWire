@@ -12,3 +12,7 @@ build/
 .claude/worktrees/
 *.bkp
 logs/
+# Recorded batches. Local reproduction assets, not repository content: feed text is the
+# C3 exposure ADR-009 avoids, and this grows with every run. Promote a specific batch into
+# tests/fixtures/ when a task cites it.
+evidence/
