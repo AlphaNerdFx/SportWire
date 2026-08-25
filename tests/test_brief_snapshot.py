@@ -98,14 +98,19 @@ def test_nothing_to_report_sends_nothing() -> None:
     assert build_messages([], [], []) == []
 
 
-def test_an_unsupported_claim_is_marked_and_still_delivered(
+def test_a_flagged_claim_is_delivered_without_a_marker(
     make_article: Callable[..., NewsArticle],
 ) -> None:
-    """`[VERIFIED]` 2026-08-18 the operator chose marking over rejecting (TASKS.md P5).
+    """~~A flagged claim is marked in the brief.~~ **Requirement withdrawn 2026-08-26** by the
+    operator: *"remove the warning about the names. I don't want it."*
 
-    Rejecting the sentence rejects the summary, and the 00:00 run would then have delivered a
-    headline list on all three attempts, which is what he had just asked never to see again.
-    So the prose survives intact and gains a mark, and the legend says what the mark means.
+    Rewritten rather than deleted, because the behaviour still needs pinning: the sentence must
+    reach the phone **unchanged**, with no mark and no legend. The detection itself is
+    untouched — `main.py` still computes and logs the flagged sentences, so TASKS.md P5 stays
+    countable.
+
+    `[VERIFIED]` The marker's only production firing was a false positive, on a true sentence
+    about James Harden and the Cavaliers, so removing it costs nothing measured.
     """
     claim = "The Pelicans are welcoming back Damian Lillard following his trade from Portland."
     messages = build_messages(
@@ -117,11 +122,9 @@ def test_an_unsupported_claim_is_marked_and_still_delivered(
     )
 
     news = "\n".join(messages)
-    assert claim in news, "the sentence must still be delivered, not dropped"
-    assert f"{claim} ⚠️" in news, "the sentence must carry the mark"
-    assert "never appear in the same source article" in news, (
-        "the legend must explain it"
-    )
+    assert claim in news, "the sentence must still be delivered"
+    assert "⚠️" not in news, "no marker"
+    assert "never appear in the same source article" not in news, "no legend"
 
 
 def test_a_brief_with_nothing_flagged_gains_no_marker(
