@@ -588,6 +588,41 @@ what each turned into, since several changed shape on contact with real data.
   failure. `[UNKNOWN]` Whether this is causal. It is a correlation over 8 runs with two
   exceptions in it (29 → prose, 46 → fallback), and it is the thing P4's soak must settle.
 
+  **2026-08-25: the full count, which is what GitHub #17 asked for.**
+
+  `[VERIFIED]` Every dated run in `logs/sportwire.log`, 13 of the 21 logged (the rest predate
+  the date being added to the log format):
+
+  | | runs | prose | rate |
+  |---|---|---|---|
+  | all dated runs | 13 | 4 | **31%** |
+  | before the v0.1.3-v0.1.5 validator fixes | 8 | 2 | 25% |
+  | after them | 4 | 2 | 50% |
+
+  Per **attempt** rather than per run: 4 accepted of 30 attempts, 13%. Two of the four prose
+  runs passed on attempt 1.
+
+  `[VERIFIED]` **A single rate is the wrong shape for this number, and that is the finding.**
+  The two post-fix fallbacks are not the same kind of event:
+
+  - **2026-08-18 16:00** rejected `Toronto Raptors`, `Steve Ballmer`, `Commissioner Adam
+    Silver` and `Collective Bargaining Agreement`. **All four were false accusations**, and
+    all four causes have since been fixed (P32, P33, and the CBA vocabulary entry). That run
+    would pass today.
+  - **2026-08-19 00:00** rejected ten names, of which **nine were the model completing a Hall
+    of Fame roster** from a "HOF predictions" story, and the tenth was corrected on 2026-08-25
+    to also be right. That fallback was the check working exactly as designed.
+
+  `[INFERRED]` So "pass rate" conflates two things that should be counted separately: how
+  often the validator is **wrong** (a bug, and the number that has been falling), and how
+  often the model **fabricates** (a model property, and the number the fallback exists for).
+  A brief that falls back because the model invented seven Hall of Famers is a success, not a
+  failure, and averaging it with a false accusation hides both.
+
+  `[UNKNOWN]` Whether 50% post-fix holds. Four runs is not a rate either, and the honest
+  reading is that the sample restarts every time a validator bug is fixed. GitHub #1, fourteen
+  consecutive unattended days, is the measurement that settles it.
+
   **2026-08-18 00:00, the first scheduled run after P25, P26 and P27. Prose, on attempt 3.**
   `[VERIFIED]` The six-run fallback streak ends here. 15 new articles, 7 stories, and the
   batch is reconstructed exactly rather than guessed: `seen_articles` recorded 15 ids at
