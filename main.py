@@ -39,7 +39,7 @@ from models.schemas import NewsArticle, SeriesContext
 from processing.cluster import group_related, limit_per_source, order_by_relatedness
 from processing.dedup import deduplicate_articles, deduplicate_games
 from processing.highlights import find_notable_games
-from processing.newsworthy import drop_non_news
+from processing.newsworthy import MAX_ARTICLE_AGE_HOURS, drop_non_news
 from processing.openrouter import OpenRouterSummarizer
 from processing.priority import sort_by_priority
 from processing.summarize import OllamaSummarizer, Summarizer
@@ -75,6 +75,24 @@ def fetch_news(feed_names: Iterable[str]) -> tuple[list[NewsArticle], list[str]]
             failed.append(source_name)
         articles.extend(fetched)
     return articles, failed
+
+
+def forget_window(dedup_window_hours: int) -> int:
+    """How long a delivered article stays remembered, never less than it stays newsworthy.
+
+    **The floor is the whole function.** `[VERIFIED]` GitHub issue #10 measured what happens
+    without it: at an 8-hour window, 3 of 17 ESPN items were older than the window and still
+    being published, so each one looked new again and was re-delivered every cycle.
+
+    `[VERIFIED]` Anything delivered longer ago than `MAX_ARTICLE_AGE_HOURS` was published at
+    least that long ago too, so `drop_non_news` removes it before dedup is ever consulted.
+    That is what makes forgetting it harmless, and it stops being true the moment the window
+    drops below that limit.
+
+    Named rather than inline because a mutation deleting the floor left all 371 tests green.
+    That is the fourth pipeline-wiring mutant of the week (TASKS.md P36).
+    """
+    return max(dedup_window_hours, MAX_ARTICLE_AGE_HOURS)
 
 
 def build_story_groups(articles: list[NewsArticle]) -> list[list[NewsArticle]]:
@@ -164,6 +182,19 @@ def main(argv: list[str] | None = None) -> int:
 
     # --- deduplicate -----------------------------------------------------------
     with SeenStore(settings.database_path) as store:
+        # Forget what is too old to come back. The floor is the point: purging inside the
+        # window during which a feed still lists an item makes it look new again, and
+        # `[VERIFIED]` GitHub issue #10 measured that at an 8-hour window, 3 of 17 ESPN items
+        # were older than the window and still being published, so they were re-delivered
+        # every cycle. Anything older than `MAX_ARTICLE_AGE_HOURS` is dropped as non-news
+        # before dedup is consulted at all, so forgetting it cannot resurrect it.
+        forget_after = forget_window(settings.dedup_window_hours)
+        purged = store.purge_delivered_before(forget_after)
+        if purged:
+            logger.info(
+                "forgot %d articles delivered over %dh ago", purged, forget_after
+            )
+
         fresh_games = deduplicate_games(games, store.seen_game_hashes())
         fresh_articles = deduplicate_articles(articles, store.seen_article_ids())
         logger.info(
