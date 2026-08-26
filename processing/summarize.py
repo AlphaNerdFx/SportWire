@@ -118,7 +118,7 @@ DEFAULT_TIMEOUT_SECONDS = 600
 # skim — is editing this string, not fine-tuning a model. Recorded because the assumption
 # that this needs training came up more than once.
 SYSTEM_PROMPT = (
-    "You write a short NBA news brief for one reader who wants to know what happened "
+    "You write a short {league} news brief for one reader who wants to know what happened "
     "without opening a sports app.\n"
     "\n"
     "Structure:\n"
@@ -149,7 +149,7 @@ CHUNK_SIZE = 5
 # means only the final call ever writes a sentence, so the paragraph is composed once, in
 # one pass, exactly as it is for a short batch.
 NOTES_PROMPT = (
-    "Extract the key facts from these NBA news items as terse notes.\n"
+    "Extract the key facts from these {league} news items as terse notes.\n"
     "\n"
     "Rules:\n"
     "- One line per item. No prose, no sentences, no introduction.\n"
@@ -297,7 +297,9 @@ class OllamaSummarizer(Summarizer):
         sits near the front of *some* call.
         """
         if len(articles) <= self._chunk_size:
-            return self._generate(SYSTEM_PROMPT, build_prompt(articles, max_chars))
+            return self._generate(
+                system_prompt(articles), build_prompt(articles, max_chars)
+            )
 
         chunks = [
             articles[index : index + self._chunk_size]
@@ -312,11 +314,13 @@ class OllamaSummarizer(Summarizer):
         )
 
         notes = [
-            self._generate(NOTES_PROMPT, build_prompt(chunk, max_chars))
+            self._generate(notes_prompt(chunk), build_prompt(chunk, max_chars))
             for chunk in chunks
         ]
 
-        return self._generate(SYSTEM_PROMPT, build_reduce_prompt(notes, max_chars))
+        return self._generate(
+            system_prompt(articles), build_reduce_prompt(notes, max_chars)
+        )
 
     def _generate(self, system: str, prompt: str) -> str:
         """One POST to Ollama's generate endpoint. Exceptions handled by `summarise`."""
@@ -353,6 +357,34 @@ def _tidy(text: str) -> str:
     return "\n\n".join(block for block in paragraphs if block)
 
 
+def league_of(articles: list[NewsArticle]) -> str:
+    """The league these articles belong to, for the prompts.
+
+    `[VERIFIED]` 2026-08-26, and this is why it exists. Every prompt said "NBA news items",
+    and after ADR-015 split the briefs the football batch was still being introduced as
+    basketball. The model obliged: three attempts in a row attached NBA teams to NFL players,
+    "Ashton Jeanty of the Timberwolves" and "Houston Rockets" where the Texans belonged, and
+    the brief lost its prose to the validator catching them.
+
+    Read from the articles rather than passed in, so it cannot disagree with the batch it
+    describes. `[INFERRED]` Falls back to "sports" for a mixed batch, which no per-league run
+    produces but a caller could; naming one league over a mixed batch is the exact mistake
+    this function exists to stop making.
+    """
+    leagues = {article.league for article in articles}
+    return leagues.pop() if len(leagues) == 1 else "sports"
+
+
+def system_prompt(articles: list[NewsArticle]) -> str:
+    """The writing instructions, naming the league this batch is actually about."""
+    return SYSTEM_PROMPT.format(league=league_of(articles))
+
+
+def notes_prompt(articles: list[NewsArticle]) -> str:
+    """The note-extraction instructions, naming the league this batch is actually about."""
+    return NOTES_PROMPT.format(league=league_of(articles))
+
+
 def build_prompt(
     articles: list[NewsArticle],
     max_chars: int = DEFAULT_SUMMARY_CHARS,
@@ -376,7 +408,7 @@ def build_prompt(
     """
     now = now or datetime.now(timezone.utc)
     instruction = (
-        f"Summarise the following {len(articles)} NBA news items in at most "
+        f"Summarise the following {len(articles)} {league_of(articles)} news items in at most "
         f"{max_chars} characters."
     )
     lines = [instruction, ""]
