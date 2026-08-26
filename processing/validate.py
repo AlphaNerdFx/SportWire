@@ -68,6 +68,11 @@ _TRAILING_PUNCTUATION = ',;:!?()[]{}"“”«»…'
 # cleared. "Jordan Goodwin: ..." keeps `Jordan Goodwin`, and only the one-word labels are lost.
 _SEPARATES_NAMES = ",;:"
 
+# A trailing possessive, in either apostrophe shape. Matched on the word rather than on the
+# punctuation stripped from it, because the apostrophe is not trailing punctuation here: it
+# is part of the token, and `_depossess` removes it later for comparison.
+_ENDS_A_NAME = re.compile(r"['\u2019]s?$")
+
 
 # Apostrophe shapes that mean the same thing. `[VERIFIED]` 2026-08-17: the 00:00 run
 # rejected `Mike D'Antoni` as invented while lead 3 of that very batch was Yahoo's
@@ -400,7 +405,25 @@ class _ProperNames:
                 run.append(word)
                 # A comma ends the name it follows. Checked on what was *stripped*, so
                 # `Leonard,` and `Leonard,"` and `Leonard",` all end the run alike.
-                if any(ch in _SEPARATES_NAMES for ch in token[len(word) :]):
+                # A possessive ends the name it follows, for the same reason a comma does:
+                # what comes after belongs to something else.
+                #
+                # `[VERIFIED]` 2026-08-26. ESPN writes "Panthers' Canales backs Young" and
+                # "Vikings' Jeshaun Jones suspended three games". Without this the whole run
+                # is one name, `Panthers Canales`, and the refutation rule then reads it as
+                # an entity keyed on "panthers" that disagrees with `Carolina Panthers` and
+                # refuses the real team. That cost the first football brief its prose: all
+                # three attempts were rejected for `Cincinnati Bengals`, `Minnesota Vikings`
+                # and `Carolina Panthers`, every one of which the sources plainly name.
+                #
+                # `[INFERRED]` It reads as a football bug and is not one. The construction is
+                # just as common in basketball writing, but a basketball team usually appears
+                # somewhere else in the batch in another form, and one same-key source name
+                # that agrees is enough to acquit. "Vikings" appeared twice in that batch and
+                # both were possessive, so nothing acquitted it.
+                if _ENDS_A_NAME.search(word) or any(
+                    ch in _SEPARATES_NAMES for ch in token[len(word) :]
+                ):
                     if len(run) >= 2:
                         names.append(" ".join(run))
                     run = []
