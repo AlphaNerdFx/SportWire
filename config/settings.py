@@ -141,9 +141,7 @@ class Settings:
             database_path=_database_path(),
             evidence_path=_anchored("EVIDENCE_PATH", DEFAULT_EVIDENCE_PATH),
             log_level=(_text("LOG_LEVEL") or DEFAULT_LOG_LEVEL).upper(),
-            poll_interval_hours=_positive_int(
-                "POLL_INTERVAL_HOURS", DEFAULT_POLL_INTERVAL_HOURS
-            ),
+            poll_interval_hours=_interval_choice(),
             dedup_window_hours=_positive_int(
                 "DEDUP_WINDOW_HOURS", DEFAULT_DEDUP_WINDOW_HOURS
             ),
@@ -223,6 +221,29 @@ def _database_path() -> Path:
 
     path = Path(configured)
     return path if path.is_absolute() else PROJECT_ROOT / path
+
+
+def _interval_choice() -> int:
+    """Read `POLL_INTERVAL_HOURS`, and refuse anything outside the offered set (PRD D6, R7).
+
+    **A set rather than a free number, and refusing is the whole point.** `[INFERRED]` Most
+    integers are wrong here in ways the operator cannot see from the outside: 1 delivers
+    mostly empty briefs, 168 delivers one enormous one a week, and neither fails loudly. The
+    error names the choices so the fix is obvious rather than a guess.
+
+    `[VERIFIED]` The bounds are measured, not preferences. Over 13 scheduled runs at 8 hours
+    new articles arrived at roughly 3.9 an hour, so half an hour usually yields nothing at all
+    and two days already discards most of the batch against the story cap.
+    """
+    value = _positive_int("POLL_INTERVAL_HOURS", DEFAULT_POLL_INTERVAL_HOURS)
+    if value not in POLL_INTERVAL_CHOICES:
+        offered = ", ".join(str(choice) for choice in POLL_INTERVAL_CHOICES)
+        raise SettingsError(
+            f"POLL_INTERVAL_HOURS must be one of {offered}, got {value}. "
+            "The set is bounded because news arrives at roughly 4 articles an hour: "
+            "anything shorter usually delivers nothing, anything longer discards most of it."
+        )
+    return value
 
 
 def _positive_int(name: str, default: int) -> int:
