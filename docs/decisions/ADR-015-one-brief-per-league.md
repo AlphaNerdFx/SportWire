@@ -1,7 +1,7 @@
 # ADR-015 — One brief per league, each on its own schedule
 
 **Date:** 2026-08-26
-**Status:** proposed
+**Status:** accepted, and built on 2026-08-26 except for the per-league schedule
 
 ## Surface
 
@@ -107,3 +107,35 @@ infer harder.
 to finish inside the shortest configured interval — the answer is (a), one sectioned brief with
 one summarisation pass, not more tuning. Measure total run time across four leagues before
 committing to the fourth.
+
+
+## What was actually built, 2026-08-26
+
+`[VERIFIED]` The split, end to end. `python main.py --dry-run --no-summary` produced two
+messages, 54 basketball articles and 112 football ones, and a word count over each found no
+term from one sport in the other's brief. The pieces:
+
+- `NewsArticle.league`, stamped by the adapter from `FEED_LEAGUES` rather than guessed from
+  the text.
+- A `league` column on `fetched_articles`, added to existing databases by `ALTER TABLE`.
+  This is the migration this decision's predecessor said would eventually be needed.
+- `assemble_brief` in `main.py`, called once per league, with delivery left outside it so
+  nothing is recorded as sent until every brief is built.
+- A heading per league, because both briefs arrive within seconds and "NEWS" twice tells the
+  reader nothing.
+- Failed sources reported only in their own league's brief. An NFL outage in the basketball
+  brief is a fact the reader can do nothing with.
+- One evidence file per league, labelled, since both are written inside the same second.
+
+Two things are deliberately *not* per league yet:
+
+**The schedule.** Both briefs are still built by one run on one interval. Splitting them
+needs the bounded interval choice from P42, which is v1.0.0 work. `[INFERRED]` Nothing built
+here blocks it: the loop already assembles each league independently, so a per-league
+schedule becomes a question of which leagues a given run handles.
+
+**The vocabulary sample.** The validator still learns ordinary English from the whole run,
+both sports together. `[VERIFIED]` That is on purpose and it is the opposite of the leakage
+rule: P32 records that a twelve-story batch is too small a sample of English, and splitting
+by league makes each batch smaller still. The sample teaches the validator which lower-case
+words are ordinary; it never reaches the model, so it cannot leak a sport into a brief.
