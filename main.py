@@ -28,9 +28,9 @@ import sys
 from collections.abc import Iterable
 from datetime import date, datetime, timezone
 
-from config.settings import Settings, SettingsError
+from config.settings import Settings, SettingsError, brief_size_for
 from delivery.base import DeliveryChannel
-from delivery.brief import DEFAULT_MAX_ARTICLES, build_messages
+from delivery.brief import build_messages
 from delivery.stdout import StdoutChannel
 from delivery.telegram import TelegramChannel
 from ingestion.nba_games import BallDontLieGamesAdapter
@@ -283,7 +283,14 @@ def main(argv: list[str] | None = None) -> int:
         # Computed here rather than inside the branch below because the recorded batch is
         # these leads whether or not a summary was attempted, and a run with `--no-summary`
         # is exactly the kind that is worth being able to replay.
-        to_summarise = [group[0] for group in story_groups[:DEFAULT_MAX_ARTICLES]]
+        # Both derived from the chosen interval, never set apart (PRD D6, TASKS.md P42).
+        #
+        # `[VERIFIED]` Scaling only the character limit would not work: the story cap binds on
+        # 8 of 22 logged runs at 8 hours, so a longer interval would discard more news and
+        # still write twelve stories. `[INFERRED]` At the default 8 hours these are exactly
+        # today's values, so nothing changes unless the interval does.
+        max_stories, summary_chars = brief_size_for(settings.poll_interval_hours)
+        to_summarise = [group[0] for group in story_groups[:max_stories]]
 
         if story_groups and not args.no_summary:
             # Hosted when a key is configured, local otherwise. `[VERIFIED]` local 7B
@@ -312,7 +319,7 @@ def main(argv: list[str] | None = None) -> int:
             # refuted the Raptors and the commissioner. Across 258 articles both words are
             # plainly ordinary.
             news_summary = summarizer.summarise(
-                to_summarise, vocabulary_sample=articles
+                to_summarise, max_chars=summary_chars, vocabulary_sample=articles
             )
 
             if news_summary is None:
@@ -370,6 +377,7 @@ def main(argv: list[str] | None = None) -> int:
             series=series,
             unsupported_claims=unsupported_claims,
             failed_sources=failed_sources,
+            max_articles=max_stories,
         )
 
         # Keep the batch before anything else can go wrong with it. `[VERIFIED]` TASKS.md
