@@ -310,6 +310,7 @@ def assemble_brief(
         unsupported_claims=unsupported_claims,
         failed_sources=failed_sources,
         directory=settings.evidence_path,
+        label=league,
     )
     return Brief(
         messages=messages, fresh_articles=fresh_articles, fresh_games=fresh_games
