@@ -2787,3 +2787,51 @@ Standing items not otherwise listed above:
   `[INFERRED]` The trade is also asymmetric in the way that matters here. A false accusation
   costs the whole brief its prose, which is the outcome the operator asked never to see
   again. A missed blend costs one wrong name inside a paragraph that is otherwise delivered.
+
+- [ ] **P51. A team from the wrong sport reached a brief, because a lone name is never
+  checked.** Open, found 2026-08-26 in the first football brief that kept its prose.
+
+  The delivered football paragraph said:
+
+  > Ashton Jeanty of the Timberwolves is recovering from an injury
+
+  `[VERIFIED]` "Timberwolves" appears **0 times** in that batch of twelve football articles,
+  and the summary passed validation on attempt 1. Jeanty is a running back; the Timberwolves
+  are a basketball team. The model supplied the team from its own weights.
+
+  It passed because `_PROPER_NAME` requires two words, so a lone capitalised word is never
+  treated as a name and never grounded. "Ashton Jeanty" was checked and is correct. The team
+  standing next to it was not checked at all.
+
+  **This corrects something written in `ADR-015` earlier the same day.** That note said
+  per-league briefs stop cross-sport leakage because the summarizer is stateless and the
+  batch is isolated. The batch half is true. What it missed is that the model does not need
+  the batch to name a basketball team, and splitting the briefs makes this *more* visible
+  rather than less, because a football-only brief now has an obvious wrong answer in it.
+
+  `[VERIFIED]` Why the cheap fix does not work. Lowering the minimum to one word, keeping the
+  existing ordinary-word and vocabulary filters, over the two summaries this run produced:
+
+  ```
+  NBA brief: Elsewhere, Lastly, Meanwhile          all false, 0 real
+  NFL brief: Elsewhere, Lastly, Meanwhile, Timberwolves    3 false, 1 real
+  ```
+
+  Every false one is a sentence connective that the sources never happen to write in lower
+  case. `[VERIFIED]` Widening the vocabulary sample to 396 articles rescues only "meanwhile";
+  "lastly" and "elsewhere" are still not ordinary. So both briefs would be rejected to catch
+  one wrong team, which is the trade the `min_words=2` comment was already warning about.
+
+  Resolve by deciding between:
+
+  - **(a) A connective stop-list.** Small, hand-written, and the same argument P23 had for
+    competition vocabulary. Would need the same measurement before shipping.
+  - **(b) Check a lone word only when it is a known team name.** Narrow and safe, but needs a
+    team list per league, which `ROADMAP.md` already flags as a cost for `v0.6.0`.
+  - **(c) Leave it.** `[INFERRED]` Defensible: the error is one wrong word in an otherwise
+    correct paragraph, and rejecting the paragraph delivers a headline list instead, which is
+    the outcome the operator asked never to see.
+
+  Do not pick this one silently. `[INFERRED]` (b) looks best because it fixes exactly the
+  observed failure and cannot touch a sentence opener, but it depends on work that has not
+  been scoped yet.
