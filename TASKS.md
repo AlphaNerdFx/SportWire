@@ -2716,8 +2716,11 @@ Standing items not otherwise listed above:
   the competition vocabulary: the batch carried "Bengals QB Joe Burrow" and indexed
   `{bengals, qb}` as an entity.
 
-- [ ] **P49. "North Carolina" refutes "Carolina Panthers".** Open, found 2026-08-26 while
-  measuring P48.
+- [x] **P49. "North Carolina" refutes "Carolina Panthers".** Closed 2026-08-26 without being
+  worked on directly. `[VERIFIED]` P50 dropped competition vocabulary from indexed names, so
+  `{north, carolina}` became one word and stopped being indexed, and P52 then split names at
+  team nicknames. `index['carolina']` is empty and the team is accepted. Kept below because
+  the reasoning about place names colliding with team names is still true and will return.
 
   `[VERIFIED]` After the possessive fix, one of eighteen NFL teams is still refused:
 
@@ -2865,3 +2868,47 @@ Standing items not otherwise listed above:
   two leagues, so a baseball team named in a baseball brief would be invisible to it rather
   than wrongly flagged. That is the safe direction to fail, but it means the check quietly
   does nothing for a new sport until the list is extended.
+
+- [x] **P52. A team standing before a player refuted the team, without an apostrophe.**
+  Closed 2026-08-26. The other half of P48.
+
+  P48 fixed "Vikings' Jeshaun Jones". The feeds write the same construction without the
+  possessive just as often, and that form was still welded:
+
+  ```
+  Giants WR Calvin Austin III suffers torn ACL
+  Sources: Giants trading OL Ezeudu to Chiefs
+  ```
+
+  `[VERIFIED]` Indexed whole, the first is one entity keyed on "giants" that disagrees with
+  `New York Giants` about everything else. The batch named the Giants **13 times** and the
+  team was still refused.
+
+  **Fix:** when indexing a source name, end it at a team nickname. A team is where one name
+  stops and the next begins. Applied to the sources only, never to the summary, because a
+  summary writing "New York Giants" is making a claim about a team and has to be judged
+  whole.
+
+  `[VERIFIED]` Measured over 396 captured articles:
+
+  - Expanded team names against their own league's live batch: NFL **17/18 accepted before,
+    18/18 after**, the gain being `New York Giants`. NBA unchanged at 6/8.
+  - The 302 real two-word names the sources write: **0 changed**.
+  - 500 generated blends: **461 refused before, 461 after**. No cost at all, because the
+    pieces a team split produces are still indexed.
+
+  `[VERIFIED]` It also closed **P49** as a side effect, along with P50. `index['carolina']`
+  is now empty, so "North Carolina" no longer refutes `Carolina Panthers`.
+
+  `[VERIFIED]` One thing measured and rejected while here. Dropping position abbreviations
+  and name suffixes (`wr`, `rb`, `jr`, `iii`) when indexing looks obviously right, because
+  "Giants WR Calvin Austin III" leaves a piece keyed on "wr" and "iii" rather than on the
+  player. It makes blend detection **worse**: 446 of 500 to 442. Those junk words are
+  currently carrying keys that catch junk blends. Not done.
+
+  `[VERIFIED]` Two existing tests had to be rewritten rather than fixed, because this change
+  made their examples stop demonstrating anything. Both used "Raptors Reacts" to show a label
+  refuting a team, which is now split at "Raptors" and never indexed. They were moved onto
+  the other rejection from the same run, "Fire Adam Silver", which no team rule can reach.
+  `[INFERRED]` That is the honest way round: the mechanism they guard is still real, only the
+  illustration expired.
