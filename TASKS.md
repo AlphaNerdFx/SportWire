@@ -2598,3 +2598,38 @@ Standing items not otherwise listed above:
 | 11 | Non-technical setup | Deferred (L13). |
 | 15 | Tests for `processing/` | **P1 above. The priority.** |
 
+
+- [ ] **P46. Only one Reddit feed can be fetched per run, which blocks r/nfl.** Open, found
+  2026-08-26 while adding the NFL feeds for v0.5.0.
+
+  `[VERIFIED]` r/nfl works fine on its own: `RssNewsAdapter('r/nfl', ...)` returned 25
+  articles with `last_error=None` after a quiet period. It fails whenever r/nba was fetched
+  shortly before it, in the same run:
+
+  ```
+  0.5s  ESPN          17 articles  err=None
+  1.7s  CBS Sports    36 articles  err=None
+  3.2s  r/nba         25 articles  err=None
+  3.7s  r/nfl          0 articles  err=HTTPError   (429 Too Many Requests)
+  ```
+
+  `[VERIFIED]` Spacing does not fix it. The same pair was retried with a 5 second gap and
+  again with a 30 second gap, from a rested state both times, and the second request failed
+  identically. So this is not a politeness delay problem, it is a per-IP budget measured over
+  minutes. Adding a sleep between requests would cost every run time and buy nothing.
+
+  `[VERIFIED]` Separately, the User-Agent matters more than expected. `curl` sending a
+  spoofed `Mozilla/5.0` gets HTTP 403 from both subreddits, while the adapter's declared
+  `SportWire/0.1 (+github.com/AlphaNerdFx/SportWire)` gets 200. Reddit is rejecting the
+  pretend browser and accepting the honest bot, which is the opposite of the usual guess and
+  is worth not undoing by "fixing" the User-Agent later.
+
+  **Decision for now: ship NFL with the three editorial feeds and no community feed.** They
+  return 113 articles between them, which is not short of material. `[INFERRED]` Alternating
+  the two subreddits across runs would work but adds stored state and halves community
+  coverage for each league, which is a lot of machinery for a feed that is a supplement.
+
+  Resolve by: authenticating to Reddit. `[INFERRED]` An OAuth client gets a much larger
+  request budget than anonymous access, which would let both subreddits be fetched in one
+  run. Free, official, and no terms problem, so it fits C2 and C3. This is the same fix
+  already suggested for general rate-limit headroom, now with a concrete thing it unblocks.
