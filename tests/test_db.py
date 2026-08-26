@@ -448,7 +448,11 @@ def test_a_poll_stores_without_delivering(
     monkeypatch.setenv("EVIDENCE_PATH", str(tmp_path / "evidence"))
     monkeypatch.setattr(main, "fetch_news", lambda feeds: (fetched, []))
 
-    assert main.main(["--poll-only", "--channel", "stdout"]) == 0
+    # `--no-summary` is not incidental. `[VERIFIED]` 2026-08-26: without it, a mutation that
+    # removed the poll-only guard did not fail this test, it made it **hang** for ten minutes
+    # calling Ollama. A test that drives the whole pipeline must be unable to reach a model or
+    # a network, or a mutation campaign becomes a timeout instead of a result.
+    assert main.main(["--poll-only", "--channel", "stdout", "--no-summary"]) == 0
 
     with SeenStore(path) as store:
         assert len(store.fetched_since(hours=1)) == 1
