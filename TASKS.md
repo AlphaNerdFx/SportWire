@@ -2912,3 +2912,52 @@ Standing items not otherwise listed above:
   the other rejection from the same run, "Fire Adam Silver", which no team rule can reach.
   `[INFERRED]` That is the honest way round: the mechanism they guard is still real, only the
   illustration expired.
+
+- [x] **P53. Every prompt told the model it was writing basketball, including the football
+  one.** Closed 2026-08-26. The root cause behind P51's symptom.
+
+  `[VERIFIED]` All three prompt strings were hardcoded:
+
+  ```
+  SYSTEM_PROMPT   "You write a short NBA news brief ..."
+  NOTES_PROMPT    "Extract the key facts from these NBA news items ..."
+  build_prompt    "Summarise the following 12 NBA news items ..."
+  ```
+
+  ADR-015 split the briefs and left the wording behind, so a batch of twelve football
+  articles was introduced to the model as basketball three times over. It obliged.
+
+  `[VERIFIED]` The 22:23 run, football, all three attempts:
+
+  ```
+  attempt 1 rejected (invented names: Timberwolves)
+  attempt 2 rejected (invented names: Houston Rockets, Rockets)
+  attempt 3 rejected (invented names: Minnesota Timberwolves', Timberwolves)
+  no attempt passed validation after 3 tries; using the headline list
+  ```
+
+  Every one is a basketball team in a football brief, and "Houston Rockets" is the giveaway:
+  the city is right and the sport is wrong, which is what a model does when it has been told
+  the wrong sport and is reaching for a team to attach to a name.
+
+  **Fix:** the league is read from the articles and written into all three prompts. Read
+  rather than passed, so it cannot disagree with the batch it describes. A mixed batch is
+  called "sports", because naming one league over a batch holding two is the mistake being
+  fixed.
+
+  `[INFERRED]` This reframes P51. The lone-team check is still right and still earning its
+  place, but it was catching a symptom of this, and a validator that rejects every attempt
+  delivers a headline list, which is the outcome the operator asked never to see. The check
+  is the net; this is the hole the fish were coming through.
+
+  `[VERIFIED]` Four call sites, four mutations, and the tests needed two rounds to hold:
+
+  - Asserting `any(...)` prompt named the league let **all three** sites survive mutation,
+    because with one left unformatted the others still carried it. Changed to every prompt.
+  - An unformatted template reads `{league}`, not "NBA", so checking for the absence of "NBA"
+    passed as well. The test now asserts the placeholder is gone.
+  - The chunked test never reaches the single-call path, so that site survived until a second
+    test covered a batch under `CHUNK_SIZE`.
+
+  `[INFERRED]` Worth keeping as a pattern: a weak assertion and a mutation that "applies"
+  are not the same thing as a test that works, and only the mutation run tells them apart.
