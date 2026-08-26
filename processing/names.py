@@ -29,11 +29,14 @@ module a no-op rather than a rewrite.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 # Punctuation that belongs inside a name — "De'Aaron", "Karl-Anthony", "Jr." — as opposed to
 # punctuation that merely follows one.
 _INSIDE_A_NAME = "'’.-"
+_POSSESSIVE = re.compile(r"['\u2019]s?$")
+
 _TRAILING_PUNCTUATION = ',;:!?()[]{}"“”«»…'
 
 
@@ -91,6 +94,12 @@ class NameScanner:
     # Warriors`, which then refuted the real "Golden State Warriors" through the refutation
     # rule and cost a live brief its prose.
     separators: str = ""
+    # Whether a trailing possessive ends the run. `[VERIFIED]` 2026-08-26: ESPN writes
+    # "Panthers' Canales" and "Vikings' Jeshaun Jones", and welding those into one name gave
+    # the refutation rule a fake entity that refused the real team. Off by default because
+    # clustering has not been shown to need it, and changing how stories group is a separate
+    # question with its own evidence. See P48.
+    possessive_ends_run: bool = False
 
     def findall(self, text: str) -> list[str]:
         """Every name-shaped run in `text`, in the order it appears."""
@@ -119,8 +128,10 @@ class NameScanner:
 
             # The word still counts; what the punctuation ends is the *run* after it.
             trailing = token[len(word) :]
-            ends_the_run = (self.break_run_on_punctuation and trailing) or any(
-                ch in self.separators for ch in trailing
+            ends_the_run = (
+                (self.break_run_on_punctuation and trailing)
+                or any(ch in self.separators for ch in trailing)
+                or (self.possessive_ends_run and bool(_POSSESSIVE.search(word)))
             )
             if ends_the_run:
                 flush()
@@ -136,7 +147,12 @@ class NameScanner:
 # `separators` gained the colon on 2026-08-17, in step with `validate._SEPARATES_NAMES`. The
 # test that asserts these two agree is what caught the drift, on the real title "Sources:
 # Knicks executive Rosas leaving team", which the old rule read as the name `Sources Knicks`.
-GROUNDING = NameScanner(min_words=2, break_run_on_punctuation=False, separators=",;:")
+GROUNDING = NameScanner(
+    min_words=2,
+    break_run_on_punctuation=False,
+    separators=",;:",
+    possessive_ends_run=True,
+)
 
 # Single words count and punctuation ends a name — the shape `cluster.py` needs.
 #
