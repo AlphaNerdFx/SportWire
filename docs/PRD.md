@@ -64,6 +64,8 @@ phone via Telegram.
 | R4 | Structured logging of what was fetched, dropped and sent | Partial — `main.py` logs; not configurable |
 | R5 | A second news source, proving the adapter boundary holds | **Not built** — M5/M6 |
 | R6 | NFL coverage | `[UNKNOWN]` — **decision needed, see §7 D3** |
+| R7 | The operator picks the delivery interval from a bounded set of choices | **Not built** — decided 2026-08-26, see §7 D6 |
+| R8 | The summary's length scales with the interval, so a longer gap yields a longer brief | **Not built** — decided 2026-08-26, see §7 D6 |
 
 ### Non-functional
 
@@ -100,6 +102,45 @@ poll. Measured against the live feed, 6 of 17 items were older than 6 hours — 
 creates a **2-hour blind spot** where an article is new, survives dedup, and is then silently
 excluded from the summary. Letting the run define the window removes the failure mode instead
 of tuning it, and stays correct if the cadence is ever changed.
+
+### D6 — Interval is a bounded choice, and output scales with it → **decided 2026-08-26**
+
+Operator decision: 8 hours stays the standard for now; at v1.0.0 the operator picks from a
+**set** of intervals rather than editing a cron line, bounded roughly between **2 hours and 2
+days**, and the model's output limit moves with the choice.
+
+**Why bounded, with the measurements behind the bounds.** `[VERIFIED]` Across 13 scheduled
+runs at 8 hours, new articles surviving deduplication were **min 10, median 23, max 81**,
+which is roughly **3.9 new articles per hour** in the offseason. Extrapolating that rate:
+
+| interval | expected new articles | why it sits inside or outside the bounds |
+|---|---|---|
+| 30 min | ~2 | Most runs would deliver nothing. `main.py` already logs "nothing new to report" and sends no message, so the brief becomes noise or silence |
+| **2 hours** | ~8 | The floor. Enough for a brief most of the time, and still under the 12-story cap |
+| **8 hours** | ~23 | Today's standard |
+| 24 hours | ~94 | Well past the cap; most news is discarded |
+| **2 days** | ~187 | The ceiling, and already lossy — see below |
+
+`[UNKNOWN]` These are offseason rates. In season the volume will be higher and the bounds
+should be re-measured rather than assumed to hold.
+
+**A longer interval does not currently produce a fuller brief, and this is the part that
+needs building.** `[VERIFIED]` `DEFAULT_MAX_ARTICLES = 12` caps the stories that reach the
+summariser, and **8 of 22 logged runs hit exactly 12** — the cap already binds regularly at 8
+hours. At 2 days it would discard roughly 175 of 187 articles. So scaling the *output token
+limit* alone is not enough: **the story cap has to scale too**, or a longer interval simply
+loses more news while producing the same twelve-story summary.
+
+`[INFERRED]` Three quantities move together and should be derived from one interval setting
+rather than tuned separately: the story cap (`DEFAULT_MAX_ARTICLES`), the output limit
+(`DEFAULT_SUMMARY_CHARS`, currently 1024), and probably the chunk count, since
+`processing/summarize.py` already splits above `CHUNK_SIZE = 5` and a 40-story brief would be
+8 chunks and 9 model calls. `[VERIFIED]` The 2026-08-26 00:00 run took **10 minutes 36
+seconds** for 12 stories in 3 chunks, so run time scales with this too and a 2-day brief may
+approach a timeout.
+
+`[INFERRED]` Deriving all three from the interval keeps D1 true: the run still defines the
+window, and nothing gains a second source of truth about how much news a brief covers.
 
 ### D2 — Deduplication window → **168 hours (7 days)**
 `[VERIFIED]` 2026-08-06, live measurement of ESPN's feed (17 items, oldest **99.1 hours** old):
