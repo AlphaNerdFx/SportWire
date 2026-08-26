@@ -362,3 +362,55 @@ def test_the_choices_stay_inside_the_measured_band() -> None:
     assert min(POLL_INTERVAL_CHOICES) == 2
     assert max(POLL_INTERVAL_CHOICES) == 48
     assert list(POLL_INTERVAL_CHOICES) == sorted(POLL_INTERVAL_CHOICES)
+
+
+@pytest.mark.parametrize("interval", POLL_INTERVAL_CHOICES)
+def test_every_offered_interval_is_accepted(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, interval: int
+) -> None:
+    """The set is the contract, so every member of it has to work."""
+    monkeypatch.setenv("POLL_INTERVAL_HOURS", str(interval))
+
+    settings = Settings.from_env(env_file=tmp_path / "absent.env")
+
+    assert settings.poll_interval_hours == interval
+
+
+@pytest.mark.parametrize("interval", ["1", "5", "36", "168"])
+def test_an_interval_outside_the_set_is_refused(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, interval: str
+) -> None:
+    """`[INFERRED]` Refusing is the point, not the set existing.
+
+    Most integers are wrong here in ways the operator cannot see from outside: 1 delivers
+    mostly empty briefs, 168 delivers one enormous one a week, and neither fails loudly. A
+    silent default would hide the mistake for weeks.
+    """
+    monkeypatch.setenv("POLL_INTERVAL_HOURS", interval)
+
+    with pytest.raises(SettingsError, match="must be one of"):
+        Settings.from_env(env_file=tmp_path / "absent.env")
+
+
+def test_the_refusal_names_the_choices(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """An error that says what is wrong without saying what is allowed is a guessing game."""
+    monkeypatch.setenv("POLL_INTERVAL_HOURS", "5")
+
+    with pytest.raises(SettingsError) as raised:
+        Settings.from_env(env_file=tmp_path / "absent.env")
+
+    for choice in POLL_INTERVAL_CHOICES:
+        assert str(choice) in str(raised.value)
+
+
+def test_an_unset_interval_still_defaults(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A fresh clone with no configuration must run, and must run at today's cadence."""
+    monkeypatch.delenv("POLL_INTERVAL_HOURS", raising=False)
+
+    settings = Settings.from_env(env_file=tmp_path / "absent.env")
+
+    assert settings.poll_interval_hours == DEFAULT_POLL_INTERVAL_HOURS
