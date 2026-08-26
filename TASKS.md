@@ -2788,8 +2788,8 @@ Standing items not otherwise listed above:
   costs the whole brief its prose, which is the outcome the operator asked never to see
   again. A missed blend costs one wrong name inside a paragraph that is otherwise delivered.
 
-- [ ] **P51. A team from the wrong sport reached a brief, because a lone name is never
-  checked.** Open, found 2026-08-26 in the first football brief that kept its prose.
+- [x] **P51. A team from the wrong sport reached a brief, because a lone name is never
+  checked.** Closed 2026-08-26, the same day it was found.
 
   The delivered football paragraph said:
 
@@ -2832,6 +2832,36 @@ Standing items not otherwise listed above:
     correct paragraph, and rejecting the paragraph delivers a headline list instead, which is
     the outcome the operator asked never to see.
 
-  Do not pick this one silently. `[INFERRED]` (b) looks best because it fixes exactly the
-  observed failure and cannot touch a sentence opener, but it depends on work that has not
-  been scoped yet.
+  **Built (b), on the operator's instruction to take the recommended option.** A frozen set
+  of the 62 NBA and NFL nicknames, and a check that runs only on words already known to be
+  teams. A sentence connective can never be one, which is exactly what makes the narrow rule
+  safe where lowering the scanner's minimum was not.
+
+  `[VERIFIED]` Measured before shipping, over 396 captured articles:
+
+  - **False accusations: 0.** 258 of those articles name a team in their title, and not one
+    was flagged when checked against a corpus containing it.
+  - **Detection, against one real batch of twelve football articles:** the 7 teams that batch
+    named were all accepted, and all 55 it did not name were refused. No overlap.
+  - **Across the five recorded summaries:** exactly one flag, `Timberwolves`, which is the
+    error this task was opened for. Nothing else in any of them.
+
+  `[VERIFIED]` One guard was written and then removed before shipping, under P6. The check
+  originally skipped nicknames the sources write in lower case, on the theory that many are
+  ordinary English. Of the 62, exactly one ever appears in lower case in the corpus, and
+  reading it shows "Luka signs a baby, the lakers visit the maternity ward" — a headline
+  missing a capital, not ordinary English. `[INFERRED]` It was also pointed the wrong way:
+  ordinary words are learned from the whole run while grounding is against one brief's own
+  articles, so the only situation where the guard could act is one where it would suppress a
+  correct flag.
+
+  `[INFERRED]` The residual weakness runs the other way and is left in deliberately. A source
+  writing "he bears no blame" grounds the Bears, because `_appears` matches the word and not
+  the meaning. That costs a missed fabrication; the alternative costs a rejected brief, and a
+  rejected brief is the outcome the operator asked never to see. `test_a_lower_case_use_of_a
+  _nickname_grounds_the_team` pins it so the trade is visible rather than discovered.
+
+  `[UNKNOWN]` What this costs when MLB and NHL arrive. The list is hardcoded and knows only
+  two leagues, so a baseball team named in a baseball brief would be invisible to it rather
+  than wrongly flagged. That is the safe direction to fail, but it means the check quietly
+  does nothing for a new sport until the list is extended.
