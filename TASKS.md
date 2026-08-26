@@ -2433,6 +2433,36 @@ what each turned into, since several changed shape on contact with real data.
   Recorded in `docs/PRD.md` D6 with requirements R7 and R8, and in `ROADMAP.md` under v0.4.0
   and v1.0.0.
 
+
+- [x] **P43. Three tests drove the real `main` straight into the live games API.** Found
+  2026-08-26 when a pre-commit `make check` failed on a 429 from `api.balldontlie.io`, with a
+  traceback about a source the test was not testing. **Fixed — `40d417d`.**
+  `[VERIFIED]` `tests/test_db.py` calls `main.main()` four times and stubbed the games adapter
+  zero times. Three of the four therefore fetched games for real: `test_a_dry_run_does_not_purge`,
+  `test_a_poll_stores_without_delivering` and `test_a_default_run_still_polls_and_delivers_in_one_pass`.
+  The fourth passes `--no-poll`, which already contacts nothing, which is the whole point of
+  ADR-014.
+  `[VERIFIED]` **Blocking the network proves nothing here, so the calls were counted instead.**
+  Every adapter catches its own failure and returns `[]` (`CLAUDE.md` §5 rule 6), so a refused
+  call is indistinguishable from a quiet source: all 31 tests passed with `requests.get`
+  raising. A counting plugin separated "did not need the network" from "asked and was refused".
+  - Proof — before: `test_a_dry_run_does_not_purge: 1 call -> https://api.balldontlie.io/v1/games`,
+    and the same for the other two. After: **none**. 31 passed both times.
+  - Proof — `make check` → **411 passed, 1 xfailed**, exit=0, and the suite dropped from ~16s
+    to 7.8s because three tests no longer wait on an upstream.
+  `[INFERRED]` The fix clears `BALL_DONT_LIE_API_KEY` rather than stubbing the adapter, so the
+  real skip path (`settings.can_fetch_games`) still runs. None of the three assert anything
+  about games; they are about the poll/deliver seam.
+  `[UNKNOWN]` Whether the 429 also explains the failure seen in that same run — the poll-only
+  test's captured output showed a brief being printed, which cannot happen past
+  `if args.poll_only: return 0`. **Not reproduced in six consecutive green runs.** Do not
+  record a cause for it until it is seen again; `SESSION.md` §11 lists concluding from one run
+  as this project's repeat mistake.
+  - **What to watch:** if it recurs, capture the failing run's `main.py` state before anything
+    else. `CLAUDE.md` §8 keeps live sources behind `@pytest.mark.network`; the general lesson
+    is that a test driving the real `main` reaches everything the real `main` reaches, which is
+    the same leak `EVIDENCE_PATH` was pointed at temporary storage to close.
+
 ---
 
 ## LOW — deferred; each requires a trigger condition
