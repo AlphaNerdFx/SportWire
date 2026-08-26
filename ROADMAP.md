@@ -107,6 +107,11 @@ source currently returns an empty list and vanishes from the brief with only a l
 **Done when both the delivery schedule and the thing that triggers it are configuration, not a
 cron line someone edited by hand.**
 
+**The interval is a bounded choice, not a free number** (operator decision 2026-08-26, PRD D6).
+Roughly 2 hours to 2 days, and the model's output limit moves with it. `[VERIFIED]` The bounds
+come from measurement: 13 runs at 8 hours produced a median of 23 new articles, about 3.9 an
+hour, so 30 minutes would usually deliver nothing while 2 days would swamp the cap.
+
 Depends on `v0.3.0` and cannot be started before it — an interval feature built on
 fetch-per-brief is the design ADR-014 exists to prevent. Resolves the `[UNKNOWN]` in §2 about
 scheduling by making it explicit rather than discovered.
@@ -223,6 +228,11 @@ of:
 
 1. Briefs for NBA, NFL, MLB and NHL arrive on schedule, unattended, from a scheduler this
    repository documents, with the operator's choice of scheduler honoured (`v0.4.0`).
+   The operator also picks the **interval** from a bounded set, and the brief's length scales
+   with it (PRD D6, R7 and R8, decided 2026-08-26). `[VERIFIED]` Scaling the output limit alone
+   is not enough: `DEFAULT_MAX_ARTICLES = 12` already binds on 8 of 22 logged runs at 8 hours,
+   so a 2-day interval would discard roughly 175 of 187 articles unless the story cap scales
+   too.
 2. The summarisation pass rate is a **measured** number, published in the release notes.
 3. No known false-accusation bug in `processing/validate.py`. `[VERIFIED]` Six were fixed
    between 2026-08-15 and 2026-08-17, so this condition is doing real work.
