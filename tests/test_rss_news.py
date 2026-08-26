@@ -21,7 +21,7 @@ from typing import Any
 import pytest
 import requests
 
-from ingestion.rss_news import RssNewsAdapter
+from ingestion.rss_news import FEED_LEAGUES, FEEDS, RssNewsAdapter
 from models.schemas import NewsArticle
 
 # `[VERIFIED]` The exact bytes the live Yahoo feed serves for "Schröder": U+00F6 as UTF-8.
@@ -216,3 +216,42 @@ def test_the_pipeline_reports_nothing_when_every_feed_is_healthy(
     monkeypatch.setattr(main, "RssNewsAdapter", Healthy)
 
     assert main.fetch_news(["ESPN", "r/nba"]) == ([], [])
+
+
+def test_every_configured_feed_declares_its_league() -> None:
+    """`FEEDS` and `FEED_LEAGUES` are separate maps, so they can drift (ADR-015).
+
+    `[INFERRED]` A feed added to one and not the other would silently take the default league
+    and file its articles under the wrong sport, which is the exact misattribution ADR-015
+    chose feed-based routing to avoid.
+    """
+    assert set(FEEDS) == set(FEED_LEAGUES), (
+        "a feed is missing its league, or the reverse"
+    )
+
+
+def test_an_article_carries_the_league_of_the_feed_it_came_from(
+    espn_rss_xml: str,
+) -> None:
+    """Carried from the producer, never inferred downstream.
+
+    `[VERIFIED]` Inferring was measured and rejected: across 128 live articles exactly 1 reads
+    as another sport, so a content classifier would misattribute more than it caught.
+    """
+    articles = RssNewsAdapter("ESPN").parse(espn_rss_xml)
+
+    assert articles, "fixture produced no articles"
+    assert all(article.league == "NBA" for article in articles)
+
+
+def test_a_feed_can_declare_a_league_the_map_does_not_know(
+    espn_rss_xml: str,
+) -> None:
+    """An explicit league wins, so a new sport can be tried without editing the map first.
+
+    `[INFERRED]` This is what makes adding NFL a configuration change rather than a code
+    change, which is the property the adapter boundary exists to provide.
+    """
+    articles = RssNewsAdapter("ESPN", league="NFL").parse(espn_rss_xml)
+
+    assert all(article.league == "NFL" for article in articles)
