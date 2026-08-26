@@ -15,7 +15,12 @@ from pathlib import Path
 
 import pytest
 
-from scripts.schedule_windows import build_command, main, to_windows_path
+from config.settings import DEFAULT_POLL_INTERVAL_HOURS
+from scripts.schedule_windows import (
+    build_command,
+    resolve_interval,
+    to_windows_path,
+)
 
 
 @pytest.mark.parametrize(
@@ -88,37 +93,53 @@ def test_the_command_carries_both_path_forms() -> None:
     assert "C:\\DSC\\SportWire" in command
 
 
-def test_the_generated_schedule_follows_the_configured_interval(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+def test_the_schedule_follows_the_configured_interval(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """`[INFERRED]` Two places holding the cadence is how a schedule and a brief come to
     disagree: the task fires every 12 hours while the brief is still sized for 8.
 
-    The generator has no interval of its own; it reads the one the pipeline uses.
-
-    ~~Asserted on the exit code.~~ **That asserted nothing**: a mutation hardcoding 8 back
-    into the generator left this green, because printing the wrong command still exits 0. The
-    emitted text is the only thing that matters here.
+    ~~Driven through `main`.~~ **That was environment-dependent and broke CI.** `main` needs
+    the real project path, which on the operator's machine is under `/mnt/c` and on a CI
+    runner is `/home/runner/work/...` with no Windows path at all. The code was right both
+    times; the test only worked in one place. It now exercises the resolution directly and the
+    emitted command separately, neither of which cares where the checkout lives.
     """
     monkeypatch.setenv("POLL_INTERVAL_HOURS", "24")
 
-    assert main(["--task-name", "T"]) == 0
-
-    printed = capsys.readouterr().out
-    assert "New-TimeSpan -Hours 24" in printed
-    assert "every 24 hours" in printed
-    assert "Hours 8)" not in printed
+    assert resolve_interval(None) == 24
+    assert "New-TimeSpan -Hours 24" in build_command(
+        Path("/mnt/c/X"), resolve_interval(None)
+    )
 
 
-def test_an_interval_outside_the_offered_set_is_refused(
-    capsys: pytest.CaptureFixture[str],
+def test_an_explicit_interval_beats_the_configured_one(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Asking for a cadence on the command line must not be silently overridden by config."""
+    monkeypatch.setenv("POLL_INTERVAL_HOURS", "24")
+
+    assert resolve_interval(4) == 4
+
+
+def test_incomplete_configuration_still_yields_a_command(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`[INFERRED]` Printing a scheduler command is exactly what you do *before* setup is
+    finished, so an unset token or chat id must not stop it.
+    """
+    for name in ("BALL_DONT_LIE_API_KEY", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("POLL_INTERVAL_HOURS", "not-a-number")
+
+    assert resolve_interval(None) == DEFAULT_POLL_INTERVAL_HOURS
+
+
+def test_an_interval_outside_the_offered_set_is_refused() -> None:
     """The generator enforces the same bounded set the settings do.
 
     `[INFERRED]` Otherwise it would happily register a task on a cadence the pipeline itself
     refuses to start with, which fails at 3am rather than at the moment of the mistake.
     """
-    with pytest.raises(SystemExit):
-        main(["--interval-hours", "5"])
-
-    assert "must be one of" in capsys.readouterr().err
+    with pytest.raises(ValueError, match="must be one of"):
+        resolve_interval(5)
