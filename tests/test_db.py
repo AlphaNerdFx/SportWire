@@ -599,3 +599,97 @@ def test_history_outside_the_window_does_not_dilute_the_rate(store: SeenStore) -
 
     # Four articles across three hours, and the old one is outside the window entirely.
     assert store.arrivals_per_hour(over_hours=24) == pytest.approx(4 / 3, rel=0.01)
+
+
+_DISTINCT_TITLES = [
+    "Hawks sign Kobe Bufkin to an extension",
+    "Celtics waive Luke Kornet before camp",
+    "Nets trade Cam Thomas to the Pistons",
+    "Hornets hire Tomas Satoransky as an assistant",
+    "Bulls extend Ayo Dosunmu for two years",
+    "Cavaliers name Sam Merrill a starter",
+    "Mavericks release Dwight Powell",
+    "Nuggets add Julian Strawther to the rotation",
+    "Pistons promote Jaden Ivey to captain",
+    "Warriors re-sign Gui Santos",
+    "Rockets decline Jock Landale's option",
+    "Pacers reward Andrew Nembhard with a deal",
+    "Clippers waive Kobe Brown",
+    "Grizzlies extend Santi Aldama",
+    "Heat sign Nikola Jovic long term",
+    "Bucks add Andre Jackson to the roster",
+    "Wolves keep Josh Minott another season",
+    "Pelicans move Trey Murphy to the bench",
+    "Knicks bring back Precious Achiuwa",
+    "Magic reward Anthony Black with minutes",
+]
+
+
+def _distinct_batch(count: int) -> list[NewsArticle]:
+    """Articles that neither group together nor hit the per-source cap.
+
+    Two things had to be right before this test could measure what it claims:
+
+    `[VERIFIED]` A first attempt used "Story number 0..19", and `group_related` correctly
+    merged all twenty into one story, because they share the rare name "Story".
+
+    `[VERIFIED]` A second attempt made them all ESPN, and `limit_per_source` correctly capped
+    them at 4. Spreading across the four real sources raises the ceiling to 15 stories, which
+    is enough for the 12-story default to be the binding limit rather than the source cap.
+    """
+    sources = ["ESPN", "CBS Sports", "Yahoo Sports", "r/nba"]
+    return [
+        _fresh(title, source=sources[index % len(sources)])
+        for index, title in enumerate(_DISTINCT_TITLES[:count])
+    ]
+
+
+def test_the_interval_decides_how_many_stories_a_brief_carries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`[VERIFIED]` P36: pipeline wiring in `main` is invisible to the suite unless a test
+    drives it, and three mutations deleting a whole step have already passed unnoticed.
+
+    Asserted on the observable consequence: the same twenty stories produce a short brief at
+    the two-hour interval and a longer one at two days.
+    """
+    import main
+
+    fetched = _distinct_batch(20)
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "iv.db"))
+    monkeypatch.setenv("EVIDENCE_PATH", str(tmp_path / "evidence"))
+    monkeypatch.setattr(main, "fetch_news", lambda feeds: (fetched, []))
+
+    def stories_at(interval: str) -> int:
+        monkeypatch.setenv("POLL_INTERVAL_HOURS", interval)
+        monkeypatch.setenv("DATABASE_PATH", str(tmp_path / f"iv{interval}.db"))
+        capsys.readouterr()
+        main.main(["--channel", "stdout", "--no-summary"])
+        return capsys.readouterr().out.count("—")
+
+    assert stories_at("2") < stories_at("48"), (
+        "a longer interval must carry more stories"
+    )
+
+
+def test_the_default_interval_leaves_the_brief_exactly_as_it_was(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The property that makes the whole change safe: 8 hours changes nothing.
+
+    `[INFERRED]` A scaling rule that quietly altered today's brief would be a behaviour change
+    disguised as a feature, and the operator asked for 8 hours to stay the standard.
+    """
+    import main
+    from delivery.brief import DEFAULT_MAX_ARTICLES
+
+    fetched = _distinct_batch(20)
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "default.db"))
+    monkeypatch.setenv("EVIDENCE_PATH", str(tmp_path / "evidence"))
+    monkeypatch.delenv("POLL_INTERVAL_HOURS", raising=False)
+    monkeypatch.setattr(main, "fetch_news", lambda feeds: (fetched, []))
+
+    capsys.readouterr()
+    main.main(["--channel", "stdout", "--no-summary"])
+
+    assert capsys.readouterr().out.count("—") == DEFAULT_MAX_ARTICLES
