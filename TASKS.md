@@ -2401,6 +2401,36 @@ what each turned into, since several changed shape on contact with real data.
 
 ---
 
+- [ ] **P42. Interval becomes a bounded choice, and the brief's size scales with it.**
+  Open, specified by the operator 2026-08-26. **Belongs to v0.4.0 and v1.0.0; not started.**
+  8 hours stays the standard until then.
+
+  `[VERIFIED]` **The bounds are measured, not guessed.** Across 13 scheduled runs at 8 hours,
+  new articles surviving deduplication were min 10, median 23, max 81 — about **3.9 an hour**
+  in the offseason. At 30 minutes most runs would deliver nothing at all, since `main.py`
+  already logs "nothing new to report" and sends no message. Roughly 2 hours to 2 days is the
+  usable band. `[UNKNOWN]` These are offseason rates and should be re-measured in season.
+
+  `[VERIFIED]` **Scaling the output limit alone will not work**, which is the finding worth
+  keeping. `DEFAULT_MAX_ARTICLES = 12` caps what reaches the summariser and **8 of 22 logged
+  runs hit exactly 12**, so the cap already binds at 8 hours. At 2 days it would discard about
+  175 of 187 articles and still produce a twelve-story brief. A longer interval would lose
+  more news rather than deliver more.
+
+  `[INFERRED]` Three quantities move together and should be derived from one interval setting
+  rather than tuned apart: the story cap, `DEFAULT_SUMMARY_CHARS` (1024), and the chunk count,
+  since `summarize.py` splits above `CHUNK_SIZE = 5`. `[VERIFIED]` Run time scales too — the
+  2026-08-26 00:00 run took **10m36s** for 12 stories in 3 chunks, so a 2-day brief may
+  approach a timeout and that needs measuring before a ceiling is promised.
+
+  `[INFERRED]` Deriving all three from the interval preserves PRD D1: the run still defines
+  the window, and nothing gains a second source of truth about how much news a brief covers.
+
+  Recorded in `docs/PRD.md` D6 with requirements R7 and R8, and in `ROADMAP.md` under v0.4.0
+  and v1.0.0.
+
+---
+
 ## LOW — deferred; each requires a trigger condition
 
 - [ ] **L1. NFL sources (`nflreadpy`).** Trigger: NBA path stable across several real runs.
