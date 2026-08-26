@@ -178,3 +178,36 @@ def test_a_brief_with_every_source_healthy_says_nothing_about_sources(
     )
 
     assert "Missing this run" not in "\n".join(messages)
+
+
+def test_each_brief_names_its_league(
+    make_article: Callable[..., NewsArticle],
+) -> None:
+    """Two briefs land on the same phone seconds apart, so each has to say what it is.
+
+    `[INFERRED]` Both headings reading "NEWS" is not a cosmetic problem: the reader has no
+    way to tell which sport they are looking at except by recognising the team names, which
+    defeats the point of splitting them (ADR-015).
+    """
+    story = [[make_article("Mahomes signs a contract extension")]]
+
+    prose = build_messages([], [], story, news_summary="Mahomes signed.", league="NFL")
+    listed = build_messages([], [], story, league="NFL")
+
+    assert "NFL" in "\n".join(prose), "the written brief must name its league"
+    assert "NFL" in "\n".join(listed), "the headline list must name its league too"
+
+
+def test_a_single_league_brief_keeps_the_plain_heading(
+    make_article: Callable[..., NewsArticle],
+) -> None:
+    """The complement. Passing no league is what a basketball-only install does.
+
+    `[INFERRED]` Worth pinning because the snapshots were approved against the plain heading,
+    so a default that quietly changed would rewrite output nobody asked to change.
+    """
+    messages = build_messages(
+        [], [], [[make_article("Blazers preview: Lillard is back")]]
+    )
+
+    assert "📰 NEWS" in "\n".join(messages)
