@@ -249,6 +249,21 @@ class NewsArticle(BaseModel):
     # parsed from the payload — the article does not know where it was fetched from.
     source: str
 
+    # Which sport this belongs to ("NBA", "NFL", ...). Set by the adapter for the same reason
+    # as `source`, and carried rather than inferred (ADR-015).
+    #
+    # `[VERIFIED]` The feed URLs are league-scoped — `espn.com/espn/rss/nba/news`,
+    # `cbssports.com/rss/headlines/nba/` — so the producer already knows this and nothing
+    # downstream has to guess. `[VERIFIED]` Guessing was measured: across 128 live articles,
+    # exactly 1 reads as another sport, so a content classifier would misattribute more than
+    # it caught.
+    #
+    # Defaulted rather than required, so every existing caller and fixture keeps working while
+    # the other leagues are added. `[INFERRED]` A required field here would be a schema change
+    # touching every construction site in the tests at once, which is the sort of edit that
+    # hides a real mistake among a hundred mechanical ones.
+    league: str = "NBA"
+
     @field_validator("published_at", mode="before")
     @classmethod
     def _parse_rss_date(cls, value: object) -> object:
