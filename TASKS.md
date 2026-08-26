@@ -2465,6 +2465,30 @@ what each turned into, since several changed shape on contact with real data.
 
 ---
 
+- [x] **P43. A test passed locally and broke CI because it read the filesystem.** Found and
+  fixed 2026-08-26 by the release gate, commits `13e0665` and `59eea85`.
+  `[VERIFIED]` `test_the_generated_schedule_follows_the_configured_interval` drove
+  `scripts/schedule_windows.main`, which resolves the **real project path**. Here that is
+  `/mnt/c/DSC/...` and translates to a Windows path; on a CI runner it is
+  `/home/runner/work/SportWire/SportWire`, which has none, so the command correctly refused and
+  returned 1. **The code was right in both places and the test only worked in one.**
+  Fixed by extracting `resolve_interval`, so config resolution is testable without a
+  filesystem, and asserting the emitted command against an explicit path.
+
+  `[VERIFIED]` **The release gate worked.** `release.yml` runs `make check` before publishing,
+  so no GitHub release was created for the red commit. That guard was written because "a tag on
+  a red commit is a claim, published under a version number, that something works", and this is
+  the first time it has actually caught one.
+
+  `[INFERRED]` **Third of this shape in a week, and the pattern is worth naming.** P37 was four
+  tests reading the wall clock, which rotted after six days. P42's wiring tests first measured
+  grouping and then per-source capping rather than what they claimed. This one read the
+  filesystem. In each case the code was correct and the test depended on something about the
+  machine it ran on. The common fix is the same: give the test the input explicitly rather than
+  letting it discover one.
+
+---
+
 ## LOW — deferred; each requires a trigger condition
 
 - [ ] **L1. NFL sources (`nflreadpy`).** Trigger: NBA path stable across several real runs.
