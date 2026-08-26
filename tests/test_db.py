@@ -282,8 +282,32 @@ def test_a_generous_window_is_honoured_rather_than_clamped() -> None:
     assert forget_window(500) == 500
 
 
+@pytest.fixture
+def no_upstream_games(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stop a test that drives the real `main` from calling the live games API.
+
+    `[VERIFIED]` 2026-08-26: without this, `make check` reached `api.balldontlie.io` and a
+    run failed when it answered **HTTP 429**, with a traceback that had nothing to do with
+    the code under test. `CLAUDE.md` §8 keeps live sources behind `@pytest.mark.network` and
+    out of the default run; these tests drove them anyway, because they exercise `main` end
+    to end and `main` fetches games.
+
+    Clearing the key uses the real skip path (`settings.can_fetch_games` is then False)
+    rather than stubbing the adapter, so the test still runs production code. `[INFERRED]`
+    None of these tests assert anything about games — they are about the poll/deliver seam —
+    so removing games removes noise, not coverage.
+
+    Same class of leak as `EVIDENCE_PATH` above: driving the real `main` reaches whatever the
+    real `main` reaches, and every such resource has to be pointed somewhere harmless.
+    """
+    monkeypatch.setenv("BALL_DONT_LIE_API_KEY", "")
+
+
 def test_a_dry_run_does_not_purge(
-    tmp_path: Path, make_article: ArticleFactory, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    make_article: ArticleFactory,
+    monkeypatch: pytest.MonkeyPatch,
+    no_upstream_games: None,
 ) -> None:
     """`[VERIFIED]` 2026-08-25 this shipped broken and cost six days of dedup state.
 
@@ -433,7 +457,10 @@ def _fresh(title: str, source: str = "ESPN") -> NewsArticle:
 
 
 def test_a_poll_stores_without_delivering(
-    tmp_path: Path, make_article: ArticleFactory, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    make_article: ArticleFactory,
+    monkeypatch: pytest.MonkeyPatch,
+    no_upstream_games: None,
 ) -> None:
     """ADR-014's write half, driven through the real `main`.
 
@@ -491,7 +518,10 @@ def test_a_brief_can_be_assembled_without_contacting_any_source(
 
 
 def test_a_default_run_still_polls_and_delivers_in_one_pass(
-    tmp_path: Path, make_article: ArticleFactory, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    make_article: ArticleFactory,
+    monkeypatch: pytest.MonkeyPatch,
+    no_upstream_games: None,
 ) -> None:
     """`[INFERRED]` The seam must not change behaviour at today's one brief per 8 hours.
 
