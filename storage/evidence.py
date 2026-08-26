@@ -95,6 +95,7 @@ def record_batch(
                             "source": article.source,
                             "url": article.url,
                             "published_at": article.published_at.isoformat(),
+                            "league": article.league,
                         }
                         for article in articles
                     ],
