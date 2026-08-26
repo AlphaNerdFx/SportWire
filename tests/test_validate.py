@@ -1853,3 +1853,83 @@ def test_dropping_vocabulary_does_not_stop_a_blend_being_caught(
     result = validate_summary("Jayson Brown will return in January.", articles)
 
     assert not result.is_safe, "a blended player name must still be refused"
+
+
+# --- P51: a team standing on its own ---------------------------------------------------------
+
+
+def test_a_team_the_sources_never_name_is_refused(
+    make_article: ArticleFactory,
+) -> None:
+    """`[VERIFIED]` 2026-08-26, delivered: "Ashton Jeanty of the Timberwolves".
+
+    Jeanty is a running back and the Timberwolves are a basketball team, which appears 0
+    times in the twelve football articles that summary was built from. It passed because the
+    name scanner needs two words, so the team standing beside a correct player name was never
+    checked at all.
+    """
+    articles = [make_article("Ashton Jeanty is on the mend, says Kubiak", league="NFL")]
+
+    result = validate_summary("Ashton Jeanty of the Timberwolves is hurt.", articles)
+
+    assert not result.is_safe
+    assert "Timberwolves" in result.invented_names
+
+
+def test_a_team_the_sources_do_name_is_accepted(
+    make_article: ArticleFactory,
+) -> None:
+    """The complement, without which the rule would just reject every brief naming a team.
+
+    `[VERIFIED]` Measured on a real batch of twelve football articles: the 7 teams it named
+    were all accepted and the 55 it did not name were all refused.
+    """
+    articles = [make_article("Bengals star Chase fine after scare", league="NFL")]
+
+    result = validate_summary("The Bengals had a scare in practice.", articles)
+
+    assert result.is_safe, f"wrongly flagged: {result.invented_names}"
+
+
+def test_a_sentence_opener_is_not_mistaken_for_a_team(
+    make_article: ArticleFactory,
+) -> None:
+    """This is the whole reason the rule is narrow rather than general.
+
+    `[VERIFIED]` Lowering the name scanner's two-word minimum and checking every lone
+    capitalised word flagged "Elsewhere", "Lastly" and "Meanwhile" in both briefs of one run,
+    to catch a single wrong team. Checking only known teams cannot do that, because a
+    connective is not a team.
+    """
+    articles = [make_article("Bengals star Chase fine after scare", league="NFL")]
+
+    result = validate_summary(
+        "The Bengals had a scare. Meanwhile, Elsewhere in camp, Lastly the news was quiet.",
+        articles,
+    )
+
+    assert result.is_safe, f"wrongly flagged: {result.invented_names}"
+
+
+def test_a_lower_case_use_of_a_nickname_grounds_the_team(
+    make_article: ArticleFactory,
+) -> None:
+    """The known weakness of this rule, pinned rather than hidden.
+
+    `_appears` matches the word, not the meaning, so a source writing "he bears no blame"
+    grounds the Bears. `[INFERRED]` Left this way on purpose: it costs a missed fabrication,
+    while the alternative costs a rejected brief, and a rejected brief is the outcome the
+    operator asked never to see. If this ever fails, the trade has been changed, so read the
+    change before updating the test.
+
+    `[VERIFIED]` It is also rare. Of the 62 nicknames, exactly one appears in lower case
+    across 396 captured articles, and that one is a headline missing a capital rather than
+    ordinary English.
+    """
+    articles = [
+        make_article("Injury news: he bears no blame for the loss", league="NFL")
+    ]
+
+    result = validate_summary("The Bears were quiet.", articles)
+
+    assert result.is_safe, "a word match grounds the team, meaning is not consulted"
