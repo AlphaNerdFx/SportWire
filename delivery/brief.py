@@ -77,6 +77,7 @@ def build_messages(
     series: dict[int, SeriesContext] | None = None,
     unsupported_claims: list[str] | None = None,
     failed_sources: list[str] | None = None,
+    league: str | None = None,
 ) -> list[str]:
     """Render the brief as an ordered list of message bodies, omitting empty sections.
 
@@ -108,7 +109,7 @@ def build_messages(
         if news_summary:
             messages.append(
                 _render_news_summary(
-                    news_summary, unsupported_claims or [], failed_sources or []
+                    news_summary, unsupported_claims or [], failed_sources or [], league
                 )
             )
         else:
@@ -118,7 +119,10 @@ def build_messages(
             # event no longer consumes half the brief.
             messages.append(
                 _render_news(
-                    article_groups[:max_articles], summary_limit, len(article_groups)
+                    article_groups[:max_articles],
+                    summary_limit,
+                    len(article_groups),
+                    league,
                 )
             )
 
@@ -243,8 +247,25 @@ def _describe(highlight: GameHighlight) -> str:
 # rejects the summary, and that run would then have delivered a headline list on all three
 # attempts, which is the outcome he had just asked never to see again. So the claim is
 # delivered and labelled, and the reader decides.
+# One heading per league, so two briefs arriving together are tellable apart at a glance.
+# `[INFERRED]` The reader gets both on the same phone within seconds of each other, and
+# "NEWS" twice says nothing about which sport is which. Falls back to the plain heading when
+# no league is given, which keeps a single-league install reading exactly as it did.
+_LEAGUE_HEADINGS = {"NBA": "🏀 NBA NEWS", "NFL": "🏈 NFL NEWS"}
+
+
+def _heading(league: str | None) -> str:
+    """The news heading for one league."""
+    if league is None:
+        return "📰 NEWS"
+    return _LEAGUE_HEADINGS.get(league, f"📰 {league} NEWS")
+
+
 def _render_news_summary(
-    summary: str, unsupported: list[str], failed_sources: list[str] | None = None
+    summary: str,
+    unsupported: list[str],
+    failed_sources: list[str] | None = None,
+    league: str | None = None,
 ) -> str:
     """Message 3, written form: one paragraph instead of a headline list.
 
@@ -252,7 +273,7 @@ def _render_news_summary(
     reads as a paragraph. `[INFERRED]` Moving them to a footnote or dropping them would either
     break the writing the operator asked for or hide a claim he needs to see.
     """
-    body = f"📰 NEWS\n\n{summary}"
+    body = f"{_heading(league)}\n\n{summary}"
     # A source that failed is named, because otherwise the brief is quietly shorter and looks
     # complete. `[VERIFIED]` 2026-08-18: Reddit returned HTTP 500 for a whole run, costing 25
     # of 87 articles, and the only trace was a log line the operator would never see.
@@ -294,7 +315,10 @@ def _render_story_group(group: list[NewsArticle], summary_limit: int) -> list[st
 
 
 def _render_news(
-    groups: list[list[NewsArticle]], summary_limit: int, total_stories: int
+    groups: list[list[NewsArticle]],
+    summary_limit: int,
+    total_stories: int,
+    league: str | None = None,
 ) -> str:
     """Message 3 — one entry per story, not per article. No links, no dates.
 
@@ -303,7 +327,7 @@ def _render_news(
     the cap, so the brief can say how many were left out — silently showing 12 of 53 would
     look like the other 41 never existed.
     """
-    lines = ["📰 NEWS", ""]
+    lines = [_heading(league), ""]
 
     for group in groups:
         lines.extend(_render_story_group(group, summary_limit))
