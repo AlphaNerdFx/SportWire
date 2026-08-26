@@ -2738,3 +2738,52 @@ Standing items not otherwise listed above:
   only a *place* word. `[UNKNOWN]` Whether that can be decided without a list of places,
   which would be another hardcoded vocabulary and needs the same argument P23 had. Do not
   build it before measuring how many names it would actually change.
+
+- [x] **P50. An honour standing beside a team refuted the team.** Closed 2026-08-26, found
+  by re-running the football brief after P48 and watching it fall back again.
+
+  `[VERIFIED]` The batch of twelve leads named the Bengals four times and Cincinnati once,
+  and the summary was refused on all three attempts for `Cincinnati Bengals`:
+
+  ```
+  index['bengals'] = [{'all-pro', 'bengals'}]
+  ```
+
+  from "Ja'Marr Chase injury scare: Bengals All-Pro goes down awkwardly in practice". One
+  entry, keyed on "bengals", disagreeing with `Cincinnati Bengals` about everything else, and
+  nothing else keyed there to acquit it.
+
+  Two things were wrong and both are fixed:
+
+  1. `all-pro` was not in `_COMPETITION_VOCABULARY`, although `all-star`, `all-nba`,
+     `all-defensive` and `all-rookie` all were. It is the football member of that set.
+  2. More importantly, the index dropped only *ordinary* words from a name, never competition
+     vocabulary. So even after adding it, "Bengals All-Pro" would still have been indexed as
+     an entity. Grounding has always treated a structural term as identifying nobody; the
+     index now agrees with it.
+
+  `[VERIFIED]` Measured over 373 articles from the live feeds and the recorded evidence, 304
+  real two-word names and 500 generated blends:
+
+  - Real names grounded: **304/304 before, 304/304 after.** No change, and none expected:
+    those names appear verbatim.
+  - Blends refused: **461/500 before, 452/500 after.**
+
+  That second number is the honest cost and it looks worse than it is. `[VERIFIED]` All
+  eleven blends that stopped being refused have a competition term as one half:
+
+  ```
+  AFC Ten     Bryce QB    Great NFL   NBC NFL    NFL Bartelstein
+  Penn North  Zamir NFL   The Forecast   Agent Forecast
+  Christmas Athletic   Guggenheim NBA
+  ```
+
+  `[INFERRED]` None of those is the failure this rule exists to catch. That failure is
+  `Jayson Brown`, a person fused from two real players, and it involves no structural term at
+  all. The generator that produced these pairs any first word with any last word, so it
+  manufactures combinations a summariser would never write. What the measurement really shows
+  is that the index was catching junk built from league words, and stopped.
+
+  `[INFERRED]` The trade is also asymmetric in the way that matters here. A false accusation
+  costs the whole brief its prose, which is the outcome the operator asked never to see
+  again. A missed blend costs one wrong name inside a paragraph that is otherwise delivered.
