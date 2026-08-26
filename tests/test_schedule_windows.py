@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.schedule_windows import build_command, to_windows_path
+from scripts.schedule_windows import build_command, main, to_windows_path
 
 
 @pytest.mark.parametrize(
@@ -86,3 +86,30 @@ def test_the_command_carries_both_path_forms() -> None:
 
     assert "/mnt/c/DSC/SportWire" in command
     assert "C:\\DSC\\SportWire" in command
+
+
+def test_the_generated_schedule_follows_the_configured_interval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`[INFERRED]` Two places holding the cadence is how a schedule and a brief come to
+    disagree: the task fires every 12 hours while the brief is still sized for 8.
+
+    The generator has no interval of its own; it reads the one the pipeline uses.
+    """
+    monkeypatch.setenv("POLL_INTERVAL_HOURS", "24")
+
+    assert main(["--task-name", "T"]) == 0
+
+
+def test_an_interval_outside_the_offered_set_is_refused(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The generator enforces the same bounded set the settings do.
+
+    `[INFERRED]` Otherwise it would happily register a task on a cadence the pipeline itself
+    refuses to start with, which fails at 3am rather than at the moment of the mistake.
+    """
+    with pytest.raises(SystemExit):
+        main(["--interval-hours", "5"])
+
+    assert "must be one of" in capsys.readouterr().err
