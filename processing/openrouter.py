@@ -65,8 +65,15 @@ class OpenRouterSummarizer(Summarizer):
     def summarizer_name(self) -> str:
         return f"OpenRouter ({self._model})"
 
-    def _summarise(self, articles: list[NewsArticle], max_chars: int) -> str:
-        """One request, every article. Exceptions and retries are handled by `summarise`."""
+    def _write(
+        self, prepared: object, articles: list[NewsArticle], max_chars: int
+    ) -> str:
+        """One request, every article. Exceptions and retries are handled by `summarise`.
+
+        Nothing is prepared, because there is nothing to reuse: a hosted model with a large
+        context window reads the whole batch in one call, so `prepared` is the default the
+        base class returns and is deliberately ignored.
+        """
         response = requests.post(
             API_URL,
             headers={
