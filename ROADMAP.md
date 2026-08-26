@@ -93,7 +93,20 @@ often is worse than no feature.
 it does not, the honest outcome is an ADR on model choice (ADR-012 territory), not more
 validator tuning — the validator is already three fixes deep this week.
 
-### → `v0.3.0` — fetch stops depending on delivery **(current)**
+### `v0.3.0` — fetch stops depending on delivery **(done 2026-08-26)**
+
+`[VERIFIED]` Both halves built and exercised end to end. `--poll-only` fetched 98 articles,
+stored them and sent nothing; `--no-poll` then assembled and delivered a brief while contacting
+**no source at all**, not even the games API. Upstream requests now happen in one place, the
+poll, and a brief can be assembled any number of times without adding one.
+
+`[VERIFIED]` The folded-in defect is also closed: a source that fails is named in the brief
+rather than vanishing with only a log line.
+
+`[INFERRED]` Behaviour at today's one brief per 8 hours is unchanged, which is deliberate. The
+default run still polls and delivers in one pass, and a test asserts that unflagged path
+specifically, because splitting a pipeline is exactly the change that works in its new modes
+and quietly breaks the old one.
 
 **Done when the number of upstream requests depends on the number of sources, not on how often
 anyone asks for a brief.**
@@ -106,7 +119,7 @@ Also folds in the small independent defect found alongside it: a rate-limited or
 source currently returns an empty list and vanishes from the brief with only a log line.
 `[VERIFIED]` CBS did exactly that at 16:00, contributing 0 articles after a read timeout.
 
-### `v0.4.0` — the operator chooses the interval **and the scheduler**
+### → `v0.4.0` — the operator chooses the interval **and the scheduler** **(current)**
 
 **Done when both the delivery schedule and the thing that triggers it are configuration, not a
 cron line someone edited by hand.**
