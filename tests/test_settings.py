@@ -50,6 +50,7 @@ _ENV_VARS = (
     "POLL_INTERVAL_HOURS",
     "DEDUP_WINDOW_HOURS",
     "OLLAMA_MODEL",
+    "OLLAMA_FIRST_MODEL",
     "OPENROUTER_API_KEY",
     "OPENROUTER_MODEL",
 )
@@ -414,3 +415,27 @@ def test_an_unset_interval_still_defaults(
     settings = Settings.from_env(env_file=tmp_path / "absent.env")
 
     assert settings.poll_interval_hours == DEFAULT_POLL_INTERVAL_HOURS
+
+
+def test_escalation_is_off_when_both_models_are_the_same(clean_env: Path) -> None:
+    """`[INFERRED]` A machine with room to spare should go straight to the capable model.
+
+    Setting the two names equal is the documented off switch for the model ladder, so it has
+    to actually switch it off.
+    """
+    clean_env.write_text("OLLAMA_MODEL=mistral:7b\nOLLAMA_FIRST_MODEL=mistral:7b\n")
+
+    assert Settings.from_env(clean_env).escalates_model is False
+
+
+def test_a_small_model_writes_first_by_default(clean_env: Path) -> None:
+    """`[VERIFIED]` 2026-08-27: 7.4 GB of RAM under WSL2, 5.3 GB free, and mistral:7b is 4.4 GB.
+
+    The default has to be the light one, because the operator's machine stalled on the heavy
+    one and a fresh clone should not have to discover that.
+    """
+    settings = Settings.from_env(clean_env)
+
+    assert settings.ollama_first_model == "llama3.2:3b"
+    assert settings.ollama_model == "mistral:7b"
+    assert settings.escalates_model is True
