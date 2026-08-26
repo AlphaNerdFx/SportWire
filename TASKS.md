@@ -2961,3 +2961,38 @@ Standing items not otherwise listed above:
 
   `[INFERRED]` Worth keeping as a pattern: a weak assertion and a mutation that "applies"
   are not the same thing as a test that works, and only the mutation run tells them apart.
+
+- [ ] **P54. The model invents which team a person plays for.** Open, mitigated 2026-08-26,
+  effect not yet measured.
+
+  After P53 fixed the prompts to name the right sport, the next run still lost the football
+  brief, but the fabrication had changed shape:
+
+  ```
+  before P53:  Houston Rockets   (basketball team, football brief)
+  after  P53:  Houston Texans    (right sport, still absent from the batch)
+  ```
+
+  `[VERIFIED]` "Texans" and "Houston" both appear **0 times** in those twelve articles, so
+  both rejections were correct. P53 fixed the sport. It did not stop the model attaching a
+  team to a person from its own weights, it only made the invention plausible.
+
+  **Mitigation:** the prompts now say so directly. The writing prompt gained "Never name a
+  team the notes do not name, and never say who someone plays for unless the notes say it",
+  and the note prompt gained "never attach a team to a person unless the item does". The
+  existing rules listed scores, statistics, dates and outcomes, and said nothing about teams.
+
+  `[VERIFIED]` One run afterwards, and **one run is not a rate.** Football was accepted on
+  attempt 1 and named the Patriots for Gonzalez and the Bengals for Chase, both correct and
+  both in the batch. Basketball was accepted on attempt 2, having been rejected once for
+  `RJ Barner`, which is a blend of RJ Barrett and someone else and has nothing to do with
+  teams.
+
+  `[INFERRED]` Left open on purpose. This project has already recorded the cost of quoting a
+  rate from one sitting: an earlier comment claimed ~84% from a single 3-of-5 run and the
+  next two runs disagreed with it completely (P4). A prompt change is exactly the kind of
+  thing that looks fixed once and is not. Resolve by counting acceptances per league across
+  the soak, and only then saying whether this helped.
+
+  `[UNKNOWN]` Whether the rule costs anything. A brief that refuses to name a team when the
+  source names one would be worse, not better, and nothing here has measured that direction.
