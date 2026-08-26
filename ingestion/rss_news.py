@@ -78,6 +78,17 @@ def strip_html(markup: str) -> str:
 
 # Known feeds, keyed by the label stamped onto every article they produce.
 # `[VERIFIED]` 2026-08-06 both return HTTP 200 with parseable items: ESPN 17, CBS 36.
+# Which sport each feed carries (ADR-015). Kept beside `FEEDS` rather than folded into it, so
+# adding a feed is still one line and the existing `FEEDS[name] -> url` shape is unchanged for
+# every caller. `[INFERRED]` The risk is the two drifting apart, which a test asserts against.
+DEFAULT_LEAGUE = "NBA"
+FEED_LEAGUES: dict[str, str] = {
+    "ESPN": "NBA",
+    "CBS Sports": "NBA",
+    "Yahoo Sports": "NBA",
+    "r/nba": "NBA",
+}
+
 FEEDS: dict[str, str] = {
     "ESPN": "https://www.espn.com/espn/rss/nba/news",
     "CBS Sports": "https://www.cbssports.com/rss/headlines/nba/",
@@ -119,8 +130,14 @@ class RssNewsAdapter(NewsSourceAdapter):
         source_name: str,
         feed_url: str | None = None,
         timeout_seconds: int = 15,
+        league: str | None = None,
     ) -> None:
-        """`feed_url` may be omitted for any source listed in `FEEDS`."""
+        """`feed_url` and `league` may be omitted for any source listed in `FEEDS`.
+
+        `league` is stamped onto every article this adapter produces, the same way
+        `source_name` is and for the same reason (ADR-015): the feed URL is league-scoped, so
+        the producer knows, and nothing downstream has to infer it from the wording.
+        """
         resolved = feed_url or FEEDS.get(source_name)
         if not resolved:
             raise ValueError(
@@ -130,6 +147,7 @@ class RssNewsAdapter(NewsSourceAdapter):
         self._source_name = source_name
         self._feed_url = resolved
         self._timeout_seconds = timeout_seconds
+        self._league = league or FEED_LEAGUES.get(source_name, DEFAULT_LEAGUE)
 
     @property
     def source_name(self) -> str:
@@ -229,6 +247,7 @@ class RssNewsAdapter(NewsSourceAdapter):
             published_at=published_at,
             author=author,
             source=self._source_name,
+            league=self._league,
         )
 
     def _atom_summary(self, entry: ElementTree.Element) -> str:
@@ -289,6 +308,7 @@ class RssNewsAdapter(NewsSourceAdapter):
             # optional in the schema, and hence no error here.
             author=self._text(item, f"{DC_NAMESPACE}creator"),
             source=self._source_name,
+            league=self._league,
         )
 
     @staticmethod
