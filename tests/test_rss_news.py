@@ -16,6 +16,7 @@ These tests use the real byte sequence from the live feed, not an invented one.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -254,4 +255,29 @@ def test_a_feed_can_declare_a_league_the_map_does_not_know(
     """
     articles = RssNewsAdapter("ESPN", league="NFL").parse(espn_rss_xml)
 
+    assert all(article.league == "NFL" for article in articles)
+
+
+def test_the_atom_path_stamps_the_league_too(
+    reddit_articles: list[NewsArticle],
+) -> None:
+    """`[VERIFIED]` 2026-08-26, found by a surviving mutant.
+
+    This adapter parses two formats — RSS `<item>` and Atom `<entry>` — through two separate
+    construction sites, and a mutation removing the league from only one of them left the
+    suite green, because every other test here uses an RSS fixture. Two code paths need two
+    tests, or one of them is decoration.
+    """
+    assert reddit_articles, "fixture produced no articles"
+    assert all(article.league == "NBA" for article in reddit_articles)
+
+
+def test_an_explicit_league_reaches_the_atom_path() -> None:
+    """The same override the RSS path honours, asserted where it is separately implemented."""
+    atom = (Path(__file__).parent / "fixtures" / "reddit_nba_atom.xml").read_text(
+        encoding="utf-8"
+    )
+    articles = RssNewsAdapter("r/nba", league="NFL").parse(atom)
+
+    assert articles
     assert all(article.league == "NFL" for article in articles)
