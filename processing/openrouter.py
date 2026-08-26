@@ -32,7 +32,7 @@ import logging
 import requests
 
 from models.schemas import NewsArticle
-from processing.summarize import SYSTEM_PROMPT, Summarizer, build_prompt
+from processing.summarize import Summarizer, build_prompt, system_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +79,7 @@ class OpenRouterSummarizer(Summarizer):
             json={
                 "model": self._model,
                 "messages": [
-                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "system", "content": system_prompt(articles)},
                     {"role": "user", "content": build_prompt(articles, max_chars)},
                 ],
                 # Low, for the same reason as the local summarizer: this is a factual
