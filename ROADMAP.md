@@ -70,7 +70,11 @@ unattended twice on 2026-08-15 (08:00 and 16:00) and `delivered 1/1 messages` bo
 
 ## 3. The order
 
-### → `v0.2.0` — the brief can be trusted **(current)**
+### `v0.2.0` — the brief can be trusted **(done 2026-08-26)**
+
+`[VERIFIED]` All three conditions met. P5 closed as marked-not-rejected, P21 closed with the
+abbreviation table, P4 counted at 31% overall and 50% since the fixes. The 2026-08-26 00:00
+run delivered prose on attempt 1.
 
 **Done when a delivered brief is prose, and the rate at which it is not is a measured number.**
 
@@ -89,7 +93,7 @@ often is worse than no feature.
 it does not, the honest outcome is an ADR on model choice (ADR-012 territory), not more
 validator tuning — the validator is already three fixes deep this week.
 
-### `v0.3.0` — fetch stops depending on delivery
+### → `v0.3.0` — fetch stops depending on delivery **(current)**
 
 **Done when the number of upstream requests depends on the number of sources, not on how often
 anyone asks for a brief.**
