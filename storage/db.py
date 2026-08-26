@@ -254,6 +254,44 @@ class SeenStore:
             for row in rows
         ]
 
+    def arrivals_per_hour(self, over_hours: float = 168.0) -> float:
+        """How fast news has actually been arriving, from what polling has recorded.
+
+        This is what a bounded interval choice should be built on rather than a guess
+        (PRD D6, TASKS.md P42). The operator's requirement is a set of intervals decided by
+        how frequent news is, and `fetched_articles` is the only record of that which does not
+        depend on anybody remembering to measure.
+
+        Measured over the span actually observed, not over `over_hours`, so a store holding
+        two days of history reports the rate for two days rather than diluting it across a
+        week of zeros. Returns 0.0 when there is not enough history to say anything.
+
+        `[INFERRED]` Arrivals rather than publications, deliberately, matching `fetched_at`
+        elsewhere in this table: what matters for choosing an interval is how often something
+        *new reaches this process*, which is what a brief covers. An outlet backdating an
+        item does not change how often the operator has something to read.
+        """
+        since = (datetime.now(timezone.utc) - timedelta(hours=over_hours)).isoformat()
+        row = self._connection.execute(
+            """
+            SELECT COUNT(*), MIN(fetched_at), MAX(fetched_at)
+            FROM fetched_articles
+            WHERE fetched_at >= ?
+            """,
+            (since,),
+        ).fetchone()
+
+        count, first, last = row
+        if not count or first is None or first == last:
+            return 0.0
+
+        span = (
+            datetime.fromisoformat(last) - datetime.fromisoformat(first)
+        ).total_seconds() / 3600
+        if span <= 0:
+            return 0.0
+        return count / span
+
     def purge_delivered_before(self, hours: int) -> int:
         """Forget articles delivered more than `hours` ago. Returns how many rows went.
 
