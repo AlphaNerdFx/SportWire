@@ -2360,6 +2360,47 @@ what each turned into, since several changed shape on contact with real data.
 
 ---
 
+- [x] **P41. Windows Task Scheduler is an option but nothing makes it usable.** Closed
+  2026-08-26 on the operator's request, commits `1e2d680`, `6533396`, `61d2312`.
+  `[VERIFIED]` The trigger for this was a real missed brief. No 08:00 delivery on 2026-08-26;
+  `/var/log/syslog` showed cron logging 3 to 7 entries every hour up to 00:00 and then
+  **nothing from 01:00 to 08:00**, including the system's own ten-minute jobs. The host slept,
+  WSL was suspended, and cron does not run a job it missed.
+  `[VERIFIED]` **`uptime` is not evidence of wakefulness in WSL2** and it misled this
+  investigation. It reported 8h27m of continuous uptime across the window in which nothing ran,
+  because the counter keeps going while the VM is paused. `docs/SCHEDULING.md` now carries the
+  syslog-gap check instead.
+
+  **What shipped.** `scripts/schedule_windows.py` prints the registration command with both
+  path forms derived. `[INFERRED]` The two forms are the actual trap: `C:\...` for Windows and
+  `/mnt/c/...` for WSL, and a task with one of them wrong registers cleanly and then fails
+  every run, silently and on a schedule. It prints rather than registers, because registering
+  needs Administrator and changes the machine.
+
+  `[VERIFIED]` Two settings the hand-written block lacked, both checked through PowerShell
+  rather than assumed:
+  - `-RepetitionDuration ([TimeSpan]::MaxValue)`. Omitting it leaves `Duration` empty with
+    `StopAtDurationEnd: True`, and `[UNKNOWN]` whether Windows reads that as "forever" or "stop
+    at the default". Stating it produces `P99999999DT23H59M59S` and removes the question.
+  - `-StartWhenAvailable`, so a run missed while the machine was off happens late rather than
+    not at all. That is the entire difference from cron, rather than merely running elsewhere.
+
+  `[VERIFIED]` The emitted quoting was executed end to end, not eyeballed: `powershell.exe`
+  invoking `wsl.exe -e bash -c "cd '...' && ./.venv/bin/python main.py --help"` reached
+  `main.py` and printed its usage.
+
+  `[INFERRED]` **This does not start v0.4.0 early.** That milestone's dependency on ADR-014 is
+  about *intervals* — running more often means more upstream fetches — and a different trigger
+  at the same 8-hour cadence changes no fetch behaviour. The scheduler half is independent of
+  ADR-014; the interval half is not, and is still waiting.
+
+  `[VERIFIED]` Mutation-tested four ways. Two survived the first attempt because `replace(...,
+  1)` hit the **docstring** mention rather than the template, so the command was unchanged and
+  the tests correctly passed. Applying is not the same as applying where intended; the second
+  campaign asserted the emitted command actually changed.
+
+---
+
 ## LOW — deferred; each requires a trigger condition
 
 - [ ] **L1. NFL sources (`nflreadpy`).** Trigger: NBA path stable across several real runs.
