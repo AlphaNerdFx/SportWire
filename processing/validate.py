@@ -208,6 +208,7 @@ _COMPETITION_VOCABULARY = frozenset(
         "all-nba",
         "all-defensive",
         "all-rookie",
+        "all-pro",  # the football counterpart of the four above
         "mvp",
         "rookie",
         "team",
@@ -833,10 +834,20 @@ def _index_source_names(
         for field in (article.title, article.summary):
             for sentence in _SENTENCE_BREAK.split(field):
                 for name in _PROPER_NAME.findall(sentence):
+                    # Competition vocabulary is dropped alongside ordinary words, and for
+                    # the same reason: this index answers "who else shares this identifying
+                    # word", and a structural term of the sport identifies nobody. That is
+                    # already the premise of `_is_competition_term` on the grounding side;
+                    # this applies it on the indexing side too.
+                    #
+                    # `[VERIFIED]` 2026-08-26: "Ja'Marr Chase injury scare: Bengals All-Pro
+                    # goes down awkwardly" indexed `{all-pro, bengals}`, the only name keyed
+                    # on "bengals" in that batch, which then refuted `Cincinnati Bengals` and
+                    # cost the football brief its prose on all three attempts.
                     words = [
                         word
                         for word in _name_words(name.strip(" .,;:"))
-                        if word not in ordinary
+                        if word not in ordinary and word not in _COMPETITION_VOCABULARY
                     ]
                     # One word left is not a disagreement about anything: the index exists to
                     # answer "who else shares this last name", and a bare surname agrees with
