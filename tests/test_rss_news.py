@@ -231,6 +231,20 @@ def test_every_configured_feed_declares_its_league() -> None:
     )
 
 
+def test_both_leagues_have_feeds_of_their_own() -> None:
+    """v0.5.0 is the NFL milestone, and a config-only feature can be undone by a config edit.
+
+    `[INFERRED]` Nothing else in the suite would notice the NFL feeds being deleted or
+    relabelled NBA. Every other test would still pass, the run would still deliver, and the
+    product would quietly be NBA-only again with no failure to point at.
+    """
+    served = {FEED_LEAGUES[name] for name in FEEDS}
+
+    assert served == {"NBA", "NFL"}, (
+        f"expected both leagues to have feeds, got {served}"
+    )
+
+
 def test_an_article_carries_the_league_of_the_feed_it_came_from(
     espn_rss_xml: str,
 ) -> None:
