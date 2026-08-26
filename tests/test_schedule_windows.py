@@ -89,16 +89,25 @@ def test_the_command_carries_both_path_forms() -> None:
 
 
 def test_the_generated_schedule_follows_the_configured_interval(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """`[INFERRED]` Two places holding the cadence is how a schedule and a brief come to
     disagree: the task fires every 12 hours while the brief is still sized for 8.
 
     The generator has no interval of its own; it reads the one the pipeline uses.
+
+    ~~Asserted on the exit code.~~ **That asserted nothing**: a mutation hardcoding 8 back
+    into the generator left this green, because printing the wrong command still exits 0. The
+    emitted text is the only thing that matters here.
     """
     monkeypatch.setenv("POLL_INTERVAL_HOURS", "24")
 
     assert main(["--task-name", "T"]) == 0
+
+    printed = capsys.readouterr().out
+    assert "New-TimeSpan -Hours 24" in printed
+    assert "every 24 hours" in printed
+    assert "Hours 8)" not in printed
 
 
 def test_an_interval_outside_the_offered_set_is_refused(
