@@ -693,3 +693,87 @@ def test_the_default_interval_leaves_the_brief_exactly_as_it_was(
     main.main(["--channel", "stdout", "--no-summary"])
 
     assert capsys.readouterr().out.count("—") == DEFAULT_MAX_ARTICLES
+
+
+# --- ADR-015: one brief per league ----------------------------------------------------------
+
+
+def test_the_league_survives_the_round_trip(
+    store: SeenStore, make_article: ArticleFactory
+) -> None:
+    """`[VERIFIED]` The prerequisite for ADR-015, and the thing a default silently hides.
+
+    `NewsArticle.league` defaults to "NBA", so a store that dropped the column entirely would
+    still return "NBA" for an NBA article and look correct. Recording an NFL one is what
+    actually proves the value is written and read rather than re-defaulted on the way out.
+    """
+    football = make_article("Mahomes signs an extension", league="NFL")
+
+    store.record_fetched([football])
+    [restored] = store.fetched_since(hours=1)
+
+    assert restored.league == "NFL"
+
+
+def test_asking_for_one_league_excludes_the_other(
+    store: SeenStore, make_article: ArticleFactory
+) -> None:
+    """The whole leakage defence in ADR-015: the batch never contains both sports.
+
+    Nothing downstream tells the sports apart, so if this filter is wrong the summarizer is
+    handed a mixed batch and blends them, which is the failure the decision exists to prevent.
+    """
+    store.record_fetched(
+        [
+            make_article("Mahomes signs an extension", league="NFL"),
+            make_article("Doncic drops 40 on the Clippers", league="NBA"),
+        ]
+    )
+
+    basketball = store.fetched_since(hours=1, league="NBA")
+    football = store.fetched_since(hours=1, league="NFL")
+
+    assert [article.title for article in basketball] == [
+        "Doncic drops 40 on the Clippers"
+    ]
+    assert [article.title for article in football] == ["Mahomes signs an extension"]
+    assert len(store.fetched_since(hours=1)) == 2, (
+        "no league asked for means all of them"
+    )
+
+
+def test_an_existing_database_gains_the_league_column(tmp_path: Path) -> None:
+    """`[VERIFIED]` The migration. ADR-014 said this case would need one, and here it is.
+
+    Builds the pre-league table by hand, because that is what is sitting on the operator's
+    disk. `CREATE TABLE IF NOT EXISTS` is a no-op against it, so without the `ALTER TABLE`
+    every read of the new column raises `no such column` and the brief stops being delivered.
+    """
+    import sqlite3
+
+    path = tmp_path / "old.db"
+    connection = sqlite3.connect(path)
+    connection.executescript(
+        """
+        CREATE TABLE fetched_articles (
+            article_id TEXT PRIMARY KEY, title TEXT NOT NULL, url TEXT NOT NULL,
+            summary TEXT NOT NULL, source TEXT NOT NULL, author TEXT,
+            published_at TEXT NOT NULL, fetched_at TEXT NOT NULL
+        );
+        INSERT INTO fetched_articles VALUES
+            ('kept', 'A story recorded before leagues existed', 'https://example.com', '',
+             'ESPN', NULL, '2026-08-26T00:00:00+00:00', '2026-08-26T00:00:00+00:00');
+        """
+    )
+    connection.commit()
+    connection.close()
+
+    with SeenStore(path) as store:
+        [restored] = store.fetched_since(hours=24 * 365 * 100)
+
+    assert restored.title == "A story recorded before leagues existed", (
+        "the migration must not drop the rows it is migrating"
+    )
+    assert restored.league == "NBA", (
+        "everything recorded before NFL existed was basketball"
+    )
