@@ -2633,3 +2633,41 @@ Standing items not otherwise listed above:
   request budget than anonymous access, which would let both subreddits be fetched in one
   run. Free, official, and no terms problem, so it fits C2 and C3. This is the same fix
   already suggested for general rate-limit headroom, now with a concrete thing it unblocks.
+
+- [x] **P47. An ordinary word at the end of a name could ground the whole name.** Closed
+  2026-08-26, found by a test written for something else.
+
+  Adding NFL teams to `test_a_team_is_never_exempt_from_grounding` failed on
+  `New England Patriots`. The cause was not the new football vocabulary. It was the
+  either-end grounding rule from P25: a name is grounded when either its first or last word
+  appears in the sources, and "new" appears in almost any batch of English.
+
+  `[VERIFIED]` Against the source headline "LeBron tests new talent with YouTube golf page",
+  which names no team at all:
+
+  ```
+  before:  New England Patriots  let through
+           New York Knicks       let through
+           New Orleans Pelicans  let through
+           Kansas City Chiefs    refused
+  after:   7 of 7 refused
+  ```
+
+  So this predates the football feeds. It could not show up earlier because no team in the
+  31-name list began with an ordinary English word, and the basketball teams that do
+  (`New York Knicks`, `New Orleans Pelicans`) were never in it.
+
+  **Fix:** an end may only identify a name when the sources do not also write that word in
+  lower case. That is the same evidence `_index_source_names` already uses to decide a
+  headline's capitalisation is not proof of an entity, so no new mechanism was added, an
+  existing one was applied in a second place.
+
+  `[VERIFIED]` Cost measured before shipping, over 327 articles from the live feeds plus the
+  recorded evidence, holding 399 distinct proper names the sources wrote themselves:
+  **0 of 399 verdicts changed.** Every real name stays grounded, because a real name either
+  appears verbatim or has a non-ordinary end. The rule only bites on names whose *only*
+  claim to grounding was an ordinary word.
+
+  `[INFERRED]` Worth noting how this was found. The test was written to check that the new
+  NFL vocabulary had not opened a hole. It had not, and it found an older and wider one
+  instead. The complement test earns its place here.
