@@ -44,9 +44,28 @@ crontab -l
 
 ### The WSL caveat
 
-`[Likely]` On Windows, WSL's `cron` only runs while a WSL instance is alive. Close every WSL
-terminal and the daemon may stop with it, so briefs stop without any error. Starting the
-service is not enough to survive a reboot:
+~~`[Likely]` On Windows, WSL's `cron` only runs while a WSL instance is alive.~~
+**`[VERIFIED]` 2026-08-26, and it is worse than "while a terminal is open": it stops while the
+machine sleeps.**
+
+The operator reported no 08:00 brief. From `/var/log/syslog`, cron logged between 3 and 7
+entries every hour from 2026-08-25 14:00 through 2026-08-26 00:00, including the 00:00
+SportWire run, and then **nothing at all for hours 01:00 to 08:00** — not even the system's own
+ten-minute jobs. The laptop slept, WSL was suspended with it, and **cron does not run a job it
+missed.** The brief did not fail; it never started, and nothing in the application log says so.
+
+`[VERIFIED]` **Do not use `uptime` to check this.** It reported 8 hours 27 minutes of
+continuous uptime across the exact window in which nothing ran, because WSL2 keeps counting
+while the VM is paused. The gap in `/var/log/syslog` is the evidence. To check whether cron has
+actually been alive:
+
+```bash
+grep -i CRON /var/log/syslog | awk '{print $1, $2, substr($3,1,2)":00"}' | uniq -c | tail
+```
+
+An hour with no entries is an hour in which no scheduled job could have run.
+
+Starting the service is not enough to survive a reboot:
 
 ```bash
 sudo service cron start
@@ -60,7 +79,28 @@ If SportWire must run unattended on Windows, prefer Option B.
 
 Survives reboots and runs with no terminal open. Preferred for a Windows host.
 
-Create the task from an **Administrator** PowerShell, replacing the path:
+**Generate the command instead of editing it by hand:**
+
+```bash
+python scripts/schedule_windows.py                    # every 8 hours, the default
+python scripts/schedule_windows.py --interval-hours 6
+```
+
+`[INFERRED]` The path appears twice below in two different forms, and a task with one of them
+wrong registers cleanly and then fails every run — silently, on a schedule, until somebody
+notices no brief arrived. The script derives both from where it is, so there is nothing to
+mistype. It **prints** the command rather than running it, because registering needs
+Administrator and changes the machine.
+
+Two things the generated command adds that the block below originally lacked:
+
+- `[VERIFIED]` `-RepetitionDuration ([TimeSpan]::MaxValue)`. Without it, `Duration` is empty
+  with `StopAtDurationEnd: True`, and `[UNKNOWN]` whether Windows reads that as "repeat
+  forever" or "stop at the default". Stating it removes the question.
+- `-StartWhenAvailable`, so a run missed while the machine was off happens late rather than
+  not at all. That is the entire reason for choosing Task Scheduler over cron.
+
+Or create it from an **Administrator** PowerShell by hand, replacing the path:
 
 ```powershell
 $project = "C:\path\to\SportWire"
