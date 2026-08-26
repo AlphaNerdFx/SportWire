@@ -186,11 +186,32 @@ work is a small module plus documentation rather than a new architecture.
 plausible prose. It needs its own investigation, and `TASKS.md` L10 already holds the phone
 port as deferred pending a concrete definition.
 
-### → `v0.5.0` — NFL **(current)**
+### → `v0.5.0` — NFL **(current, mostly built 2026-08-26)**
 
 Promoted from after the line to before it on 2026-08-17, see the note under `v1.0.0`.
 `[VERIFIED]` `TASKS.md` records the L1 trigger as already fired, so this is held back by
 sequencing rather than by its own condition.
+
+`[VERIFIED]` Built on 2026-08-26: three football feeds checked live, the league carried on
+every article and stored beside it, one brief assembled per league with its own heading and
+its own evidence file, and a run producing two messages with neither sport appearing in the
+other's. `ADR-015` records the shape and what it cost.
+
+Two things are left before this milestone closes:
+
+- **A per-league schedule.** Both briefs still come from one run on one interval. This needs
+  the bounded interval choice in `TASKS.md` P42, which is `v1.0.0` work, so the two are
+  coupled and the ordering is not obvious yet.
+- **A community football feed.** `[VERIFIED]` r/nfl works alone and returns 429 when r/nba
+  was fetched shortly before it, so only one Reddit feed can be fetched per run. P46 holds
+  the measurements and the fix.
+
+`[VERIFIED]` Adding football also cost two validator bugs, both of which predated it and
+were merely hidden by basketball writing: P47, where an ordinary word at the end of a name
+grounded the whole name, and P48, where a possessive headline welded a team to a player and
+then refuted the team. `[INFERRED]` That is the honest cost of a second league, and it is
+worth expecting again for the third: a new sport is a new writing style meeting rules that
+were tuned on one.
 
 ### `v0.6.0` — MLB and NHL
 
