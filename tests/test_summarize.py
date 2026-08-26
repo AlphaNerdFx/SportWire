@@ -36,6 +36,9 @@ from processing.summarize import (
     _tidy,
     build_prompt,
     build_reduce_prompt,
+    league_of,
+    notes_prompt,
+    system_prompt,
 )
 
 ArticleFactory = Callable[..., NewsArticle]
@@ -444,3 +447,101 @@ def test_the_clock_is_injected_so_the_prompt_can_be_diffed(
 
     assert build_prompt([article], now=now) == build_prompt([article], now=now)
     assert "[5h ago]" in build_prompt([article], now=now)
+
+
+def test_every_prompt_names_the_league_it_is_summarising(
+    make_article: Callable[..., NewsArticle],
+) -> None:
+    """`[VERIFIED]` 2026-08-26: all three prompts said "NBA" while the batch was football.
+
+    ADR-015 split the briefs and left the wording behind, so the football batch was
+    introduced to the model as basketball. It obliged. Three attempts in a row attached NBA
+    teams to NFL players, "Ashton Jeanty of the Timberwolves" and "Houston Rockets" where the
+    Texans belonged, and the brief lost its prose to the validator catching them.
+
+    All three are asserted, not one. The note pass and the writing pass use different
+    prompts, and fixing whichever is easiest to reach would leave the other lying.
+    """
+    football = [make_article("Mahomes signs an extension", league="NFL")]
+
+    assert "NFL" in system_prompt(football)
+    assert "NFL" in notes_prompt(football)
+    assert "NFL" in build_prompt(football, 500)
+
+    assert "NBA" not in system_prompt(football)
+    assert "NBA" not in notes_prompt(football)
+    assert "NBA" not in build_prompt(football, 500)
+
+
+def test_a_mixed_batch_is_not_called_either_league(
+    make_article: Callable[..., NewsArticle],
+) -> None:
+    """`[INFERRED]` Naming one league over a batch holding two is the mistake being fixed.
+
+    No per-league run produces a mixed batch, but a caller could, and the honest answer for
+    one is the general word rather than a coin toss between the two.
+    """
+    mixed = [
+        make_article("Mahomes signs an extension", league="NFL"),
+        make_article("Doncic drops 40", league="NBA"),
+    ]
+
+    assert league_of(mixed) == "sports"
+    assert "NFL" not in system_prompt(mixed)
+    assert "NBA" not in system_prompt(mixed)
+
+
+def test_the_summarizer_sends_the_league_in_every_prompt_it_makes(
+    make_article: ArticleFactory,
+) -> None:
+    """`[VERIFIED]` Written because a mutation demanded it, the same day and the same way P32's
+    pass-through test was.
+
+    Swapping the call site back to the unformatted template left every other test green: the
+    prompt builders were checked directly, and nothing checked that the summarizer used them.
+    A batch large enough to chunk is used so the note prompt and the writing prompt are both
+    exercised, since they are separate strings and fixing one would hide the other.
+    """
+    summarizer = RecordingOllama()
+    football = [
+        make_article(f"Football story {index}", league="NFL")
+        for index in range(CHUNK_SIZE + 1)
+    ]
+
+    summarizer.summarise(football, max_chars=500)
+
+    assert len(summarizer.prompts) > 1, (
+        "expected a chunked run, with notes and a reduce"
+    )
+    # Every prompt, not any. `[VERIFIED]` Asserting "any" let all three call sites survive
+    # mutation: with one left unformatted the others still carried the league, and an
+    # unformatted template reads "{league}" rather than "NBA", so an absence check passed too.
+    for system, prompt in summarizer.prompts:
+        assert "NFL" in system, f"prompt does not name the league: {system[:80]}"
+        assert "{league}" not in system, f"placeholder never filled: {system[:80]}"
+        assert "NBA" not in system, f"basketball leaked in: {system[:80]}"
+        assert "NBA" not in prompt, f"basketball leaked in: {prompt[:80]}"
+
+
+def test_a_short_batch_also_names_its_league(
+    make_article: ArticleFactory,
+) -> None:
+    """The single-call path, which the chunked test above never reaches.
+
+    `[VERIFIED]` Mutation showed exactly that: leaving the one-call site unformatted survived
+    the chunked test, because a batch over `CHUNK_SIZE` goes through notes and reduce instead
+    and never touches it. Two paths, two tests.
+    """
+    summarizer = RecordingOllama()
+    football = [
+        make_article(f"Football story {index}", league="NFL")
+        for index in range(CHUNK_SIZE)
+    ]
+
+    summarizer.summarise(football, max_chars=500)
+
+    assert len(summarizer.prompts) == 1, "a short batch is one call"
+    [(system, prompt)] = summarizer.prompts
+    assert "NFL" in system, f"prompt does not name the league: {system[:80]}"
+    assert "{league}" not in system, f"placeholder never filled: {system[:80]}"
+    assert "NBA" not in system and "NBA" not in prompt
