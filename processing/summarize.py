@@ -425,14 +425,14 @@ class OllamaSummarizer(Summarizer):
         timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
         chunk_size: int = CHUNK_SIZE,
         keep_alive: str = KEEP_ALIVE_DURING_RUN,
-        token_budget: int = int(DEFAULT_SUMMARY_CHARS * TOKEN_BUDGET_RATIO),
+        minimum_tokens: int = 256,
     ) -> None:
         self._model = model
         self._host = host.rstrip("/")
         self._timeout_seconds = timeout_seconds
         self._chunk_size = chunk_size
         self._keep_alive = keep_alive
-        self._token_budget = token_budget
+        self._minimum_tokens = minimum_tokens
 
     @property
     def summarizer_name(self) -> str:
@@ -462,7 +462,9 @@ class OllamaSummarizer(Summarizer):
             len(chunks),
         )
         return [
-            self._generate(notes_prompt(chunk), build_prompt(chunk, max_chars))
+            self._generate(
+                notes_prompt(chunk), build_prompt(chunk, max_chars), max_chars
+            )
             for chunk in chunks
         ]
 
@@ -472,11 +474,11 @@ class OllamaSummarizer(Summarizer):
         """Write the paragraph, from notes when there are any and from the articles when not."""
         if prepared is None:
             return self._generate(
-                system_prompt(articles), build_prompt(articles, max_chars)
+                system_prompt(articles), build_prompt(articles, max_chars), max_chars
             )
         notes = cast("list[str]", prepared)
         return self._generate(
-            system_prompt(articles), build_reduce_prompt(notes, max_chars)
+            system_prompt(articles), build_reduce_prompt(notes, max_chars), max_chars
         )
 
     def release(self) -> None:
@@ -498,7 +500,23 @@ class OllamaSummarizer(Summarizer):
         except Exception:
             logger.debug("could not release %s", self._model, exc_info=True)
 
-    def _generate(self, system: str, prompt: str) -> str:
+    def _token_budget_for(self, max_chars: int) -> int:
+        """How many tokens this call may produce, from the character limit it is given.
+
+        `[VERIFIED]` 2026-08-27, and this is a bug fixed the hour after it shipped. The budget
+        was computed once at construction from `DEFAULT_SUMMARY_CHARS`, while the real limit
+        scales with the poll interval (P42). At 24 hours the brief is allowed 1792 characters
+        and needs roughly 448 tokens, against a fixed budget of 409, so the paragraph would
+        have been cut off mid-sentence on any interval longer than the default. Nothing caught
+        it because every test and every run so far used the default.
+
+        `[INFERRED]` The ratio is deliberately generous. English runs about four characters to
+        the token, so 0.4 leaves room for a model that writes short words rather than clipping
+        a summary that was within its limit.
+        """
+        return max(self._minimum_tokens, int(max_chars * TOKEN_BUDGET_RATIO))
+
+    def _generate(self, system: str, prompt: str, max_chars: int) -> str:
         """One POST to Ollama's generate endpoint. Exceptions handled by `summarise`."""
         response = requests.post(
             f"{self._host}/api/generate",
@@ -511,7 +529,7 @@ class OllamaSummarizer(Summarizer):
                 # worse than a dull paragraph.
                 "options": {
                     "temperature": 0.3,
-                    "num_predict": self._token_budget,
+                    "num_predict": self._token_budget_for(max_chars),
                 },
                 # Held between this run's calls, then released. See `release`.
                 "keep_alive": self._keep_alive,
