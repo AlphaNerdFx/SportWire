@@ -529,7 +529,11 @@ what each turned into, since several changed shape on contact with real data.
   - **What to watch:** the drop log, for retrospectives returning. That is the measurement
     option (a) was chosen to produce.
 
-- [ ] **P4. Establish the summariser's actual pass rate.** (#17)
+- [x] **P4. Establish the summariser's actual pass rate.** (#17) **Closed 2026-08-26.**
+  The rate is counted: 4 of 13 dated runs delivered prose (31%), 25% before the validator
+  fixes and 50% after, 4 of 30 attempts accepted (13%). GitHub #17 closed with the table.
+  `[INFERRED]` The condition was "the rate is a measured number", and it is. Whether that rate
+  is *good enough* is a different question and belongs to GitHub #1, the fourteen-run soak.
   `[VERIFIED]` The "~84%" figure came from 3/5 on one sitting and is repeated in several
   places; two runs on 2026-08-13 went 0/3 then pass. `[UNKNOWN]` The real rate.
   Count validation outcomes across the soak from `logs/sportwire.log` rather than quoting
