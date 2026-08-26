@@ -7,7 +7,7 @@ everything around it, and that is where every recorded bug in this module actual
   - retry gave up on the first HTTP 500      -> `test_a_request_failure_is_retried`
   - `" ".join(...)` flattened the paragraphs -> `test_tidy_preserves_paragraph_breaks`
 
-The `Summarizer` ABC exists precisely so this is possible. `_summarise` is the only abstract
+The `Summarizer` ABC exists precisely so this is possible. `_write` is the only abstract
 piece; the retry-and-validate loop lives in the base class, so a stub subclass exercises the
 whole contract with no Ollama running. `[VERIFIED]` H13 Q2 asked why `_fetch`/`fetch` is
 split in the ingestion adapters and the answer did not land — this is the same pattern in a
@@ -26,10 +26,12 @@ from datetime import datetime
 
 import pytest
 
+import processing.summarize as summarize_module
 from models.schemas import NewsArticle
 from processing.summarize import (
     CHUNK_SIZE,
     NOTES_PROMPT,
+    EscalatingSummarizer,
     OllamaSummarizer,
     Summarizer,
     _note_lines,
@@ -70,7 +72,9 @@ class StubSummarizer(Summarizer):
     def summarizer_name(self) -> str:
         return "Stub"
 
-    def _summarise(self, articles: list[NewsArticle], max_chars: int) -> str:
+    def _write(
+        self, prepared: object, articles: list[NewsArticle], max_chars: int
+    ) -> str:
         self.calls += 1
         response = self._responses[min(self.calls - 1, len(self._responses) - 1)]
         if isinstance(response, Exception):
@@ -135,7 +139,10 @@ def test_fabrication_on_every_attempt_falls_back_to_the_headline_list(
 
     assert result is None, "None means 'use the headline list', not 'fail the run'"
     assert summarizer.calls == 3
-    assert "using the headline list" in caplog.text
+    # The summarizer reports what it did; `main` reports what follows. `[VERIFIED]`
+    # 2026-08-27 this asserted "using the headline list", which stopped being true once a
+    # failed small model escalated to a bigger one instead of falling back.
+    assert "no attempt passed validation after 3 tries" in caplog.text
 
 
 def test_a_request_failure_is_retried_rather_than_abandoned(
@@ -303,7 +310,7 @@ def test_a_short_batch_is_summarised_in_one_call(
     summarizer = RecordingOllama()
     articles = [make_article(f"Story {index}") for index in range(CHUNK_SIZE)]
 
-    summarizer._summarise(articles, max_chars=1024)
+    summarizer._write(summarizer._prepare(articles, 1024), articles, max_chars=1024)
 
     assert len(summarizer.prompts) == 1
 
@@ -322,7 +329,7 @@ def test_a_long_batch_is_chunked_then_reduced(
     articles = [make_article(f"Story {index}") for index in range(CHUNK_SIZE * 2 + 1)]
 
     with caplog.at_level(logging.INFO, logger="processing.summarize"):
-        summarizer._summarise(articles, max_chars=1024)
+        summarizer._write(summarizer._prepare(articles, 1024), articles, max_chars=1024)
 
     # Three note-extraction calls plus one reduce.
     assert len(summarizer.prompts) == 4
@@ -335,7 +342,7 @@ def test_every_article_reaches_some_chunk(make_article: ArticleFactory) -> None:
     summarizer = RecordingOllama()
     articles = [make_article(f"Story {index}") for index in range(CHUNK_SIZE * 2 + 1)]
 
-    summarizer._summarise(articles, max_chars=1024)
+    summarizer._write(summarizer._prepare(articles, 1024), articles, max_chars=1024)
 
     combined = " ".join(prompt for _, prompt in summarizer.prompts)
     for article in articles:
@@ -545,3 +552,215 @@ def test_a_short_batch_also_names_its_league(
     assert "NFL" in system, f"prompt does not name the league: {system[:80]}"
     assert "{league}" not in system, f"placeholder never filled: {system[:80]}"
     assert "NBA" not in system and "NBA" not in prompt
+
+
+def test_a_retry_does_not_extract_the_notes_again(
+    make_article: ArticleFactory,
+) -> None:
+    """`[VERIFIED]` 2026-08-27: the map step was inside the retry loop and ran three times.
+
+    A twelve-article brief chunks into three, so each attempt cost three note calls plus a
+    reduce. Three attempts was twelve model calls where six would do, on a machine with
+    5.3 GB of RAM free and a 4.4 GB model loaded. The notes are identical every time, because
+    the same chunks and the same prompt go in; only the paragraph written from them differs.
+
+    Counted rather than asserted on a flag, because the point is the number of calls.
+    """
+
+    class AlwaysRejected(RecordingOllama):
+        def _generate(self, system: str, prompt: str) -> str:
+            self.prompts.append((system, prompt))
+            # A name no source contains, so validation refuses every attempt and the retry
+            # loop runs to exhaustion.
+            return "Fabricated Nobody signed with the Fabricated Nobodies."
+
+    summarizer = AlwaysRejected()
+    articles = [make_article(f"Story {index}") for index in range(CHUNK_SIZE * 3)]
+
+    assert summarizer.summarise(articles, max_chars=1024, attempts=3) is None
+
+    chunks = -(-len(articles) // CHUNK_SIZE)
+    note_calls = sum(1 for system, _ in summarizer.prompts if "terse notes" in system)
+
+    assert note_calls == chunks, (
+        f"notes were extracted {note_calls} times for {chunks} chunks; "
+        "the map step is back inside the retry loop"
+    )
+    assert len(summarizer.prompts) == chunks + 3, "expected one write per attempt"
+
+
+def test_the_model_is_released_and_the_output_is_bounded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`[VERIFIED]` 2026-08-27: 7.4 GB of RAM under WSL2 against a 4.4 GB model.
+
+    Two things go on every request and both are about the machine rather than the writing.
+    `keep_alive` holds the model across this run's calls and no longer, instead of Ollama's
+    default of five minutes after a program that runs every eight hours has stopped talking.
+    `num_predict` bounds the generation, because one call on 2026-08-26 ran for the full 600
+    second timeout and returned nothing.
+
+    `[VERIFIED]` This asserted `"0s"` when first written, which was wrong in an expensive
+    way: `keep_alive` applies to the request it rides on, so zero unloaded the model after
+    **every** call. Measured on `llama3.2:3b`, a second call cost 13.8 seconds that way
+    against 0.8 seconds resident. Handing the memory back is `release`'s job, not this one's.
+
+    Asserted on the request body, because the effect belongs to Ollama and the only thing
+    this code controls is what it asks for.
+    """
+    sent: dict[str, object] = {}
+
+    class Response:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, str]:
+            return {"response": "text"}
+
+    def fake_post(url: str, json: dict[str, object], timeout: int) -> Response:
+        sent.update(json)
+        return Response()
+
+    monkeypatch.setattr(summarize_module.requests, "post", fake_post)
+
+    OllamaSummarizer()._generate("system", "prompt")
+
+    assert sent["keep_alive"] == "2m", "the model must stay resident between calls"
+    options = sent["options"]
+    assert isinstance(options, dict)
+    assert isinstance(options["num_predict"], int)
+    assert options["num_predict"] > 0, "generation must be bounded"
+
+
+def test_the_small_model_writes_and_the_big_one_is_not_loaded(
+    make_article: ArticleFactory,
+) -> None:
+    """The point of the ladder: most briefs never touch the 4.4 GB model.
+
+    `[VERIFIED]` 2026-08-27 the operator's machine has 5.3 GB of RAM free, so loading
+    `mistral:7b` for a brief `llama3.2:3b` could have written is what stalled the desktop.
+    """
+    small = StubSummarizer("Cavs deal Schroder for Hornets' Mann.")
+    big = StubSummarizer("Cavs deal Schroder for Hornets' Mann.")
+    articles = [make_article("Cavs deal Schroder for Hornets' Mann")]
+
+    result = EscalatingSummarizer(first=small, then=big).summarise(articles)
+
+    assert result is not None
+    assert small.calls == 1
+    assert big.calls == 0, (
+        "the big model must not be loaded when the small one succeeded"
+    )
+
+
+def test_the_big_model_takes_over_when_the_small_one_fabricates(
+    make_article: ArticleFactory,
+) -> None:
+    """The other half. Escalation only means anything if it actually happens.
+
+    `[INFERRED]` The validator is what makes this safe rather than a quality gamble: the
+    small model is trusted only for output that survived the same check the big one's
+    output faces.
+    """
+    small = StubSummarizer("Fabricated Nobody signed with the Fabricated Nobodies.")
+    big = StubSummarizer("Cavs deal Schroder for Hornets' Mann.")
+    articles = [make_article("Cavs deal Schroder for Hornets' Mann")]
+
+    result = EscalatingSummarizer(first=small, then=big, first_attempts=2).summarise(
+        articles, attempts=3
+    )
+
+    assert result == "Cavs deal Schroder for Hornets' Mann."
+    assert small.calls == 2, "the small model should use its share of the budget"
+    assert big.calls == 1, "and the big one should get what is left"
+
+
+def test_the_model_is_handed_back_when_the_run_is_done(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`[VERIFIED]` 2026-08-27: the model stays resident between calls, so something has to
+    end that, and Ollama's own default is five minutes after a program that runs every eight
+    hours has stopped talking.
+
+    Asserted on the request Ollama receives: a generate call carrying no prompt and
+    `keep_alive: 0` is how a model is evicted.
+    """
+    posted: list[dict[str, object]] = []
+
+    class Response:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, str]:
+            return {"response": ""}
+
+    def fake_post(url: str, json: dict[str, object], timeout: int) -> Response:
+        posted.append(json)
+        return Response()
+
+    monkeypatch.setattr(summarize_module.requests, "post", fake_post)
+
+    OllamaSummarizer(model="llama3.2:3b").release()
+
+    assert posted, "release must actually tell Ollama something"
+    assert posted[0]["keep_alive"] == 0, "0 is what evicts the model"
+    assert posted[0]["model"] == "llama3.2:3b"
+    assert "prompt" not in posted[0], "an eviction carries no work"
+
+
+def test_a_failure_to_release_never_costs_the_brief(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`[INFERRED]` This runs after the paragraph is already written.
+
+    Losing a delivered brief because the machine would not give memory back would be an
+    absurd trade, and it is the same rule the evidence recorder follows.
+    """
+
+    def explode(url: str, json: dict[str, object], timeout: int) -> None:
+        raise OSError("ollama is gone")
+
+    monkeypatch.setattr(summarize_module.requests, "post", explode)
+
+    OllamaSummarizer().release()
+
+
+def test_the_small_model_is_released_before_the_big_one_loads(
+    make_article: ArticleFactory,
+) -> None:
+    """`[VERIFIED]` 2026-08-27: 2.0 GB plus 4.4 GB does not fit in 5.3 GB of free RAM.
+
+    Escalation is the one moment both models would otherwise be resident at once, which is
+    exactly the swapping this ladder exists to avoid. Order matters, so order is asserted.
+    """
+    events: list[str] = []
+
+    class Tracking(StubSummarizer):
+        def __init__(self, name: str, *responses: str) -> None:
+            super().__init__(*responses)
+            self._name = name
+
+        @property
+        def summarizer_name(self) -> str:
+            return self._name
+
+        def _write(
+            self, prepared: object, articles: list[NewsArticle], max_chars: int
+        ) -> str:
+            events.append(f"write:{self._name}")
+            return super()._write(prepared, articles, max_chars)
+
+        def release(self) -> None:
+            events.append(f"release:{self._name}")
+
+    small = Tracking("small", "Fabricated Nobody signed with the Fabricated Nobodies.")
+    big = Tracking("big", "Cavs deal Schroder for Hornets' Mann.")
+    articles = [make_article("Cavs deal Schroder for Hornets' Mann")]
+
+    EscalatingSummarizer(first=small, then=big, first_attempts=1).summarise(
+        articles, attempts=2
+    )
+
+    assert events.index("release:small") < events.index("write:big"), (
+        f"the small model must be gone before the big one loads: {events}"
+    )
