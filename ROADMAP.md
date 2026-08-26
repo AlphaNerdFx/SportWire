@@ -118,6 +118,22 @@ rather than a preference, because the two options fail in opposite directions.
 while WSL is running, which is why `TASKS.md` P4 records that runs are skipped while the
 machine sleeps and warns against inferring a rate from elapsed days.
 
+**Observed directly on 2026-08-26**, which turns that from an inference into a measurement.
+The operator reported no brief at 08:00. `[VERIFIED]` From `/var/log/syslog`, cron logged
+between 3 and 7 entries every hour from 2026-08-25 14:00 through 2026-08-26 00:00, including
+the 00:00 SportWire run, and then **nothing at all for hours 01:00 to 08:00**. Even the
+system's own every-ten-minutes jobs stopped. The host slept, WSL was suspended with it, and
+cron does not run a job it missed.
+
+`[VERIFIED]` **`uptime` is not evidence here and it misled this investigation for a minute.**
+It reported 8 hours 27 minutes of continuous uptime across the very window in which nothing
+ran, because WSL2 keeps counting while the VM is paused. The gap in syslog is the evidence;
+uptime is not.
+
+`[INFERRED]` This is the case the table below exists for, and it is now concrete rather than
+hypothetical: an operator who closes the lid loses every brief until the machine is next
+awake at a scheduled minute, with no error and no trace in the application log.
+
 So the operator picks, and the two answers are for two different wants:
 
 | what you want | what schedules it |
