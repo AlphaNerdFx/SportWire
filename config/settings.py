@@ -13,6 +13,7 @@ own configuration cannot be tested without setting global state.
 
 from __future__ import annotations
 
+import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -40,6 +41,56 @@ DEFAULT_OLLAMA_MODEL = "mistral:7b"
 # Hosted summarisation, used when a key is present. Free tier, open-weight model, 262k
 # context — see processing/openrouter.py and ADR-012.
 DEFAULT_OPENROUTER_MODEL = "google/gemma-4-31b-it:free"
+
+
+# The intervals a user may choose between, in hours (PRD D6, TASKS.md P42).
+#
+# **A set rather than a free number**, because most numbers are wrong in ways the operator
+# cannot see. `[VERIFIED]` Measured over 13 scheduled runs at 8 hours, new articles arrived at
+# about 3.9 an hour, so 30 minutes would usually deliver nothing at all and the brief becomes
+# silence or noise. The floor and ceiling are the operator's, and the measurement agrees with
+# both: 2 hours yields roughly 8 articles, 2 days roughly 187.
+#
+# `[UNKNOWN]` Those are offseason rates. `SeenStore.arrivals_per_hour` exists so this can be
+# re-derived from what actually arrived rather than re-guessed, and it should be re-checked
+# once the season starts.
+POLL_INTERVAL_CHOICES: tuple[int, ...] = (2, 4, 8, 12, 24, 48)
+
+# What a brief looks like at the reference interval. These are today's shipped values, so an
+# 8-hour interval produces exactly the brief that ships now and nothing changes by default.
+REFERENCE_INTERVAL_HOURS = 8
+REFERENCE_MAX_STORIES = 12
+REFERENCE_SUMMARY_CHARS = 1024
+
+# Above this, a brief stops being something anyone reads to the end.
+MAX_STORIES_CEILING = 24
+
+
+def brief_size_for(interval_hours: int) -> tuple[int, int]:
+    """How many stories a brief may carry and how long it may run, for a given interval.
+
+    Returns `(max_stories, summary_chars)`.
+
+    **Scaling both is the point.** `[VERIFIED]` TASKS.md P42: `DEFAULT_MAX_ARTICLES = 12` binds
+    on 8 of 22 logged runs at 8 hours, so raising only the character limit would leave a 2-day
+    brief discarding roughly 175 of 187 articles and still writing twelve stories. A longer
+    interval would lose more news rather than deliver more.
+
+    **Sublinear, by the square root of the ratio.** `[INFERRED]` Linear scaling would make a
+    2-day brief six times longer than an 8-hour one, which nobody finishes reading, and it
+    would cost proportionally more model time: `[VERIFIED]` the 2026-08-26 00:00 run took 10
+    minutes 36 seconds for 12 stories in 3 chunks, and `processing/summarize.py` adds a chunk
+    per 5 stories. Square root keeps a 2-day brief about 2.4 times an 8-hour one rather than 6.
+
+    Clamped at `MAX_STORIES_CEILING` for the same reason the cap exists at all.
+    """
+    ratio = interval_hours / REFERENCE_INTERVAL_HOURS
+    scale = math.sqrt(ratio)
+    stories = min(MAX_STORIES_CEILING, max(1, round(REFERENCE_MAX_STORIES * scale)))
+    # Characters follow the stories actually shown, not the interval, so the model is never
+    # asked for a length the story count cannot fill.
+    chars = round(REFERENCE_SUMMARY_CHARS * stories / REFERENCE_MAX_STORIES)
+    return stories, chars
 
 
 class SettingsError(RuntimeError):
