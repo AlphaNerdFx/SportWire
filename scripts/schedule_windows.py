@@ -96,6 +96,34 @@ Get-ScheduledTaskInfo -TaskName "{task_name}"   # LastTaskResult 0 means success
 # Unregister-ScheduledTask -TaskName "{task_name}" -Confirm:$false"""
 
 
+def resolve_interval(requested: int | None) -> int:
+    """The cadence to schedule: the one asked for, or the one the pipeline is configured with.
+
+    **Separate from `main` so it can be tested anywhere.** `[VERIFIED]` 2026-08-26 the first
+    version of this logic lived inline, and its test drove `main` against the real project
+    path. That passed on the operator's machine, which sits under `/mnt/c`, and failed on CI,
+    where the checkout is `/home/runner/work/...` and has no Windows path at all. The code was
+    right and the test was environment-dependent.
+
+    `[INFERRED]` Two places holding the cadence is how a schedule and a brief quietly come to
+    disagree: the task would fire every 12 hours while the brief was still sized for 8.
+
+    Raises `ValueError` rather than exiting, so the caller decides how to report it.
+    """
+    if requested is None:
+        try:
+            requested = Settings.from_env().poll_interval_hours
+        except SettingsError:
+            # Configuration may be incomplete on a machine that has not been set up yet, and
+            # printing a scheduler command is exactly what you do *before* that is finished.
+            return DEFAULT_POLL_INTERVAL_HOURS
+
+    if requested not in POLL_INTERVAL_CHOICES:
+        offered = ", ".join(str(choice) for choice in POLL_INTERVAL_CHOICES)
+        raise ValueError(f"--interval-hours must be one of {offered}, got {requested}")
+    return requested
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
@@ -114,21 +142,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    # Default to the configured interval rather than a second hardcoded 8. `[INFERRED]` Two
-    # places holding the cadence is how a schedule and a brief quietly come to disagree: the
-    # task would fire every 12 hours while the brief was still sized for 8.
-    interval = args.interval_hours
-    if interval is None:
-        try:
-            interval = Settings.from_env().poll_interval_hours
-        except SettingsError:
-            # Configuration may be incomplete on a machine that has not been set up yet, and
-            # printing a scheduler command is exactly what you do *before* that is finished.
-            interval = DEFAULT_POLL_INTERVAL_HOURS
-
-    if interval not in POLL_INTERVAL_CHOICES:
-        offered = ", ".join(str(choice) for choice in POLL_INTERVAL_CHOICES)
-        parser.error(f"--interval-hours must be one of {offered}, got {interval}")
+    try:
+        interval = resolve_interval(args.interval_hours)
+    except ValueError as error:
+        parser.error(str(error))
 
     project = Path(__file__).resolve().parent.parent
     try:
