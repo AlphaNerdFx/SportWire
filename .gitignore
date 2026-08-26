@@ -1,4 +1,9 @@
+# Virtual environments, any name. `.venv/` is this project's; the pattern is broader because
+# `[VERIFIED]` 2026-08-26 a 4.6 MB `.tangovenv/` from a different project was sitting here
+# untracked and unignored, one `git add -A` away from being committed into a repository meant
+# to be published.
 .venv/
+*venv/
 __pycache__/
 *.pyc
 .env
