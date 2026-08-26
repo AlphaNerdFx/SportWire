@@ -43,6 +43,7 @@ import logging
 import re
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
+from typing import cast
 
 import requests
 
@@ -114,6 +115,33 @@ DEFAULT_MODEL = "mistral:7b"
 # Generous, because a cold model load was measured at 193s before any inference begins.
 DEFAULT_TIMEOUT_SECONDS = 600
 
+# How long Ollama keeps the model resident after a request. `[VERIFIED]` 2026-08-27 the
+# operator's machine has **7.4 GB of RAM total under WSL2, 5.3 GB free, with 656 MB of swap
+# already in use**, and `mistral:7b` is 4.4 GB. Ollama's default is to hold the model for five
+# minutes after the last request, so the machine stayed under that pressure long after the
+# brief was delivered, for a program that runs once every eight hours and then has nothing to
+# say. Releasing it immediately costs a reload on the next run, which is seconds, and returns
+# the memory to the desktop, which is the thing the operator actually noticed.
+# ~~UNLOAD_AFTER_RUN = "0s"~~ **Corrected 2026-08-27, hours after it was written.**
+#
+# `[VERIFIED]` Ollama's `keep_alive` says how long to hold the model after *that request*, not
+# after the program finishes. Setting it to zero unloaded the model after **every call**, so a
+# brief making three calls loaded the model three times. The escalation path made it obvious:
+# `mistral:7b` spent over seven minutes on two chunks and a reduce, work the small model had
+# just done in fifty seconds.
+#
+# `[INFERRED]` So the model stays resident across a run's calls and is released explicitly
+# when the run is done. Two minutes rather than Ollama's default five, so a process that dies
+# before releasing still gives the memory back reasonably soon.
+KEEP_ALIVE_DURING_RUN = "2m"
+
+# Hard ceiling on generated tokens. `[INFERRED]` The brief already has a character budget, so
+# nothing downstream wants more than this; what it prevents is the pathological case where the
+# model does not stop. `[VERIFIED]` One run on 2026-08-26 spent **600 seconds** in a single
+# call and hit the read timeout, and a bounded generation cannot do that. Four characters per
+# token is the usual rough ratio for English, and the margin is deliberate.
+TOKEN_BUDGET_RATIO = 0.4
+
 # The instruction is the whole "training". Steering the output — what to emphasise, what to
 # skim — is editing this string, not fine-tuning a model. Recorded because the assumption
 # that this needs training came up more than once.
@@ -174,13 +202,39 @@ class Summarizer(ABC):
     def summarizer_name(self) -> str:
         """Human-readable label, e.g. "Ollama (llama3.2)". Used in logs."""
 
-    @abstractmethod
-    def _summarise(self, articles: list[NewsArticle], max_chars: int) -> str:
-        """Produce the summary text. Allowed to raise.
+    def release(self) -> None:
+        """Give back whatever this summarizer holds. Called when the run is finished.
 
-        Takes articles rather than a finished prompt because how many model calls this
-        requires is the implementation's business, not the interface's. `OllamaSummarizer`
-        makes several; a hosted implementation with a larger context window may make one.
+        A no-op by default, which is right for a hosted model: nothing on this machine to
+        release. `[VERIFIED]` It matters for local inference on the operator's machine, where
+        the model is 4.4 GB against 5.3 GB of free RAM and Ollama would otherwise hold it for
+        minutes after a program that runs every eight hours has stopped talking.
+
+        Never raises. Failing to hand memory back is not a reason to lose a delivered brief.
+        """
+
+    def _prepare(self, articles: list[NewsArticle], max_chars: int) -> object:
+        """Whatever the writing step needs, computed **once** for all attempts.
+
+        `[VERIFIED]` 2026-08-27, and this seam exists entirely because of it. A long batch is
+        chunked, and every chunk costs a model call to turn into notes. Those calls were
+        inside the retry loop, so a three-attempt brief extracted the same notes three times:
+        twelve model calls where six would do. The notes do not change between attempts, only
+        the paragraph written from them does.
+
+        The default returns the articles unchanged, which is right for any implementation
+        that makes a single call: there is nothing to reuse.
+        """
+        return articles
+
+    @abstractmethod
+    def _write(
+        self, prepared: object, articles: list[NewsArticle], max_chars: int
+    ) -> str:
+        """Produce the summary text from what `_prepare` returned. Allowed to raise.
+
+        Called once per attempt. `articles` comes along because the prompts name the league
+        the batch belongs to, and that is a property of the articles rather than of the notes.
         """
 
     def summarise(
@@ -215,9 +269,19 @@ class Summarizer(ABC):
         if not articles:
             return None
 
+        try:
+            prepared = self._prepare(articles, max_chars)
+        except Exception:
+            # Preparation is one or more model calls too, so it fails the same ways. A
+            # failure here means no attempt can run, which is the headline list.
+            logger.warning(
+                "%s failed while preparing", self.summarizer_name, exc_info=True
+            )
+            return None
+
         for attempt in range(1, max(1, attempts) + 1):
             try:
-                text = self._summarise(articles, max_chars)
+                text = self._write(prepared, articles, max_chars)
             except Exception:
                 # `[VERIFIED]` 2026-08-10 a production run got HTTP 500 from Ollama on the
                 # first attempt and gave up, delivering the headline list — an earlier
@@ -254,11 +318,93 @@ class Summarizer(ABC):
 
             logger.warning("attempt %d rejected (%s)", attempt, result.describe())
 
+        # States what happened, not what follows from it. `[VERIFIED]` 2026-08-27 this said
+        # "using the headline list", and once `EscalatingSummarizer` existed that was simply
+        # untrue: the small model exhausting its attempts escalates to the big one, and the
+        # log claimed a fallback that had not happened. `main` already logs the real
+        # consequence when it gets None back, which is the layer that decides it.
         logger.warning(
-            "no attempt passed validation after %d tries; using the headline list",
+            "%s: no attempt passed validation after %d tries",
+            self.summarizer_name,
             attempts,
         )
         return None
+
+
+class EscalatingSummarizer(Summarizer):
+    """Try a small model first and only reach for a big one when the small one fails.
+
+    `[VERIFIED]` 2026-08-27, the operator's machine: **7.4 GB of RAM under WSL2, 5.3 GB free,
+    656 MB of swap already used**, against `mistral:7b` at 4.4 GB and `llama3.2:3b` at 2.0 GB.
+    Running the big model for every brief is what made the desktop unusable, and most briefs
+    do not need it: the task is compression of a few kilobytes of headlines.
+
+    So the small model writes, the validator judges, and the big one is loaded only when the
+    small one produced something that did not survive. `[INFERRED]` The escalation is worth
+    having rather than simply switching models because the validator gives an honest signal to
+    escalate *on*. Without it this would be a quality gamble; with it, the worst case is the
+    behaviour the project already had.
+
+    Each model prepares its own notes. `[INFERRED]` That is deliberate and it costs calls: a
+    fabrication can enter at the note step as easily as at the writing step, so handing the
+    big model the small one's notes would escalate the writing while keeping the mistake.
+
+    Composition rather than a flag inside `OllamaSummarizer`, because "which model" and "what
+    to do when a model fails" are two different decisions, and only one of them is about
+    Ollama. `[INFERRED]` It also means a hosted model can be the second rung without this
+    class learning anything new.
+    """
+
+    def __init__(
+        self, first: Summarizer, then: Summarizer, first_attempts: int = 2
+    ) -> None:
+        self._first = first
+        self._then = then
+        self._first_attempts = max(1, first_attempts)
+
+    @property
+    def summarizer_name(self) -> str:
+        return f"{self._first.summarizer_name} then {self._then.summarizer_name}"
+
+    def _write(
+        self, prepared: object, articles: list[NewsArticle], max_chars: int
+    ) -> str:
+        """Never called: `summarise` is overridden and delegates to the wrapped summarizers."""
+        raise NotImplementedError
+
+    def release(self) -> None:
+        """Release both rungs. Either may hold a model, depending how far the run got."""
+        self._first.release()
+        self._then.release()
+
+    def summarise(
+        self,
+        articles: list[NewsArticle],
+        max_chars: int = DEFAULT_SUMMARY_CHARS,
+        attempts: int = DEFAULT_ATTEMPTS,
+        vocabulary_sample: list[NewsArticle] | None = None,
+    ) -> str | None:
+        """Small model first, then the capable one, splitting the attempt budget between them."""
+        first_attempts = min(self._first_attempts, max(1, attempts))
+        text = self._first.summarise(
+            articles, max_chars, first_attempts, vocabulary_sample
+        )
+        if text is not None:
+            return text
+
+        # The small model goes before the big one arrives. `[VERIFIED]` 2026-08-27: 2.0 GB
+        # plus 4.4 GB does not fit in 5.3 GB free, and the machine swapping is the whole
+        # problem this ladder exists to avoid.
+        self._first.release()
+
+        remaining = max(1, attempts - first_attempts)
+        logger.info(
+            "%s did not pass in %d attempt(s); escalating to %s",
+            self._first.summarizer_name,
+            first_attempts,
+            self._then.summarizer_name,
+        )
+        return self._then.summarise(articles, max_chars, remaining, vocabulary_sample)
 
 
 class OllamaSummarizer(Summarizer):
@@ -278,32 +424,31 @@ class OllamaSummarizer(Summarizer):
         host: str = "http://localhost:11434",
         timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
         chunk_size: int = CHUNK_SIZE,
+        keep_alive: str = KEEP_ALIVE_DURING_RUN,
+        token_budget: int = int(DEFAULT_SUMMARY_CHARS * TOKEN_BUDGET_RATIO),
     ) -> None:
         self._model = model
         self._host = host.rstrip("/")
         self._timeout_seconds = timeout_seconds
         self._chunk_size = chunk_size
+        self._keep_alive = keep_alive
+        self._token_budget = token_budget
 
     @property
     def summarizer_name(self) -> str:
         return f"Ollama ({self._model})"
 
-    def _summarise(self, articles: list[NewsArticle], max_chars: int) -> str:
-        """Summarise, chunking first if the batch is long enough to lose its tail.
+    def _prepare(self, articles: list[NewsArticle], max_chars: int) -> object:
+        """Extract the notes once, if this batch is long enough to need chunking.
 
-        `[VERIFIED]` 2026-08-06: given all 15 fixture articles in one call, this model
-        omitted the two LeBron-to-Philadelphia items entirely — the biggest story in the
-        feed — while including a child-support filing. Re-running with those same two items
-        moved to the front of the list covered them, and led with them. The model was not
-        judging badly; it was barely reading the tail.
-
-        So short batches go straight through, and long ones are split so that every article
-        sits near the front of *some* call.
+        Returns None for a short batch, meaning "there is nothing to reuse, write straight
+        from the articles". `[VERIFIED]` 2026-08-27: doing this inside the retry loop cost a
+        three-attempt brief twelve model calls instead of six, on a machine with 5.3 GB of
+        RAM free and a 4.4 GB model. The notes are identical every time; only the paragraph
+        written from them differs.
         """
         if len(articles) <= self._chunk_size:
-            return self._generate(
-                system_prompt(articles), build_prompt(articles, max_chars)
-            )
+            return None
 
         chunks = [
             articles[index : index + self._chunk_size]
@@ -316,15 +461,42 @@ class OllamaSummarizer(Summarizer):
             self._chunk_size,
             len(chunks),
         )
-
-        notes = [
+        return [
             self._generate(notes_prompt(chunk), build_prompt(chunk, max_chars))
             for chunk in chunks
         ]
 
+    def _write(
+        self, prepared: object, articles: list[NewsArticle], max_chars: int
+    ) -> str:
+        """Write the paragraph, from notes when there are any and from the articles when not."""
+        if prepared is None:
+            return self._generate(
+                system_prompt(articles), build_prompt(articles, max_chars)
+            )
+        notes = cast("list[str]", prepared)
         return self._generate(
             system_prompt(articles), build_reduce_prompt(notes, max_chars)
         )
+
+    def release(self) -> None:
+        """Ask Ollama to unload this model now, rather than holding it for `keep_alive`.
+
+        A generate request carrying no prompt and `keep_alive: 0` is how Ollama is told to
+        evict a model. `[VERIFIED]` 2026-08-27: 4.4 GB against 5.3 GB free is the difference
+        between a usable desktop and one that swaps.
+
+        Swallows everything. This runs after the brief is already built, so a failure costs
+        some memory for two minutes and must never cost the brief.
+        """
+        try:
+            requests.post(
+                f"{self._host}/api/generate",
+                json={"model": self._model, "keep_alive": 0},
+                timeout=self._timeout_seconds,
+            )
+        except Exception:
+            logger.debug("could not release %s", self._model, exc_info=True)
 
     def _generate(self, system: str, prompt: str) -> str:
         """One POST to Ollama's generate endpoint. Exceptions handled by `summarise`."""
@@ -337,7 +509,12 @@ class OllamaSummarizer(Summarizer):
                 "stream": False,
                 # Low temperature: this is a factual summary, and invented trades would be
                 # worse than a dull paragraph.
-                "options": {"temperature": 0.3},
+                "options": {
+                    "temperature": 0.3,
+                    "num_predict": self._token_budget,
+                },
+                # Held between this run's calls, then released. See `release`.
+                "keep_alive": self._keep_alive,
             },
             timeout=self._timeout_seconds,
         )
