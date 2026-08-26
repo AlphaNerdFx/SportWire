@@ -2498,6 +2498,55 @@ what each turned into, since several changed shape on contact with real data.
 
 ---
 
+- [ ] **P44. Judge the brief's writing with a second model pass.** Open, proposed by the
+  operator 2026-08-26. **Not built, and the cost is smaller than the last time this was
+  considered.**
+
+  The idea: after a summary survives validation, ask a model whether it reads well, and use
+  that to steer the writing rather than the facts.
+
+  `[VERIFIED]` **This is not the option rejected under P5.** That one was a second-pass check
+  of **every sentence against the source notes**, rejected because it "doubles an already 5 to
+  9 minute run". A style judge is **one call on a finished paragraph**, against a chunked
+  summarisation that already makes 3 or 4. Measured across 13 dated runs, summarisation takes
+  0.3 to 10.9 minutes, median 3.9, so one more call is a fraction rather than a doubling.
+
+  `[INFERRED]` **Style is a better fit for a model judge than facts are**, which is the real
+  argument. ADR-012 measured that every local model tested fabricates names and figures, so a
+  model is the wrong tool for checking truth. Style has no ground truth to fabricate against:
+  asking "does this read like a news brief or like a list" is a judgement, and a judgement is
+  what a model can actually give.
+
+  `[VERIFIED]` There is already a specific defect it might catch. `processing/summarize.py`
+  records that a preamble appears despite an explicit instruction against it, and
+  `validate.py` counts preambles without rejecting for them, on the grounds that a preamble is
+  "a style problem, not a truth problem". Nothing currently acts on that count.
+
+  `[UNKNOWN]` Whether it changes anything. `[VERIFIED]` A prompt change of a similar shape was
+  measured for names and moved nothing (3/6 against 3/6), and P6 is the standing warning about
+  mechanisms that read as protection and cannot be shown to work. Before building: count how
+  many delivered briefs have a style defect worth catching, using the preamble flag already in
+  the log. If the answer is few, this is decoration.
+
+  `[INFERRED]` It should never gate delivery. A brief that is factually sound but reads poorly
+  must still arrive; the judge's output belongs in the log, or at most as a retry hint, on the
+  same reasoning that made the P5 claim marker advisory rather than a rejection.
+
+- [ ] **P45. International league coverage is accepted for now, to be tightened later.**
+  Open, operator decision 2026-08-26: *"I'm fine with news from international leagues. However,
+  we'll tighten that later on."*
+  `[INFERRED]` Recorded so it is a decision rather than an oversight. The feeds are
+  NBA-scoped, so EuroLeague, NBL and FIBA items arrive only when a US outlet covers them,
+  which is roughly the right filter by accident.
+  `[VERIFIED]` It is not hypothetical: a captured batch carried *"On February 25, 2024, at the
+  Ariake Coliseum, Japan defeated China 76-73 during Window 1 of the FIBA qualifiers"*, which
+  the retrospective rule dropped for being about the past rather than for being international.
+  `[UNKNOWN]` What tightening should mean. `[INFERRED]` Once ADR-015's league attribution
+  exists, "NBA" versus "international basketball" is the same routing problem as NBA versus
+  NFL, so this should reuse that mechanism rather than become its own filter.
+
+---
+
 ## LOW — deferred; each requires a trigger condition
 
 - [ ] **L1. NFL sources (`nflreadpy`).** Trigger: NBA path stable across several real runs.
