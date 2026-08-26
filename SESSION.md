@@ -1,6 +1,6 @@
 # SESSION.md — Current Working State
 
-**Last updated:** 2026-08-14
+**Last updated:** 2026-08-26
 **Repository:** https://github.com/AlphaNerdFx/SportWire (public)
 **Next session should begin with:** §10.
 
@@ -18,15 +18,15 @@
 
 | Field | Value |
 |---|---|
-| **Name** | SportWire — NBA news and game-data brief, delivered to Telegram |
-| **Stage** | **Working and running unattended.** Cron delivers every 8 hours. |
-| **Version** | `[VERIFIED]` **v0.1.0**, tagged 2026-08-14, published as a pre-release |
-| **Repo** | Public, MIT, CI green. `[VERIFIED]` 17 issues: 15 open, #6 and #14 closed |
+| **Name** | SportWire, an NBA and NFL news brief delivered to Telegram |
+| **Stage** | **Working and running unattended.** Cron delivers every 8 hours, one brief per league since 2026-08-26. |
+| **Version** | `[VERIFIED]` **v0.4.0** is the latest tag. `git tag` |
+| **Repo** | Public, MIT, CI green. `[VERIFIED]` 7 issues open, `gh issue list` |
 | **Wiki** | `[VERIFIED]` 6 pages. Its links are checked by `make check`; it had drifted for 4 days before that existed |
-| **Tests** | `[VERIFIED]` **192 passed, 1 xfailed** (2026-08-14 `make check`). See §8 |
+| **Tests** | `[VERIFIED]` **466 passed, 1 xfailed** (2026-08-26 `make check`, exit 0). See §8 |
 | **Runtime** | `[VERIFIED]` WSL2 Ubuntu, Python 3.10.12, `.venv` (68 MB, 21 packages) |
-| **Sources** | ESPN, CBS Sports, Yahoo Sports, r/nba (news); balldontlie (games) |
-| **Delivery** | Telegram `@sportwire_news_bot`, three messages, one notification |
+| **Sources** | Basketball: ESPN, CBS Sports, Yahoo Sports, r/nba. Football: ESPN, CBS Sports, Yahoo Sports. Games: balldontlie, basketball only |
+| **Delivery** | Telegram `@sportwire_news_bot`. One brief per league, only the first message rings the phone |
 
 ---
 
@@ -378,69 +378,47 @@ Note especially:
 
 First, tell me the current state without changing anything:
 
-  tail -40 logs/sportwire.log      # runs are DATED from 2026-08-13 onward
-  make check                        # expect 126 passed, 1 xfailed
+  tail -60 logs/sportwire.log
+  make check                        # expect 466 passed, 1 xfailed
   git log --oneline -12
 
-Three things to check in that log specifically, all new since 2026-08-13:
+Two leagues have been live since 2026-08-26, so the log now has two briefs per
+run. Three things to look for:
 
-1. Does "grouping skipped" appear? That is the P9 warning. If it fires in
-   production, the cluster threshold question becomes real and there is finally
-   data to settle it with. If it never fires, say so — that is also an answer.
-2. Count validation outcomes across the DATED runs only. That resolves P4. The
-   measured floor is 11% (2 of 19 attempts) but it mixes code versions. Do not
-   restate 84% under any circumstances.
-3. Did any run produce a 12-story summary? That is the untested case for P2 —
-   the paragraph prompt has only ever been observed on a 7-story, 2-chunk run.
+1. How often each league keeps its prose, counted separately. Football is the
+   new one and the one to watch: its first brief lost all three attempts to
+   false accusations, which P47 and P48 fixed. Basketball is the control. If
+   football falls back much more often than basketball, the cause is a writing
+   style the validator has not met, not the model.
+2. Whether any run took long enough to matter. Two leagues means two rounds of
+   summarising. One measured run took 23 minutes, and 10 of those were a single
+   Ollama read timeout. At 8 hours that is nothing. At the 2-hour interval P42
+   is heading for, it is not.
+3. Whether "Carolina Panthers" still appears in a rejection. That is P49 and it
+   is open, so seeing it is expected rather than a surprise.
 
 Ask me for the latest delivered brief. The log records that a summary passed,
-never its shape, and P2 and P5 both need the text that lands on my phone.
+never its shape.
 
-One decision is waiting, in TASKS.md. Do not pick it silently:
-- P5: validate.py grounds entities, not claims. A sentence built entirely from
-  real names can assert a false relationship and pass — one did, on attempt 1,
-  and reached my phone ("...end of playoff runs for ... Kawhi Leonard", who is
-  active). Four options written out; (c), an entity-pair co-occurrence check,
-  is the recommendation. It is recorded as an xfail in tests/test_validate.py,
-  so it flips to XPASS the moment it is fixed.
+Where the work is, in order:
 
-Then, the remaining #15 work — everything left on SESSION.md §8's original list
-that is NOT in processing/: storage/db.py, config/settings.py, both RSS parsers,
-and the Telegram message splitter.
+- v0.5.0 is nearly closed. What is left is a per-league schedule, which is
+  coupled to the interval choice in P42, and a football community feed, which
+  is blocked by P46: only one Reddit feed can be fetched per run.
+- P49 is open and needs a decision before code. Do not pick it silently.
+
+Two things this project keeps relearning, so do them by default:
 
 **Mutation-test everything you write.** Put the bug back and confirm the suite
-notices. That caught five tests of mine that asserted nothing, and two of those
-diagnoses became real defects (P6, P9). Commit before mutating — a `git checkout`
-restore once wiped an uncommitted fix. And assert the mutation actually applied;
-one silently did not and reported "20 passed", which looks exactly like the
-suite surviving it.
+notices, and assert the mutation actually applied. On 2026-08-26 a mutation
+silently failed to apply and reported green, which looks exactly like the suite
+surviving it. Commit before mutating, and never restore with a destructive git
+verb.
+
+**Measure a validator change before shipping it.** Both fixes that day were
+measured over the live feeds first: P47 changed 0 of 399 source-written names,
+P48 changed 0 of 398 and moved football teams from 16/18 accepted to 17/18. A
+validator change without a number beside it is a guess.
 
 Do not add features unless I ask.
 ```
-
----
-
-## 11. What to resist
-
-`[INFERRED]` Patterns this project has repeatedly fallen into, worth naming:
-
-- **Concluding from one run.** Done twice, wrongly both times — a model declared clean on one
-  sample, then a validator blamed on the model when the bug was mine. `[VERIFIED]` The "84%"
-  pass rate is the same mistake a third time: one sitting of 3/5, restated as fact in several
-  places, against a measured floor of 11%.
-- **Trusting a green test.** `[VERIFIED]` 2026-08-13: five tests written that session asserted
-  nothing, and review caught none of them — only mutation did. A test written from the same
-  reasoning as the code inherits the code's blind spots. Worse, one *mutation* silently failed
-  to apply and reported a green run, which is indistinguishable from the suite surviving it.
-- **Fixing the same symptom twice from different directions.** `[VERIFIED]` Two commits a day
-  apart both fixed "a correct summary was rejected", and the second made the first dead code
-  (P6). Neither had reason to look at the other. Ask what already handles this.
-- **Adding a category without checking what it displaces.** `[VERIFIED]` Three highlight
-  categories added in the M band silently removed "Biggest win" from the brief, because the
-  new category claimed the game first and the old one was not reassigned (P10).
-- **Filtering by cleverer patterns.** Title-based classification of Reddit hit a hard limit;
-  a blacklist missed untagged chatter and a whitelist dropped the biggest story. Bounding
-  volume worked where classification could not.
-- **Adding a source without measuring freshness.** The Athletic looks like a news feed and is
-  an archive — 100 items, oldest 17 days, one within 48 hours.
-- **Believing a green run means a working feature.** Nine bugs say otherwise.
