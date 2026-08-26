@@ -860,3 +860,49 @@ def test_each_league_records_its_own_evidence(
     assert len(recorded) == 2, f"one batch per league, got {recorded}"
     assert any(name.endswith("-nba.json") for name in recorded), recorded
     assert any(name.endswith("-nfl.json") for name in recorded), recorded
+
+
+def test_the_model_is_released_even_when_summarising_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    no_upstream_games: None,
+) -> None:
+    """`[VERIFIED]` 2026-08-27, written because a mutation demanded it.
+
+    Turning the `finally` in `main` into an `else` left all 487 tests green: nothing drove
+    `main` far enough to notice that a summarizer which raised was never asked to hand its
+    memory back. That is the worst case for holding a 4.4 GB model on a machine with 5.3 GB
+    free, because the run that failed is the one still holding it. TASKS.md P36.
+    """
+    import main
+    from processing.summarize import OllamaSummarizer
+
+    released: list[str] = []
+
+    class Exploding(OllamaSummarizer):
+        def summarise(self, *args: object, **kwargs: object) -> str | None:
+            raise RuntimeError("ollama fell over mid-brief")
+
+        def release(self) -> None:
+            released.append(self._model)
+
+    # One model, so `main` takes the plain branch rather than building a ladder.
+    monkeypatch.setenv("OLLAMA_MODEL", "mistral:7b")
+    monkeypatch.setenv("OLLAMA_FIRST_MODEL", "mistral:7b")
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "release.db"))
+    monkeypatch.setenv("EVIDENCE_PATH", str(tmp_path / "evidence"))
+    monkeypatch.setattr(main, "OllamaSummarizer", Exploding)
+    monkeypatch.setattr(
+        main,
+        "fetch_news",
+        lambda feeds: ([_fresh("Doncic drops 40 on the Clippers", source="ESPN")], []),
+    )
+
+    with pytest.raises(RuntimeError):
+        main.main(["--dry-run"])
+    capsys.readouterr()
+
+    assert released == ["mistral:7b"], (
+        "a summarizer that raised is exactly the one still holding the model"
+    )
