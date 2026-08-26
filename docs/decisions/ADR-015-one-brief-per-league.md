@@ -54,8 +54,14 @@ validator did not catch it because a lone capitalised word is never treated as a
 
 `[INFERRED]` Splitting the briefs makes this more visible rather than less. A mixed brief
 would have carried the same sentence and it would have looked less obviously wrong. So the
-decision is still right, and the claim attached to it was too strong. `TASKS.md` P51 holds
-the measurements and the three options, none of which is chosen yet.
+decision is still right, and the claim attached to it was too strong.
+
+`[VERIFIED]` Closed the same day. The validator now checks a team standing on its own against
+the sources, using a list of the 62 NBA and NFL nicknames. It is narrow on purpose: checking
+every lone capitalised word would have flagged "Elsewhere", "Lastly" and "Meanwhile" in both
+briefs of one run to catch a single wrong team, while checking only known teams flagged 0 of
+258 real titles that name one. `TASKS.md` P51 has the rest, including what it will not do for
+a league it has not been told about.
 
 The part that does survive: no separate process, model or instance is required. A second
 Ollama instance would cost memory and would not have prevented this, because the wrong team
