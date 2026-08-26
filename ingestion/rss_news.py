@@ -87,6 +87,9 @@ FEED_LEAGUES: dict[str, str] = {
     "CBS Sports": "NBA",
     "Yahoo Sports": "NBA",
     "r/nba": "NBA",
+    "ESPN NFL": "NFL",
+    "CBS Sports NFL": "NFL",
+    "Yahoo Sports NFL": "NFL",
 }
 
 FEEDS: dict[str, str] = {
@@ -104,6 +107,19 @@ FEEDS: dict[str, str] = {
     # `[VERIFIED]` Reddit rate-limits aggressively -- three requests in ~2s returned two
     # HTTP 429s. One fetch per run is fine; never retry in a loop.
     "r/nba": "https://www.reddit.com/r/nba/.rss",
+    # NFL, added for v0.5.0 under ADR-015. The same three editorial outlets, because a feed
+    # whose shape the adapter already parses is worth more than a new one that needs its own
+    # quirks handled. `[VERIFIED]` 2026-08-26, all three HTTP 200 with items present:
+    # ESPN 27, CBS 36, Yahoo 50. Checked live rather than assumed from the NBA URLs, since
+    # assuming a symmetric endpoint works is exactly what went wrong with `cdn.nba.com`.
+    "ESPN NFL": "https://www.espn.com/espn/rss/nfl/news",
+    "CBS Sports NFL": "https://www.cbssports.com/rss/headlines/nfl/",
+    "Yahoo Sports NFL": "https://sports.yahoo.com/nfl/rss/",
+    # No r/nfl, deliberately. `[VERIFIED]` 2026-08-26 it works alone but returns 429 whenever
+    # r/nba was fetched shortly before, and a 5 second and a 30 second gap both failed the
+    # same way, so Reddit's limit is a per-IP budget over minutes rather than a spacing rule.
+    # One Reddit feed per run is the real ceiling. Task P46 holds the measurements and the
+    # fix, which is authenticating rather than waiting longer.
 }
 
 # Feeds evaluated and rejected, recorded so they are not re-proposed:
