@@ -275,6 +275,18 @@ stability is unknown. If it slips, the line should not slip with it.
 
 ### After 1.0, in this order
 
+- **Hosting stays local until 1.0** (operator decision 2026-08-26). cron and Windows Task
+  Scheduler are the two supported options and both work today. `[VERIFIED]` The choice between
+  them is real rather than cosmetic: cron inside WSL does not run while the machine sleeps,
+  observed 2026-08-26 as an eight-hour gap in `/var/log/syslog` and a missing 08:00 brief.
+- **`v1.3.0` — cloud hosting, cost minimised.** Operator's stated plan for after 1.0.
+  `[UNKNOWN]` Everything about it: provider, shape, and what "minimised" means in numbers.
+  `[INFERRED]` Two things already point at the shape. ADR-014's poll/brief split means the
+  poll is the only part that must run on a schedule, and it is small; and `[VERIFIED]` C1 was
+  written because `stats.nba.com` blocks datacenter ranges, so a cloud host changes which
+  sources are reachable. That needs re-measuring from a cloud IP before anything is chosen,
+  not assumed to work because it works from a laptop.
+
 - **`v1.1.0` — multi-user routing (L8).** Only meaningful once `v0.3.0` and `v0.4.0` exist.
 - **`v2.0.0`** — reserved for a change that breaks how the operator runs it. Nothing currently
   planned qualifies.
