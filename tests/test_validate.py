@@ -1768,3 +1768,46 @@ def test_a_title_running_into_its_own_summary_does_not_hide_an_entity(
     )
 
     assert flagged == [], f"wrongly flagged: {flagged}"
+
+
+def test_a_possessive_headline_does_not_refute_the_team_it_names(
+    make_article: ArticleFactory,
+) -> None:
+    """`[VERIFIED]` 2026-08-26, the first football brief, all three attempts rejected.
+
+    The batch named the Vikings twice and both were possessive, so the only thing indexed
+    under "vikings" was `{jeshaun, jones, vikings}`, which disagrees with `Minnesota Vikings`
+    about everything else. The refutation rule then refused a team the sources plainly named.
+
+    `[INFERRED]` Basketball hid this rather than being free of it: a basketball team usually
+    appears somewhere else in the batch in a plain form, and one agreeing name is enough to
+    acquit.
+    """
+    articles = [
+        make_article("Vikings' Jeshaun Jones suspended three games", league="NFL"),
+        make_article(
+            "Ranking all eight NFL uniforms: Vikings near the top", league="NFL"
+        ),
+    ]
+
+    result = validate_summary("The Minnesota Vikings suspended a receiver.", articles)
+
+    assert result.is_safe, f"wrongly flagged: {result.invented_names}"
+
+
+def test_the_player_in_a_possessive_headline_is_still_indexed(
+    make_article: ArticleFactory,
+) -> None:
+    """The other half: ending the run must not lose the person standing after it.
+
+    `[INFERRED]` Splitting the name is only safe if the player survives as a name of their
+    own. Otherwise the fix would trade a false accusation for a blind spot, and a blend built
+    from that player would have nothing left to refute it.
+    """
+    articles = [
+        make_article("Vikings' Jeshaun Jones suspended three games", league="NFL")
+    ]
+
+    blended = validate_summary("Jeshaun Smith was suspended.", articles)
+
+    assert not blended.is_safe, "a blend on that surname should still be refused"
