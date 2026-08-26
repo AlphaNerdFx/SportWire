@@ -2671,3 +2671,70 @@ Standing items not otherwise listed above:
   `[INFERRED]` Worth noting how this was found. The test was written to check that the new
   NFL vocabulary had not opened a hole. It had not, and it found an older and wider one
   instead. The complement test earns its place here.
+
+- [x] **P48. A possessive headline welded a team to a player and then refuted the team.**
+  Closed 2026-08-26, found by the first football brief falling back to a headline list.
+
+  `[VERIFIED]` The run at 21:06 rejected all three attempts:
+
+  ```
+  attempt 1 rejected (invented names: Cincinnati Bengals)
+  attempt 2 rejected (invented names: Cincinnati Bengals, Minnesota Vikings)
+  attempt 3 rejected (invented names: Cincinnati Bengals, Minnesota Vikings, Carolina Panthers)
+  ```
+
+  All three teams are named by the sources. The cause was ESPN's house style:
+
+  ```
+  Vikings' Jeshaun Jones suspended three games for violating NFL substance abuse policy
+  Panthers' Canales backs Young, defers on deal
+  ```
+
+  The apostrophe is not trailing punctuation, so the capitalised run walked straight through
+  it and indexed one name, `{jeshaun, jones, vikings}`. The refutation rule then read that as
+  an entity keyed on "vikings" that disagrees with `Minnesota Vikings` about everything else,
+  and refused the real team.
+
+  **Fix:** a possessive ends the name it follows, exactly as a comma already did. The player
+  after it survives as a name of their own, so nothing is lost from the index.
+
+  `[INFERRED]` This reads as a football bug and is not one. The construction is just as
+  common in basketball writing. What differs is that a basketball team usually appears
+  somewhere else in the batch in a plain form, and one agreeing same-key name is enough to
+  acquit. "Vikings" appeared twice in that batch and both were possessive.
+
+  `[VERIFIED]` Measured before shipping, over 350 articles from the live feeds and the
+  recorded evidence:
+
+  - Full team names against their own league's batch: NFL **16/18 accepted before, 17/18
+    after**, the gain being `Minnesota Vikings`. NBA unchanged at 6/8.
+  - The 398 names the sources write themselves: **0 changed**, in either direction. Those are
+    already grounded verbatim, so the rule only reaches expanded forms, which is the
+    population it was written for.
+
+  `Cincinnati Bengals`, the first name in that log, was fixed separately by adding "qb" to
+  the competition vocabulary: the batch carried "Bengals QB Joe Burrow" and indexed
+  `{bengals, qb}` as an entity.
+
+- [ ] **P49. "North Carolina" refutes "Carolina Panthers".** Open, found 2026-08-26 while
+  measuring P48.
+
+  `[VERIFIED]` After the possessive fix, one of eighteen NFL teams is still refused:
+
+  ```
+  index['carolina'] = [{'carolina', 'north'}]
+  ```
+
+  Nothing is wrong with that index entry. "North Carolina" is a real proper name, it is two
+  words like `Carolina Panthers`, so the P20 length rule permits it to refute, and it is the
+  only name keyed on "carolina" so there is nothing to acquit.
+
+  `[INFERRED]` This is the key-sharing weakness recorded in P24 rather than a new defect: two
+  unrelated entities share an identifying word and the rule cannot tell them apart. What is
+  new is a case where the collision is between a place and a team named after that place,
+  which will keep happening. Carolina, Washington, and the state names generally.
+
+  Resolve by: deciding whether a source name may refute a summary name when the two share
+  only a *place* word. `[UNKNOWN]` Whether that can be decided without a list of places,
+  which would be another hardcoded vocabulary and needs the same argument P23 had. Do not
+  build it before measuring how many names it would actually change.
