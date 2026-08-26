@@ -296,6 +296,7 @@ def assemble_brief(
         unsupported_claims=unsupported_claims,
         failed_sources=failed_sources,
         max_articles=max_stories,
+        league=league,
     )
 
     # Keep the batch before anything else can go wrong with it. `[VERIFIED]` TASKS.md
