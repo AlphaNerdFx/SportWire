@@ -43,7 +43,11 @@ from processing.highlights import find_notable_games
 from processing.newsworthy import MAX_ARTICLE_AGE_HOURS, drop_non_news
 from processing.openrouter import OpenRouterSummarizer
 from processing.priority import sort_by_priority
-from processing.summarize import OllamaSummarizer, Summarizer
+from processing.summarize import (
+    EscalatingSummarizer,
+    OllamaSummarizer,
+    Summarizer,
+)
 from processing.validate import unsupported_sentences
 from storage.db import SeenStore
 from storage.evidence import record_batch
@@ -221,6 +225,14 @@ def assemble_brief(
                 api_key=settings.openrouter_api_key,
                 model=settings.openrouter_model,
             )
+        elif settings.escalates_model:
+            # Small model first, the big one only when the validator refuses what it wrote.
+            # `[VERIFIED]` 2026-08-27: 7.4 GB of RAM under WSL2 against a 4.4 GB model is
+            # what made the desktop unusable during a run. TASKS.md P55.
+            summarizer = EscalatingSummarizer(
+                first=OllamaSummarizer(model=settings.ollama_first_model),
+                then=OllamaSummarizer(model=settings.ollama_model),
+            )
         else:
             summarizer = OllamaSummarizer(model=settings.ollama_model)
         logger.info(
@@ -236,9 +248,17 @@ def assemble_brief(
         # so "Raptors Reacts:" and "Fire Adam Silver" were indexed as entities and
         # refuted the Raptors and the commissioner. Across 258 articles both words are
         # plainly ordinary.
-        news_summary = summarizer.summarise(
-            to_summarise, max_chars=summary_chars, vocabulary_sample=articles
-        )
+        try:
+            news_summary = summarizer.summarise(
+                to_summarise, max_chars=summary_chars, vocabulary_sample=articles
+            )
+        finally:
+            # Hand the model back as soon as this league is written, rather than leaving it
+            # resident while the brief is formatted and sent. `[VERIFIED]` 2026-08-27: on a
+            # machine with 5.3 GB free and a 4.4 GB model, that residency is what the
+            # operator felt as the desktop stalling. In a `finally` because a summarizer that
+            # raised is exactly the one still holding memory.
+            summarizer.release()
 
         if news_summary is None:
             logger.info("using the headline list")
