@@ -321,3 +321,90 @@ def test_a_dry_run_does_not_purge(
         assert after.seen_article_ids() == {stale.article_id}, (
             "a dry run must not forget anything"
         )
+
+
+# --- ADR-014: fetching and delivering run at different rates ---------------------------------
+
+
+def test_a_fetched_article_comes_back_whole(
+    store: SeenStore, make_article: ArticleFactory
+) -> None:
+    """The point of ADR-014: a brief is assembled from here, so nothing may be lost in transit.
+
+    Every field the pipeline reads has to survive the round trip, and it comes back as a real
+    `NewsArticle` so nothing above the store learns a row shape.
+    """
+    article = make_article(
+        "Cavs deal Schroder for Hornets' Mann",
+        summary="Cleveland moved the guard on Tuesday.",
+        source="ESPN",
+        author="Shams Charania",
+    )
+
+    assert store.record_fetched([article]) == 1
+    [restored] = store.fetched_since(hours=1)
+
+    assert restored.article_id == article.article_id
+    assert restored.title == article.title
+    assert restored.summary == article.summary
+    assert restored.source == article.source
+    assert restored.author == article.author
+    assert restored.published_at == article.published_at
+
+
+def test_a_second_poll_does_not_refresh_the_fetch_time(
+    store: SeenStore, make_article: ArticleFactory
+) -> None:
+    """`[INFERRED]` The behaviour a window query depends on, and the easy thing to get wrong.
+
+    Feeds list an item for days, so it arrives in poll after poll. If each poll updated
+    `fetched_at`, a week-old story would look new forever and never leave the window.
+    """
+    article = make_article("Cavs deal Schroder for Hornets' Mann")
+    store.record_fetched([article])
+
+    assert store.record_fetched([article]) == 0
+    assert len(store.fetched_since(hours=1)) == 1
+
+
+def test_only_the_window_is_returned(
+    store: SeenStore, make_article: ArticleFactory
+) -> None:
+    """A brief covers a period, not the whole archive.
+
+    Backdated directly, because `fetched_at` is set by the store rather than passed in — which
+    is itself the design: it records when *this process* saw the item.
+    """
+    recent = make_article("Fetched just now")
+    old = make_article("Fetched last week")
+    store.record_fetched([recent, old])
+    store._connection.execute(
+        "UPDATE fetched_articles SET fetched_at = ? WHERE article_id = ?",
+        ("2026-08-01T00:00:00+00:00", old.article_id),
+    )
+    store._connection.commit()
+
+    titles = [a.title for a in store.fetched_since(hours=24)]
+
+    assert titles == ["Fetched just now"]
+
+
+def test_fetching_is_not_delivering(
+    store: SeenStore, make_article: ArticleFactory
+) -> None:
+    """Two questions, two tables. `[INFERRED]` Collapsing them would make an article that has
+    been fetched but not yet sent indistinguishable from one already delivered, which is
+    exactly the state ADR-014 creates and depends on.
+    """
+    article = make_article("Cavs deal Schroder for Hornets' Mann")
+
+    store.record_fetched([article])
+
+    assert store.seen_article_ids() == set(), "fetching must not mark it delivered"
+    assert len(store.fetched_since(hours=1)) == 1
+
+
+def test_an_empty_poll_is_not_an_error(store: SeenStore) -> None:
+    """A source can legitimately return nothing, and a poll that found nothing still finishes."""
+    assert store.record_fetched([]) == 0
+    assert store.fetched_since(hours=24) == []
