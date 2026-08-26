@@ -108,3 +108,48 @@ def test_old_records_are_pruned_newest_first(
     remaining = sorted(p.name for p in tmp_path.glob("*.json"))
     assert len(remaining) == 3
     assert "2026-08-10T00-00-00.json" not in remaining, "the oldest must go first"
+
+
+def test_two_batches_in_one_second_do_not_overwrite_each_other(
+    tmp_path: Path, make_article: Callable[..., NewsArticle]
+) -> None:
+    """`[VERIFIED]` 2026-08-26: one run records one batch per league, both within a second.
+
+    The filename is a timestamp to the second, so without the label the football batch lands
+    on the basketball one and the run's evidence is half missing. That is the same class of
+    loss as P38 and P39, which is why it is worth a test rather than a comment.
+    """
+    basketball = record_batch(
+        [make_article("Doncic drops 40")],
+        summary=None,
+        directory=tmp_path,
+        label="NBA",
+    )
+    football = record_batch(
+        [make_article("Mahomes signs an extension")],
+        summary=None,
+        directory=tmp_path,
+        label="NFL",
+    )
+
+    assert basketball != football, "one label per league, so one file per league"
+    assert len(list(tmp_path.glob("*.json"))) == 2
+    assert load_batch(basketball)[0].title == "Doncic drops 40"
+    assert load_batch(football)[0].title == "Mahomes signs an extension"
+
+
+def test_a_recorded_article_keeps_its_league(
+    tmp_path: Path, make_article: Callable[..., NewsArticle]
+) -> None:
+    """Evidence is only reproduction evidence if it round trips.
+
+    `[INFERRED]` The league decides which brief an article belonged to, so a batch that
+    forgot it cannot be replayed against the run that produced it.
+    """
+    path = record_batch(
+        [make_article("Mahomes signs an extension", league="NFL")],
+        summary=None,
+        directory=tmp_path,
+    )
+
+    assert load_batch(path)[0].league == "NFL"
