@@ -1,11 +1,13 @@
 # SportWire — NBA/NFL News & Games Retrieval Assistant
 
-Aggregates NBA and NFL news and game data from multiple sources, deduplicates stories, and
-delivers a periodic brief to a Telegram chat.
+Aggregates NBA and NFL news from multiple sources, deduplicates stories, summarises them and
+delivers a periodic brief to a Telegram chat. Game data is basketball only so far.
 
-**Status: slice 1 working.** `[VERIFIED]` 2026-08-05 — a real three-message brief (scores,
-notable events, news) was delivered to a phone via Telegram, and a repeat run correctly sent
-nothing because deduplication remembered it.
+**Status: running unattended, two leagues.** `[VERIFIED]` 2026-08-05 a real brief reached a
+phone via Telegram, and a repeat run correctly sent nothing because deduplication remembered
+it. `[VERIFIED]` 2026-08-26 each sport gets its own brief: a run produced two messages, 54
+basketball articles and 112 football ones, with neither sport appearing in the other's brief.
+See [`ADR-015`](docs/decisions/ADR-015-one-brief-per-league.md).
 
 A prior prototype is frozen for reference on the `legacy` branch. It never completed a single
 end-to-end run; `docs/AUDIT.md` records the forensic findings that led to this rebuild, and
