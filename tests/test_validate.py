@@ -1034,6 +1034,16 @@ def test_a_conference_the_sources_never_mention_is_not_invented(
         "Summer League",
         "Draft Lottery",
         "All-Defensive Team",
+        # NFL, added 2026-08-26. `[VERIFIED]` Counted in the 113 articles the football feeds
+        # returned that day: NFL 57, preseason 27, Week 15, QB 13, AFC 3, NFC 3, North 4,
+        # South 3.
+        "AFC North",
+        "NFC South",
+        "NFL Preseason",
+        "Week 1",
+        # `[INFERRED]` Same class, rare in an August batch and certain in January.
+        "Super Bowl",
+        "NFLPA",
     ],
 )
 def test_competition_vocabulary_needs_no_source(
@@ -1084,6 +1094,15 @@ def test_vocabulary_does_not_launder_the_name_standing_next_to_it(
         "Houston Rockets",
         "Indiana Pacers",
         "Washington Wizards",
+        # NFL, added 2026-08-26 with the football vocabulary. `[INFERRED]` The reason these
+        # matter more than another basketball name: the new entries include "north", "south"
+        # and "week", which are ordinary English in a way "southeast" is not, so the chance
+        # of one accidentally exempting a team is higher than it was.
+        "Kansas City Chiefs",
+        "Green Bay Packers",
+        "New England Patriots",
+        "Cleveland Browns",
+        "Cincinnati Bengals",
     ],
 )
 def test_a_team_is_never_exempt_from_grounding(
