@@ -27,6 +27,7 @@ import logging
 import sys
 from collections.abc import Iterable
 from datetime import date, datetime, timezone
+from typing import NamedTuple
 
 from config.settings import Settings, SettingsError, brief_size_for
 from delivery.base import DeliveryChannel
@@ -35,7 +36,7 @@ from delivery.stdout import StdoutChannel
 from delivery.telegram import TelegramChannel
 from ingestion.nba_games import BallDontLieGamesAdapter
 from ingestion.rss_news import FEEDS, RssNewsAdapter
-from models.schemas import NewsArticle, SeriesContext
+from models.schemas import GameData, NewsArticle, SeriesContext
 from processing.cluster import group_related, limit_per_source, order_by_relatedness
 from processing.dedup import deduplicate_articles, deduplicate_games
 from processing.highlights import find_notable_games
@@ -118,6 +119,191 @@ def build_story_groups(articles: list[NewsArticle]) -> list[list[NewsArticle]]:
     network. That is the third pipeline-wiring mutant to survive in one day.
     """
     return order_by_relatedness(limit_per_source(group_related(articles)))
+
+
+class Brief(NamedTuple):
+    """One league's assembled brief, plus what must be recorded once it is delivered.
+
+    `[INFERRED]` The two article lists are not the same thing and the difference matters:
+    `messages` is what gets sent, while `fresh_articles` and `fresh_games` are what must be
+    marked as seen, and only after a send succeeds. Returning them together keeps that
+    ordering rule in the caller, where the delivery result is known.
+    """
+
+    messages: list[str]
+    fresh_articles: list[NewsArticle]
+    fresh_games: list[GameData]
+
+
+def assemble_brief(
+    articles: list[NewsArticle],
+    games: list[GameData],
+    *,
+    store: SeenStore,
+    settings: Settings,
+    failed_sources: list[str],
+    no_summary: bool,
+) -> Brief:
+    """Turn one batch of articles into the messages for one brief.
+
+    Everything from dedup to formatting, with no delivery and no early exits, so it can be
+    called once per league (ADR-015). `[INFERRED]` Pulled out of `main` unchanged rather than
+    rewritten, because a behaviour change hidden inside a move is the hardest kind to find
+    later. Sends nothing and records nothing as seen, so calling it twice is safe.
+    """
+    fresh_games = deduplicate_games(games, store.seen_game_hashes())
+    fresh_articles = deduplicate_articles(articles, store.seen_article_ids())
+    logger.info(
+        "after dedup: %d games, %d articles (%d and %d already sent)",
+        len(fresh_games),
+        len(fresh_articles),
+        len(games) - len(fresh_games),
+        len(articles) - len(fresh_articles),
+    )
+
+    # --- summarise -----------------------------------------------------------
+    # Sorted first so the most important news reaches the model first; it will not
+    # reliably reorder on instruction (see processing/priority.py).
+    # Games are passed in so articles naming a team that played rank first. That is what
+    # makes a high-volume community feed usable: tonight's fixtures are an exact filter
+    # the pipeline already has, at no extra cost.
+    fresh_articles = sort_by_priority(fresh_articles, fresh_games)
+
+    story_groups = build_story_groups(fresh_articles)
+
+    # On by default since 2026-08-10. It was off while validation passed 0/3; what
+    # changed is the input, not the model — filtering retrospectives and capping per
+    # source leaves twelve coherent current stories.
+    #
+    # `[UNKNOWN]` The pass rate. An earlier comment here claimed ~84% from a single
+    # sitting of 3/5; `[VERIFIED]` 2026-08-13 the 00:00 run then failed all three
+    # attempts and the 08:00 run passed. Two runs is not a rate either. Do not quote a
+    # number until the soak has counted enough of them.
+    #
+    # The summarizer validates its own output and returns None when nothing passes, so
+    # a fabrication can never reach a phone: the worst case is the headline list.
+    news_summary: str | None = None
+    unsupported_claims: list[str] = []
+
+    # Only what the brief would actually show. `[VERIFIED]` 2026-08-08: summarising
+    # everything fetched meant 16 chunks and 17 model calls, exceeding the timeout and
+    # falling back to the headline list anyway.
+    #
+    # Computed here rather than inside the branch below because the recorded batch is
+    # these leads whether or not a summary was attempted, and a run with `--no-summary`
+    # is exactly the kind that is worth being able to replay.
+    # Both derived from the chosen interval, never set apart (PRD D6, TASKS.md P42).
+    #
+    # `[VERIFIED]` Scaling only the character limit would not work: the story cap binds on
+    # 8 of 22 logged runs at 8 hours, so a longer interval would discard more news and
+    # still write twelve stories. `[INFERRED]` At the default 8 hours these are exactly
+    # today's values, so nothing changes unless the interval does.
+    max_stories, summary_chars = brief_size_for(settings.poll_interval_hours)
+    to_summarise = [group[0] for group in story_groups[:max_stories]]
+
+    if story_groups and not no_summary:
+        # Hosted when a key is configured, local otherwise. `[VERIFIED]` local 7B
+        # fabrication repeats identically across attempts -- "Joe Dumars" invented three
+        # times from one Pistons story -- so retry cannot rescue it and parameter count
+        # is the only remaining lever (ADR-012).
+        summarizer: Summarizer
+        if settings.prefers_hosted_summariser:
+            summarizer = OpenRouterSummarizer(
+                api_key=settings.openrouter_api_key,
+                model=settings.openrouter_model,
+            )
+        else:
+            summarizer = OllamaSummarizer(model=settings.ollama_model)
+        logger.info(
+            "summarising %d stories via %s",
+            len(to_summarise),
+            summarizer.summarizer_name,
+        )
+        # Everything fetched this run is handed over as the vocabulary sample, while
+        # the summary is still validated against `to_summarise` alone.
+        #
+        # `[VERIFIED]` TASKS.md P32: a twelve-story batch is too small a sample of
+        # English. On 2026-08-18 16:00 it never wrote "reacts" or "fire" in lower case,
+        # so "Raptors Reacts:" and "Fire Adam Silver" were indexed as entities and
+        # refuted the Raptors and the commissioner. Across 258 articles both words are
+        # plainly ordinary.
+        news_summary = summarizer.summarise(
+            to_summarise, max_chars=summary_chars, vocabulary_sample=articles
+        )
+
+        if news_summary is None:
+            logger.info("using the headline list")
+        else:
+            # Claims the sources cannot have reported, marked rather than removed.
+            #
+            # `[VERIFIED]` 2026-08-18: the 00:00 brief said Damian Lillard had been traded
+            # from Portland to the Pelicans. He had not; the batch says he is back with
+            # Portland. Every name in the sentence is real and in the batch, so the
+            # summarizer's own validation grounds them all and the brief was delivered.
+            #
+            # This runs *after* acceptance and never changes it. `[VERIFIED]` The operator
+            # chose marking over rejecting, because rejecting that sentence would have
+            # rejected all three attempts and delivered a headline list. TASKS.md P5.
+            unsupported_claims = unsupported_sentences(news_summary, to_summarise)
+            if unsupported_claims:
+                logger.warning(
+                    "%d sentence(s) name entities that never share a source article: %s",
+                    len(unsupported_claims),
+                    " | ".join(unsupported_claims),
+                )
+
+    # --- format ------------------------------------------------------------
+    # Head-to-head comes from what this instance has already recorded, not the API.
+    # `[VERIFIED]` 2026-08-08: the network version cost one request per fixture and
+    # balldontlie's free tier returned 429 from the sixth, so a nine-game slate got
+    # context for four. Every result needed already passes through this process, so the
+    # local answer costs nothing, cannot be rate-limited, and improves the longer
+    # SportWire runs. It is empty for a season this instance has not seen — which is the
+    # honest answer rather than a guess.
+    series = {}
+    for game in fresh_games:
+        home_wins, away_wins, meetings = store.head_to_head(game)
+        if meetings:
+            series[game.game_id] = SeriesContext(
+                game_id=game.game_id,
+                meeting_number=meetings + 1,
+                home_team_prior_wins=home_wins,
+                away_team_prior_wins=away_wins,
+            )
+
+    if fresh_games:
+        logger.info(
+            "season-series context for %d of %d games (from local history)",
+            len(series),
+            len(fresh_games),
+        )
+
+    messages = build_messages(
+        fresh_games,
+        find_notable_games(fresh_games),
+        story_groups,
+        news_summary=news_summary,
+        series=series,
+        unsupported_claims=unsupported_claims,
+        failed_sources=failed_sources,
+        max_articles=max_stories,
+    )
+
+    # Keep the batch before anything else can go wrong with it. `[VERIFIED]` TASKS.md
+    # P38 and P39: this week the reproduction evidence was destroyed twice, once by /tmp
+    # being cleared on shutdown and once by a purge bug, and both times the numbers
+    # measured against it stopped being reproducible. Recording is best-effort and never
+    # raises, because losing a brief to protect its evidence would be an absurd trade.
+    record_batch(
+        to_summarise,
+        summary=news_summary,
+        unsupported_claims=unsupported_claims,
+        failed_sources=failed_sources,
+        directory=settings.evidence_path,
+    )
+    return Brief(
+        messages=messages, fresh_articles=fresh_articles, fresh_games=fresh_games
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -242,156 +428,17 @@ def main(argv: list[str] | None = None) -> int:
             articles = store.fetched_since(settings.dedup_window_hours)
             logger.info("no poll: assembled from %d stored articles", len(articles))
 
-        fresh_games = deduplicate_games(games, store.seen_game_hashes())
-        fresh_articles = deduplicate_articles(articles, store.seen_article_ids())
-        logger.info(
-            "after dedup: %d games, %d articles (%d and %d already sent)",
-            len(fresh_games),
-            len(fresh_articles),
-            len(games) - len(fresh_games),
-            len(articles) - len(fresh_articles),
-        )
-
-        # --- summarise -----------------------------------------------------------
-        # Sorted first so the most important news reaches the model first; it will not
-        # reliably reorder on instruction (see processing/priority.py).
-        # Games are passed in so articles naming a team that played rank first. That is what
-        # makes a high-volume community feed usable: tonight's fixtures are an exact filter
-        # the pipeline already has, at no extra cost.
-        fresh_articles = sort_by_priority(fresh_articles, fresh_games)
-
-        story_groups = build_story_groups(fresh_articles)
-
-        # On by default since 2026-08-10. It was off while validation passed 0/3; what
-        # changed is the input, not the model — filtering retrospectives and capping per
-        # source leaves twelve coherent current stories.
-        #
-        # `[UNKNOWN]` The pass rate. An earlier comment here claimed ~84% from a single
-        # sitting of 3/5; `[VERIFIED]` 2026-08-13 the 00:00 run then failed all three
-        # attempts and the 08:00 run passed. Two runs is not a rate either. Do not quote a
-        # number until the soak has counted enough of them.
-        #
-        # The summarizer validates its own output and returns None when nothing passes, so
-        # a fabrication can never reach a phone: the worst case is the headline list.
-        news_summary: str | None = None
-        unsupported_claims: list[str] = []
-
-        # Only what the brief would actually show. `[VERIFIED]` 2026-08-08: summarising
-        # everything fetched meant 16 chunks and 17 model calls, exceeding the timeout and
-        # falling back to the headline list anyway.
-        #
-        # Computed here rather than inside the branch below because the recorded batch is
-        # these leads whether or not a summary was attempted, and a run with `--no-summary`
-        # is exactly the kind that is worth being able to replay.
-        # Both derived from the chosen interval, never set apart (PRD D6, TASKS.md P42).
-        #
-        # `[VERIFIED]` Scaling only the character limit would not work: the story cap binds on
-        # 8 of 22 logged runs at 8 hours, so a longer interval would discard more news and
-        # still write twelve stories. `[INFERRED]` At the default 8 hours these are exactly
-        # today's values, so nothing changes unless the interval does.
-        max_stories, summary_chars = brief_size_for(settings.poll_interval_hours)
-        to_summarise = [group[0] for group in story_groups[:max_stories]]
-
-        if story_groups and not args.no_summary:
-            # Hosted when a key is configured, local otherwise. `[VERIFIED]` local 7B
-            # fabrication repeats identically across attempts -- "Joe Dumars" invented three
-            # times from one Pistons story -- so retry cannot rescue it and parameter count
-            # is the only remaining lever (ADR-012).
-            summarizer: Summarizer
-            if settings.prefers_hosted_summariser:
-                summarizer = OpenRouterSummarizer(
-                    api_key=settings.openrouter_api_key,
-                    model=settings.openrouter_model,
-                )
-            else:
-                summarizer = OllamaSummarizer(model=settings.ollama_model)
-            logger.info(
-                "summarising %d stories via %s",
-                len(to_summarise),
-                summarizer.summarizer_name,
-            )
-            # Everything fetched this run is handed over as the vocabulary sample, while
-            # the summary is still validated against `to_summarise` alone.
-            #
-            # `[VERIFIED]` TASKS.md P32: a twelve-story batch is too small a sample of
-            # English. On 2026-08-18 16:00 it never wrote "reacts" or "fire" in lower case,
-            # so "Raptors Reacts:" and "Fire Adam Silver" were indexed as entities and
-            # refuted the Raptors and the commissioner. Across 258 articles both words are
-            # plainly ordinary.
-            news_summary = summarizer.summarise(
-                to_summarise, max_chars=summary_chars, vocabulary_sample=articles
-            )
-
-            if news_summary is None:
-                logger.info("using the headline list")
-            else:
-                # Claims the sources cannot have reported, marked rather than removed.
-                #
-                # `[VERIFIED]` 2026-08-18: the 00:00 brief said Damian Lillard had been traded
-                # from Portland to the Pelicans. He had not; the batch says he is back with
-                # Portland. Every name in the sentence is real and in the batch, so the
-                # summarizer's own validation grounds them all and the brief was delivered.
-                #
-                # This runs *after* acceptance and never changes it. `[VERIFIED]` The operator
-                # chose marking over rejecting, because rejecting that sentence would have
-                # rejected all three attempts and delivered a headline list. TASKS.md P5.
-                unsupported_claims = unsupported_sentences(news_summary, to_summarise)
-                if unsupported_claims:
-                    logger.warning(
-                        "%d sentence(s) name entities that never share a source article: %s",
-                        len(unsupported_claims),
-                        " | ".join(unsupported_claims),
-                    )
-
-        # --- format ------------------------------------------------------------
-        # Head-to-head comes from what this instance has already recorded, not the API.
-        # `[VERIFIED]` 2026-08-08: the network version cost one request per fixture and
-        # balldontlie's free tier returned 429 from the sixth, so a nine-game slate got
-        # context for four. Every result needed already passes through this process, so the
-        # local answer costs nothing, cannot be rate-limited, and improves the longer
-        # SportWire runs. It is empty for a season this instance has not seen — which is the
-        # honest answer rather than a guess.
-        series = {}
-        for game in fresh_games:
-            home_wins, away_wins, meetings = store.head_to_head(game)
-            if meetings:
-                series[game.game_id] = SeriesContext(
-                    game_id=game.game_id,
-                    meeting_number=meetings + 1,
-                    home_team_prior_wins=home_wins,
-                    away_team_prior_wins=away_wins,
-                )
-
-        if fresh_games:
-            logger.info(
-                "season-series context for %d of %d games (from local history)",
-                len(series),
-                len(fresh_games),
-            )
-
-        messages = build_messages(
-            fresh_games,
-            find_notable_games(fresh_games),
-            story_groups,
-            news_summary=news_summary,
-            series=series,
-            unsupported_claims=unsupported_claims,
+        brief = assemble_brief(
+            articles,
+            games,
+            store=store,
+            settings=settings,
             failed_sources=failed_sources,
-            max_articles=max_stories,
+            no_summary=args.no_summary,
         )
-
-        # Keep the batch before anything else can go wrong with it. `[VERIFIED]` TASKS.md
-        # P38 and P39: this week the reproduction evidence was destroyed twice, once by /tmp
-        # being cleared on shutdown and once by a purge bug, and both times the numbers
-        # measured against it stopped being reproducible. Recording is best-effort and never
-        # raises, because losing a brief to protect its evidence would be an absurd trade.
-        record_batch(
-            to_summarise,
-            summary=news_summary,
-            unsupported_claims=unsupported_claims,
-            failed_sources=failed_sources,
-            directory=settings.evidence_path,
-        )
+        messages = brief.messages
+        fresh_articles = brief.fresh_articles
+        fresh_games = brief.fresh_games
 
         if not messages:
             logger.info("nothing new to report")
