@@ -2204,10 +2204,19 @@ what each turned into, since several changed shape on contact with real data.
   not because it was football.
   `[INFERRED]` The cause is the feeds, not the pipeline: CBS and Yahoo publish league-wide
   sports RSS, and nothing downstream asks which sport an item is about.
-  `[UNKNOWN]` How often, and what the rule should be. It matters more than it looks, because
-  `ROADMAP.md` v0.5.0 and v0.6.0 add NFL, MLB and NHL, at which point "is this NBA" stops
-  being a filter and becomes **routing**. `[INFERRED]` Worth solving once, in that shape,
-  rather than twice.
+  ~~`[UNKNOWN]` How often~~ **Measured 2026-08-26: rare.** Across 128 live articles from the
+  four NBA-scoped feeds, **1 (0.8%)** reads as another sport, a CBS item pairing an NFL
+  contract story with a list. `[INFERRED]` The feed URLs are league-scoped
+  (`/rss/nba/`, `/nba/rss/`), so the leakage is cross-promotional rather than systematic, and
+  a filter built to catch 0.8% would be more machinery than the problem deserves.
+
+  `[INFERRED]` **The priority is therefore not the filter, it is the routing**, and they are
+  different problems that happen to share a symptom. `ROADMAP.md` v0.5.0 and v0.6.0 add NFL,
+  MLB and NHL, at which point every article needs to be *attributed* to a league so it reaches
+  the right brief. Once that exists, the stray CBS item is handled by the same mechanism at no
+  extra cost, and building a discard rule first would be work thrown away.
+
+  So this stays open but is superseded in practice by the multi-league work. See ADR-015.
 
 - [ ] **P36. Pipeline wiring in `main.py` is invisible to the suite.** Open, and it is a
   pattern rather than a defect. **Recorded 2026-08-18 after it happened three times in a day.**
