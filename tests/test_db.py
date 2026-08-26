@@ -541,3 +541,61 @@ def test_a_default_run_still_polls_and_delivers_in_one_pass(
     with SeenStore(path) as store:
         assert len(store.fetched_since(hours=1)) == 1, "stored"
         assert store.seen_article_ids(), "and delivered"
+
+
+def _backdate(store: SeenStore, article_id: str, hours_ago: float) -> None:
+    """Move one row's fetch time. `fetched_at` is set by the store, which is the design."""
+    when = (datetime.now(timezone.utc) - timedelta(hours=hours_ago)).isoformat()
+    store._connection.execute(
+        "UPDATE fetched_articles SET fetched_at = ? WHERE article_id = ?",
+        (when, article_id),
+    )
+    store._connection.commit()
+
+
+def test_the_arrival_rate_is_measured_over_the_span_actually_observed(
+    store: SeenStore,
+) -> None:
+    """The number a bounded interval choice should be built on (PRD D6, TASKS.md P42).
+
+    Ten articles across ten hours is one an hour, and it must stay one an hour when asked
+    about a week. `[INFERRED]` Dividing by the requested window instead would report 0.06 and
+    make every interval look viable, which is the opposite of useful.
+    """
+    articles = [_fresh(f"Story {index}") for index in range(10)]
+    store.record_fetched(articles)
+    for index, article in enumerate(articles):
+        _backdate(store, article.article_id, hours_ago=index)
+
+    assert store.arrivals_per_hour(over_hours=168) == pytest.approx(10 / 9, rel=0.01)
+
+
+def test_an_empty_store_reports_no_rate_rather_than_guessing(store: SeenStore) -> None:
+    """Zero is the honest answer before polling has run, and it is what a fresh clone sees."""
+    assert store.arrivals_per_hour() == 0.0
+
+
+def test_a_single_article_is_not_a_rate(
+    store: SeenStore, make_article: ArticleFactory
+) -> None:
+    """One observation has no span, so it cannot say how often anything arrives.
+
+    `[INFERRED]` Returning a large number here would be worse than returning nothing: the
+    first poll would suggest news arrives constantly and unlock every short interval.
+    """
+    store.record_fetched([_fresh("The only story so far")])
+
+    assert store.arrivals_per_hour() == 0.0
+
+
+def test_history_outside_the_window_does_not_dilute_the_rate(store: SeenStore) -> None:
+    """Asking about the last day must not average in a quiet fortnight."""
+    recent = [_fresh(f"Recent {index}") for index in range(4)]
+    ancient = _fresh("From long ago")
+    store.record_fetched([*recent, ancient])
+    for index, article in enumerate(recent):
+        _backdate(store, article.article_id, hours_ago=index)
+    _backdate(store, ancient.article_id, hours_ago=500)
+
+    # Four articles across three hours, and the old one is outside the window entirely.
+    assert store.arrivals_per_hour(over_hours=24) == pytest.approx(4 / 3, rel=0.01)
