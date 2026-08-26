@@ -509,6 +509,133 @@ class ValidationResult:
         return "; ".join(parts) or "clean"
 
 
+# Every NBA and NFL team's distinctive one-word name. `[VERIFIED]` 2026-08-26, added for P51:
+# a lone capitalised word is never treated as a name, so nothing checked "Timberwolves" when a
+# football brief said "Ashton Jeanty of the Timberwolves". That word appears 0 times in the
+# twelve football articles it was written from.
+#
+# `[VERIFIED]` The obvious objection is that many of these are ordinary English: Bears, Saints,
+# Heat, Kings, Bills, Giants. Measured across 396 captured articles, exactly **one** of the 62
+# is ever written in lower case by a source, and that one is "lakers". So the collision is
+# theoretical here rather than real, and `ordinary_words` is already the guard against it: a
+# nickname the sources write in lower case is skipped like any other ordinary word.
+#
+# `[INFERRED]` This is a hardcoded list and carries the same cost P23 recorded: it is wrong the
+# day a team is renamed, and it knows nothing about leagues it has not been told about. It
+# earns its place by being checkable against one thing, which is whether the sources named the
+# team. It is kept here rather than in a module of its own because nothing else consumes it
+# yet; when a second caller appears, that is the moment to move it.
+# Capitalised words, taken one at a time. Deliberately not `_PROPER_NAME`: that scanner welds
+# runs together, and what is wanted here is every capitalised token on its own, including the
+# ones sitting inside a longer run.
+_LONE_WORD = re.compile(r"\b[A-Z0-9][A-Za-z0-9]+\b")
+
+_TEAM_NICKNAMES = frozenset(
+    {
+        # NBA
+        "hawks",
+        "celtics",
+        "nets",
+        "hornets",
+        "bulls",
+        "cavaliers",
+        "mavericks",
+        "nuggets",
+        "pistons",
+        "warriors",
+        "rockets",
+        "pacers",
+        "clippers",
+        "lakers",
+        "grizzlies",
+        "heat",
+        "bucks",
+        "timberwolves",
+        "pelicans",
+        "knicks",
+        "thunder",
+        "magic",
+        "76ers",
+        "suns",
+        "blazers",
+        "kings",
+        "spurs",
+        "raptors",
+        "jazz",
+        "wizards",
+        # NFL
+        "cardinals",
+        "falcons",
+        "ravens",
+        "bills",
+        "panthers",
+        "bears",
+        "bengals",
+        "browns",
+        "cowboys",
+        "broncos",
+        "lions",
+        "packers",
+        "texans",
+        "colts",
+        "jaguars",
+        "chiefs",
+        "raiders",
+        "chargers",
+        "rams",
+        "dolphins",
+        "vikings",
+        "patriots",
+        "saints",
+        "giants",
+        "jets",
+        "eagles",
+        "steelers",
+        "49ers",
+        "seahawks",
+        "buccaneers",
+        "titans",
+        "commanders",
+    }
+)
+
+
+def _ungrounded_teams(summary: str, source: str) -> list[str]:
+    """Team names standing alone in `summary` that the sources never mention.
+
+    `_PROPER_NAME` needs two words before it calls something a name, for a good reason: a lone
+    capitalised word is usually a sentence opener, and treating it as a name produced false
+    accusations. `[VERIFIED]` Still true. Lowering that minimum and checking every lone word
+    would have flagged "Elsewhere", "Lastly" and "Meanwhile" in both briefs of one run, to
+    catch a single wrong team.
+
+    So this checks only words already known to be teams. A sentence opener can never be one,
+    which is what makes the narrow rule safe where the general one is not.
+
+    ~~Nicknames the sources write in lower case are skipped, because many are ordinary
+    English.~~ **Removed before shipping, 2026-08-26.** `[VERIFIED]` It could not change a
+    verdict: of the 62 nicknames, exactly one appears in lower case across 396 captured
+    articles, and reading it shows "Luka signs a baby, the lakers visit the maternity ward",
+    which is the team with a missing capital rather than ordinary English. `[INFERRED]` Worse,
+    in the one situation where the guard could act it would suppress a correct flag, because
+    ordinary words are learned from the whole run while grounding is against this brief's own
+    articles. A team absent from those articles is exactly what this is looking for. P6.
+
+    `[INFERRED]` The residual weakness is the reverse and it is real: a source writing "he
+    bears no blame" grounds the Bears, because `_appears` cannot tell the verb from the team.
+    That direction costs a missed fabrication rather than a rejected brief, which is the
+    cheaper way to be wrong here.
+    """
+    flagged: list[str] = []
+    for word in _LONE_WORD.findall(summary):
+        folded = normalise_word(word)
+        if folded not in _TEAM_NICKNAMES:
+            continue
+        if not _appears(folded, source):
+            flagged.append(word)
+    return list(dict.fromkeys(flagged))
+
+
 def validate_summary(
     summary: str,
     articles: list[NewsArticle],
@@ -537,6 +664,15 @@ def validate_summary(
         name
         for name in dict.fromkeys(candidates)
         if name and not _grounded(name, source, source_lower, source_names, ordinary)
+    ]
+
+    # A team named on its own is checked separately, because the name scanner needs two
+    # words and a team nickname is one. See `_ungrounded_teams` for why the narrow rule is
+    # safe where lowering the minimum was not.
+    invented_names += [
+        team
+        for team in _ungrounded_teams(summary, _depossess_text(source_lower))
+        if team not in invented_names
     ]
 
     invented_figures = [
