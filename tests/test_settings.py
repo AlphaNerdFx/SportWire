@@ -29,10 +29,15 @@ from config.settings import (
     DEFAULT_DEDUP_WINDOW_HOURS,
     DEFAULT_OLLAMA_MODEL,
     DEFAULT_POLL_INTERVAL_HOURS,
+    MAX_STORIES_CEILING,
+    POLL_INTERVAL_CHOICES,
     PROJECT_ROOT,
     Settings,
     SettingsError,
+    brief_size_for,
 )
+from delivery.brief import DEFAULT_MAX_ARTICLES
+from processing.summarize import DEFAULT_SUMMARY_CHARS
 
 # Every variable `from_env` reads. Cleared before each test so a value in the operator's real
 # environment cannot make a test pass or fail for reasons that have nothing to do with it.
@@ -292,3 +297,68 @@ def test_an_absolute_evidence_path_is_honoured_as_given(
     settings = Settings.from_env(env_file=tmp_path / "absent.env")
 
     assert settings.evidence_path == elsewhere
+
+
+# --- interval choices and the brief size derived from them -----------------------------------
+
+
+def test_the_reference_interval_produces_todays_brief_unchanged() -> None:
+    """The property that makes this safe to add: 8 hours must change nothing.
+
+    `[INFERRED]` A scaling rule that quietly alters the current brief would be a behaviour
+    change disguised as a feature, and the operator asked for 8 hours to stay the standard.
+    """
+    stories, chars = brief_size_for(8)
+
+    assert (stories, chars) == (DEFAULT_MAX_ARTICLES, DEFAULT_SUMMARY_CHARS)
+
+
+def test_both_the_story_cap_and_the_length_scale_together() -> None:
+    """`[VERIFIED]` TASKS.md P42: the 12-story cap binds on 8 of 22 logged runs at 8 hours.
+
+    Raising only the character limit would leave a 2-day brief discarding roughly 175 of 187
+    articles and still writing twelve stories, so a longer interval would lose more news
+    rather than deliver more.
+    """
+    short_stories, short_chars = brief_size_for(2)
+    long_stories, long_chars = brief_size_for(48)
+
+    assert long_stories > short_stories
+    assert long_chars > short_chars
+
+
+def test_the_brief_grows_more_slowly_than_the_interval() -> None:
+    """`[INFERRED]` Linear scaling makes a 2-day brief six times an 8-hour one, which nobody
+    finishes, and costs proportionally more model time: the 2026-08-26 00:00 run took 10m36s
+    for 12 stories in 3 chunks, and a chunk is added every 5 stories.
+    """
+    eight_hour, _ = brief_size_for(8)
+    two_day, _ = brief_size_for(48)
+
+    assert two_day < eight_hour * 6, "growth must be sublinear"
+
+
+def test_the_story_count_is_capped_however_long_the_interval() -> None:
+    """Past a point a brief stops being read, which is why the cap exists at all."""
+    assert brief_size_for(48)[0] <= MAX_STORIES_CEILING
+    assert brief_size_for(2000)[0] <= MAX_STORIES_CEILING
+
+
+def test_even_the_shortest_interval_yields_a_brief() -> None:
+    """`[INFERRED]` Rounding must never reach zero stories, or the shortest choice would
+    produce a brief that cannot contain anything.
+    """
+    for interval in POLL_INTERVAL_CHOICES:
+        stories, chars = brief_size_for(interval)
+        assert stories >= 1, interval
+        assert chars > 0, interval
+
+
+def test_the_choices_stay_inside_the_measured_band() -> None:
+    """`[VERIFIED]` The bounds are the operator's and the measurement agrees: at roughly 3.9
+    new articles an hour, 30 minutes usually delivers nothing, and 2 days is already past the
+    point where the cap discards most of the batch.
+    """
+    assert min(POLL_INTERVAL_CHOICES) == 2
+    assert max(POLL_INTERVAL_CHOICES) == 48
+    assert list(POLL_INTERVAL_CHOICES) == sorted(POLL_INTERVAL_CHOICES)
