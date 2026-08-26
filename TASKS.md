@@ -2996,3 +2996,55 @@ Standing items not otherwise listed above:
 
   `[UNKNOWN]` Whether the rule costs anything. A brief that refuses to name a team when the
   source names one would be worse, not better, and nothing here has measured that direction.
+
+- [x] **P55. A run made the whole machine unusable, and spent minutes doing it.** Closed
+  2026-08-27, raised by the operator: *"pc spent like 8 minutes processing to just get proses
+  ... whole PC goes down to halt, imagine this on weaker systems."*
+
+  `[VERIFIED]` The measurements that mattered, taken before changing anything:
+
+  ```
+  WSL2 RAM      7.4 GB total, 5.3 GB free, 656 MB of swap already used
+  mistral:7b    4.4 GB          llama3.2:3b   2.0 GB
+  venv          68 MB, 21 packages
+  ```
+
+  `[VERIFIED]` **The packages were not the cost and nothing was removed.** All 21 are
+  `requests`, `pydantic`, `pytest`, `ruff` or a transitive dependency of those. There is no
+  torch and no transformers in this tree. Saying so plainly was worth more than a sweep that
+  would have found nothing.
+
+  Four changes, in order of how much they mattered:
+
+  1. **The map step ran inside the retry loop.** A twelve-article brief chunks into three, so
+     every attempt paid three note calls plus a reduce, and three attempts cost twelve model
+     calls where six would do. The notes are identical each time; only the paragraph differs.
+     Split into `_prepare` once and `_write` per attempt.
+  2. **A model ladder.** `llama3.2:3b` writes; `mistral:7b` is loaded only when the validator
+     refuses what the small model wrote. `[INFERRED]` This is safe rather than a quality
+     gamble precisely because the validator gives an honest signal to escalate on, and the
+     worst case is the behaviour the project already had.
+  3. **The model is handed back when the run ends**, instead of Ollama holding it for five
+     more minutes after a program that runs every eight hours has stopped talking.
+  4. **Generation is bounded** by `num_predict`. The 600 second call that produced the worst
+     run cannot happen against a token ceiling.
+
+  `[VERIFIED]` Measured end to end, both leagues, both delivering prose:
+
+  ```
+  before   183 s, 398 s, 453 s, 490 s observed today, 1381 s at worst
+  after    51 s
+  memory   lowest free 5282 MB, and mistral:7b never loaded at all
+  after    "loaded=none" one second past the end of the run
+  ```
+
+  **One correction inside this task, caught by measuring rather than by reading.** The first
+  version set `keep_alive: 0s`, which reads as "release the model" and actually means "unload
+  after *this request*". So every call reloaded the model. `[VERIFIED]` On `llama3.2:3b` a
+  second call cost **13.8 s** that way against **0.8 s** resident, and the escalation path
+  made it unmissable: `mistral:7b` spent over seven minutes on two chunks and a reduce, work
+  the small model had just finished in fifty. The model now stays resident for the run and is
+  released explicitly at the end.
+
+  `[INFERRED]` The general lesson is the one this repository keeps paying for: an option whose
+  name suggests the intent is not evidence that it does what the name suggests.
