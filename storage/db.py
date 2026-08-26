@@ -282,9 +282,15 @@ class SeenStore:
         ).fetchone()
 
         count, first, last = row
-        if not count or first is None or first == last:
+        if not count:
             return 0.0
 
+        # ~~Also guarded on `first is None or first == last`.~~ **Removed 2026-08-26 before it
+        # shipped, on the P6 rule.** `[VERIFIED]` A mutation deleting both left the whole suite
+        # green, and neither can fire: `fetched_at` is `NOT NULL`, so `first` is None only when
+        # the count is zero, and a single row makes `first == last`, which the `span <= 0`
+        # guard two lines below already catches. Restore them if `fetched_at` ever becomes
+        # nullable.
         span = (
             datetime.fromisoformat(last) - datetime.fromisoformat(first)
         ).total_seconds() / 3600
