@@ -27,6 +27,7 @@ from datetime import datetime
 import pytest
 
 import processing.summarize as summarize_module
+from config.settings import brief_size_for
 from models.schemas import NewsArticle
 from processing.summarize import (
     CHUNK_SIZE,
@@ -298,7 +299,7 @@ class RecordingOllama(OllamaSummarizer):
         super().__init__(**kwargs)  # type: ignore[arg-type]
         self.prompts: list[tuple[str, str]] = []
 
-    def _generate(self, system: str, prompt: str) -> str:
+    def _generate(self, system: str, prompt: str, max_chars: int) -> str:
         self.prompts.append((system, prompt))
         return "- a note"
 
@@ -568,7 +569,7 @@ def test_a_retry_does_not_extract_the_notes_again(
     """
 
     class AlwaysRejected(RecordingOllama):
-        def _generate(self, system: str, prompt: str) -> str:
+        def _generate(self, system: str, prompt: str, max_chars: int) -> str:
             self.prompts.append((system, prompt))
             # A name no source contains, so validation refuses every attempt and the retry
             # loop runs to exhaustion.
@@ -623,7 +624,7 @@ def test_the_model_is_released_and_the_output_is_bounded(
 
     monkeypatch.setattr(summarize_module.requests, "post", fake_post)
 
-    OllamaSummarizer()._generate("system", "prompt")
+    OllamaSummarizer()._generate("system", "prompt", max_chars=1024)
 
     assert sent["keep_alive"] == "2m", "the model must stay resident between calls"
     options = sent["options"]
@@ -764,3 +765,36 @@ def test_the_small_model_is_released_before_the_big_one_loads(
     assert events.index("release:small") < events.index("write:big"), (
         f"the small model must be gone before the big one loads: {events}"
     )
+
+
+@pytest.mark.parametrize("interval_hours", [2, 8, 24, 48])
+def test_the_token_budget_covers_the_brief_it_is_allowed(interval_hours: int) -> None:
+    """`[VERIFIED]` 2026-08-27: the budget was fixed at 409 tokens while the limit scales.
+
+    P42 makes the summary's character limit a function of the poll interval, so a 24 hour
+    interval allows 1792 characters and a 48 hour one 2048. A budget computed once from the
+    default limit truncated both, mid-sentence, and nothing noticed because every test and
+    every run used the eight hour default.
+
+    Every offered interval is checked rather than a couple, since the whole point of the
+    setting is that the operator picks one.
+    """
+    _, summary_chars = brief_size_for(interval_hours)
+    budget = OllamaSummarizer()._token_budget_for(summary_chars)
+
+    # Four characters to the token is the usual rough ratio for English.
+    needed = summary_chars / 4
+
+    assert budget >= needed, (
+        f"{interval_hours}h allows {summary_chars} characters, about {needed:.0f} tokens, "
+        f"but the budget is {budget}"
+    )
+
+
+def test_the_token_budget_is_never_uselessly_small() -> None:
+    """`[INFERRED]` A floor, so a caller passing a tiny limit cannot produce a stub.
+
+    Nothing in the pipeline does that today; the guard is here because `max_chars` is an
+    argument and arguments arrive from places this module cannot see.
+    """
+    assert OllamaSummarizer()._token_budget_for(10) >= 256
