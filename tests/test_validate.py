@@ -1598,19 +1598,23 @@ def test_a_wider_vocabulary_sample_stops_a_label_refuting_a_team(
     The wider sample is where the evidence lives: across 258 captured articles, "reacts" is
     ordinary. Nothing else changes, and in particular the names are still grounded against
     `articles` alone.
+
+    `[VERIFIED]` 2026-08-26 the Raptors half of that run is now fixed twice over, because
+    `_split_at_teams` ends a scanned name at a team nickname and "Raptors Reacts" stops being
+    one name at all. So this uses the *other* rejection from the same run, which no team rule
+    can reach: the post "Fire Adam Silver" is indexed as `{adam, fire, silver}` and refutes
+    the commissioner. Only the vocabulary sample answers that one.
     """
     batch = [
-        make_article(
-            "Raptors Reacts: Which player needs to elevate their game next to Kawhi?"
-        ),
-        make_article("Raptors fans confused about when Kawhi nightmare ends"),
+        make_article("Fire Adam Silver: the case against the commissioner"),
+        make_article("Adam Silver defends the new schedule"),
     ]
 
-    assert not validate_summary("Toronto Raptors have options.", batch).is_safe
+    assert not validate_summary("Commissioner Adam Silver spoke.", batch).is_safe
 
-    wider = [*batch, make_article("The crowd reacts to a late three in Denver")]
+    wider = [*batch, make_article("Sources say the Lakers fire their head coach")]
 
-    result = validate_summary("Toronto Raptors have options.", batch, wider)
+    result = validate_summary("Commissioner Adam Silver spoke.", batch, wider)
 
     assert result.is_safe, f"wrongly flagged: {result.invented_names}"
 
@@ -1933,3 +1937,46 @@ def test_a_lower_case_use_of_a_nickname_grounds_the_team(
     result = validate_summary("The Bears were quiet.", articles)
 
     assert result.is_safe, "a word match grounds the team, meaning is not consulted"
+
+
+def test_a_team_before_a_player_does_not_refute_the_team(
+    make_article: ArticleFactory,
+) -> None:
+    """`[VERIFIED]` 2026-08-26: this refused `New York Giants` against a batch naming them 13 times.
+
+    "Giants WR Calvin Austin III" is a team, a position and a player in one capitalised run.
+    Indexed whole it is an entity keyed on "giants" that disagrees with the real team about
+    everything else. P48 fixed the same shape when an apostrophe separates the two, and the
+    feeds write both forms.
+    """
+    articles = [
+        make_article("Giants WR Calvin Austin III suffers torn ACL", league="NFL"),
+        make_article("Sources: Giants trading OL Ezeudu to Chiefs", league="NFL"),
+    ]
+
+    result = validate_summary("The New York Giants lost a receiver.", articles)
+
+    assert result.is_safe, f"wrongly flagged: {result.invented_names}"
+
+
+def test_splitting_at_a_team_keeps_the_player_indexed(
+    make_article: ArticleFactory,
+) -> None:
+    """The safety half, same as P48's: the person after the team must survive as a name.
+
+    `[INFERRED]` Otherwise the split trades a false accusation for a blind spot, and a blend
+    built on that surname would have nothing left to refute it.
+
+    `[VERIFIED]` The headline here carries no position abbreviation, deliberately. With one,
+    "Giants WR Calvin Austin III", the surviving piece is keyed on "wr" and "iii" rather than
+    on the player, so a blend on the surname is missed. That holds with or without this split,
+    measured both ways, and dropping those words makes blend detection worse rather than
+    better: 446 of 500 before, 442 after. So it is left alone and recorded here.
+    """
+    articles = [
+        make_article("Vikings Jeshaun Jones suspended three games", league="NFL")
+    ]
+
+    result = validate_summary("Jeshaun Smith was suspended.", articles)
+
+    assert not result.is_safe, "a blend on that surname should still be refused"
