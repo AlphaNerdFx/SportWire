@@ -1811,3 +1811,45 @@ def test_the_player_in_a_possessive_headline_is_still_indexed(
     blended = validate_summary("Jeshaun Smith was suspended.", articles)
 
     assert not blended.is_safe, "a blend on that surname should still be refused"
+
+
+def test_an_honour_beside_a_team_does_not_refute_the_team(
+    make_article: ArticleFactory,
+) -> None:
+    """`[VERIFIED]` 2026-08-26: this refused `Cincinnati Bengals` on all three attempts.
+
+    "Bengals All-Pro" was indexed as a name keyed on "bengals", and it was the only one in
+    that batch, so there was nothing to acquit the real team. An honour is a structural term
+    of the sport: it identifies nobody, which is already why grounding exempts it, and it has
+    no business in an index that answers "who else shares this word".
+    """
+    articles = [
+        make_article(
+            "Ja'Marr Chase injury scare: Bengals All-Pro goes down awkwardly",
+            league="NFL",
+        ),
+        make_article("Bengals star Chase 'fine' after knee injury scare", league="NFL"),
+    ]
+
+    result = validate_summary("The Cincinnati Bengals had an injury scare.", articles)
+
+    assert result.is_safe, f"wrongly flagged: {result.invented_names}"
+
+
+def test_dropping_vocabulary_does_not_stop_a_blend_being_caught(
+    make_article: ArticleFactory,
+) -> None:
+    """The safety half. Removing words from the index must not remove its teeth.
+
+    `[VERIFIED]` The blend this rule exists for is `Jayson Brown`, fused from Jayson Tatum and
+    Jaylen Brown, which reached the operator's phone on 2026-08-14. No competition term is
+    involved in it, so no amount of vocabulary filtering should let it through.
+    """
+    articles = [
+        make_article("All-NBA guard Jayson Tatum returns", league="NBA"),
+        make_article("Jaylen Brown named an All-Star again", league="NBA"),
+    ]
+
+    result = validate_summary("Jayson Brown will return in January.", articles)
+
+    assert not result.is_safe, "a blended player name must still be refused"
