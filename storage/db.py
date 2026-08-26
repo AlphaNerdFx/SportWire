@@ -86,7 +86,8 @@ CREATE TABLE IF NOT EXISTS fetched_articles (
     source       TEXT NOT NULL,
     author       TEXT,
     published_at TEXT NOT NULL,
-    fetched_at   TEXT NOT NULL
+    fetched_at   TEXT NOT NULL,
+    league       TEXT NOT NULL DEFAULT 'NBA'
 );
 
 CREATE INDEX IF NOT EXISTS idx_fetched_at ON fetched_articles (fetched_at);
@@ -106,6 +107,7 @@ class SeenStore:
         self._path = Path(database_path)
         self._connection = sqlite3.connect(self._path)
         self._connection.executescript(_SCHEMA)
+        _add_missing_columns(self._connection)
         self._connection.commit()
 
     def close(self) -> None:
@@ -201,8 +203,9 @@ class SeenStore:
         cursor = self._connection.executemany(
             """
             INSERT OR IGNORE INTO fetched_articles
-                (article_id, title, url, summary, source, author, published_at, fetched_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (article_id, title, url, summary, source, author, published_at,
+                 fetched_at, league)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
@@ -214,6 +217,7 @@ class SeenStore:
                     article.author,
                     article.published_at.isoformat(),
                     now,
+                    article.league,
                 )
                 for article in articles
             ],
@@ -221,8 +225,16 @@ class SeenStore:
         self._connection.commit()
         return cursor.rowcount
 
-    def fetched_since(self, hours: float) -> list[NewsArticle]:
+    def fetched_since(
+        self, hours: float, league: str | None = None
+    ) -> list[NewsArticle]:
         """Everything fetched in the last `hours`, newest first, as real articles.
+
+        Pass `league` to get one league's batch. That is the whole mechanism behind ADR-015:
+        a brief is built from a batch that only ever contained one sport, so nothing
+        downstream has to tell the sports apart, and the summarizer cannot blend them
+        because it never sees both. Leaving it `None` returns everything, which is what a
+        single-league install wants and what every caller did before NFL existed.
 
         This is the read half of ADR-014: a brief assembles from here and sends nothing
         upstream, so how often briefs are wanted stops driving how often sources are asked.
@@ -232,14 +244,16 @@ class SeenStore:
         article definitions are why that matters more than the convenience.
         """
         since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+        clause = "" if league is None else " AND league = ?"
+        parameters: tuple[str, ...] = (since,) if league is None else (since, league)
         rows = self._connection.execute(
-            """
-            SELECT article_id, title, url, summary, source, author, published_at
+            f"""
+            SELECT article_id, title, url, summary, source, author, published_at, league
             FROM fetched_articles
-            WHERE fetched_at >= ?
+            WHERE fetched_at >= ?{clause}
             ORDER BY fetched_at DESC, article_id
             """,
-            (since,),
+            parameters,
         ).fetchall()
         return [
             NewsArticle(
@@ -250,6 +264,7 @@ class SeenStore:
                 source=row[4],
                 author=row[5],
                 published_at=datetime.fromisoformat(row[6]),
+                league=row[7],
             )
             for row in rows
         ]
@@ -362,6 +377,35 @@ class SeenStore:
                 away_wins += 1
 
         return home_wins, away_wins, len(rows)
+
+
+def _add_missing_columns(connection: sqlite3.Connection) -> None:
+    """Add columns to tables that already exist. **This is a migration, small as it is.**
+
+    `[VERIFIED]` ADR-014 claimed no migration was needed and was right about the case it
+    described: `CREATE TABLE IF NOT EXISTS` creates a *new* table on the next connect and
+    leaves existing rows alone. It also said the exception out loud — "a migration is only
+    needed when a table that already exists has to change shape" — and adding `league` to
+    `fetched_articles` is exactly that. The schema statement above cannot do it, because the
+    table already exists and `IF NOT EXISTS` makes the whole statement a no-op.
+
+    `[VERIFIED]` `TASKS.md` L4 defers Alembic until "a schema change against a table with real
+    rows". That trigger has **not** fired: `fetched_articles` was created on 2026-08-26 and
+    held 0 rows when this was written, because no scheduled poll had run against it yet. A
+    hand-written `ALTER TABLE` is proportionate; a migration framework for one column would not
+    be.
+
+    Idempotent by inspection rather than by exception handling. `[INFERRED]` Catching the
+    "duplicate column" error would work and would also swallow a genuine failure, and this runs
+    on every single connect.
+    """
+    columns = {
+        row[1] for row in connection.execute("PRAGMA table_info(fetched_articles)")
+    }
+    if columns and "league" not in columns:
+        connection.execute(
+            "ALTER TABLE fetched_articles ADD COLUMN league TEXT NOT NULL DEFAULT 'NBA'"
+        )
 
 
 def _is_final(game: GameData) -> bool:
