@@ -40,6 +40,11 @@ DEFAULT_EVIDENCE_DIR = Path("evidence")
 DEFAULT_KEEP = 120
 
 
+def _slug(label: str) -> str:
+    """Make a label safe to put in a filename."""
+    return "".join(c if c.isalnum() else "-" for c in label).strip("-").lower()
+
+
 def record_batch(
     articles: list[NewsArticle],
     *,
@@ -48,6 +53,7 @@ def record_batch(
     failed_sources: list[str] | None = None,
     directory: Path = DEFAULT_EVIDENCE_DIR,
     keep: int = DEFAULT_KEEP,
+    label: str | None = None,
 ) -> Path | None:
     """Write one run's batch and outcome. Returns the file, or None if nothing was written.
 
@@ -65,11 +71,18 @@ def record_batch(
     try:
         directory.mkdir(parents=True, exist_ok=True)
         recorded_at = datetime.now(timezone.utc)
-        path = directory / f"{recorded_at.strftime('%Y-%m-%dT%H-%M-%S')}.json"
+        # `label` keeps two batches recorded in the same second apart. `[VERIFIED]` One
+        # run now writes one batch per league (ADR-015), and both finish well inside a
+        # second, so without it the second league silently overwrites the first and the
+        # evidence for the run is half missing.
+        stamp = recorded_at.strftime("%Y-%m-%dT%H-%M-%S")
+        suffix = "" if label is None else f"-{_slug(label)}"
+        path = directory / f"{stamp}{suffix}.json"
         path.write_text(
             json.dumps(
                 {
                     "recorded_at": recorded_at.isoformat(),
+                    "label": label,
                     "delivered_prose": summary is not None,
                     "summary": summary,
                     "unsupported_claims": unsupported_claims or [],
