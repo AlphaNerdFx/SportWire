@@ -3048,3 +3048,24 @@ Standing items not otherwise listed above:
 
   `[INFERRED]` The general lesson is the one this repository keeps paying for: an option whose
   name suggests the intent is not evidence that it does what the name suggests.
+
+  **A second defect from the same work, found within the hour and fixed in `v0.5.3`.** The
+  token ceiling was computed once when the summarizer was built, from `DEFAULT_SUMMARY_CHARS`,
+  while the real limit scales with the poll interval (P42):
+
+  ```
+  interval  2h ->  512 chars, ~128 tokens needed, budget 409   fine
+  interval  8h -> 1024 chars, ~256 tokens needed, budget 409   fine
+  interval 24h -> 1792 chars, ~448 tokens needed, budget 409   TRUNCATED
+  interval 48h -> 2048 chars, ~512 tokens needed, budget 409   TRUNCATED
+  ```
+
+  `[INFERRED]` So any interval longer than the default would have cut the paragraph off
+  mid-sentence, and nothing would have caught it, because every test and every run so far used
+  the eight hour default. The budget is now derived from the limit in force for the call.
+
+  `[INFERRED]` Worth noting how it was found. Not by a test and not by a run, but by asking
+  what the new number was actually tied to. A ceiling that is right for today's configuration
+  and wrong for a configuration the project already offers is invisible until someone changes
+  the setting, which here would have been the operator, months later, wondering why long
+  briefs end halfway.
