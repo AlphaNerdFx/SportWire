@@ -1,7 +1,18 @@
 # ADR-014 — Fetch cadence is independent of delivery cadence
 
 **Date:** 2026-08-15
-**Status:** proposed
+**Status:** accepted 2026-08-26, storage half implemented
+
+> `[VERIFIED]` The store now holds fetched articles (`fetched_articles`, `record_fetched`,
+> `fetched_since`) and `storage/db.py`'s docstring is amended as this ADR said it would be.
+> The `[VERIFIED]` claim below that no migration is required held: `executescript` with
+> `CREATE TABLE IF NOT EXISTS` produced the table on the next connect and existing rows were
+> untouched.
+>
+> **Still to do:** the pipeline does not use it yet. `main.py` continues to fetch and deliver
+> in one pass, which is correct behaviour at one brief per 8 hours and stays correct until the
+> interval feature exists. Splitting `main` into a poll and a brief is the remaining half, and
+> it is what v0.4.0 depends on.
 
 ## Surface
 
