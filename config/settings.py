@@ -38,6 +38,15 @@ DEFAULT_POLL_INTERVAL_HOURS = 8
 DEFAULT_DEDUP_WINDOW_HOURS = 168
 DEFAULT_OLLAMA_MODEL = "mistral:7b"
 
+# The model that writes first. `[VERIFIED]` 2026-08-27 the operator's machine has 7.4 GB of
+# RAM under WSL2 with 5.3 GB free, and `mistral:7b` is 4.4 GB, which is what made the desktop
+# unusable during a run. `llama3.2:3b` is 2.0 GB. It writes every brief; `OLLAMA_MODEL` above
+# is loaded only when the validator refuses what it wrote.
+#
+# Set `OLLAMA_FIRST_MODEL` equal to `OLLAMA_MODEL` to turn the escalation off and go straight
+# to the capable model, which is what a machine with room to spare should do.
+DEFAULT_OLLAMA_FIRST_MODEL = "llama3.2:3b"
+
 # Hosted summarisation, used when a key is present. Free tier, open-weight model, 262k
 # context — see processing/openrouter.py and ADR-012.
 DEFAULT_OPENROUTER_MODEL = "google/gemma-4-31b-it:free"
@@ -118,6 +127,7 @@ class Settings:
     poll_interval_hours: int = DEFAULT_POLL_INTERVAL_HOURS
     dedup_window_hours: int = DEFAULT_DEDUP_WINDOW_HOURS
     ollama_model: str = DEFAULT_OLLAMA_MODEL
+    ollama_first_model: str = DEFAULT_OLLAMA_FIRST_MODEL
     openrouter_api_key: str = ""
     openrouter_model: str = DEFAULT_OPENROUTER_MODEL
 
@@ -146,6 +156,9 @@ class Settings:
                 "DEDUP_WINDOW_HOURS", DEFAULT_DEDUP_WINDOW_HOURS
             ),
             ollama_model=_text("OLLAMA_MODEL") or DEFAULT_OLLAMA_MODEL,
+            ollama_first_model=(
+                _text("OLLAMA_FIRST_MODEL") or DEFAULT_OLLAMA_FIRST_MODEL
+            ),
             openrouter_api_key=_text("OPENROUTER_API_KEY"),
             openrouter_model=_text("OPENROUTER_MODEL") or DEFAULT_OPENROUTER_MODEL,
         )
@@ -154,6 +167,11 @@ class Settings:
     def can_fetch_games(self) -> bool:
         """Whether game fetching is configured. False degrades the brief, it does not fail."""
         return bool(self.balldontlie_api_key)
+
+    @property
+    def escalates_model(self) -> bool:
+        """Whether a small model writes first and a bigger one is the fallback."""
+        return self.ollama_first_model != self.ollama_model
 
     @property
     def prefers_hosted_summariser(self) -> bool:
