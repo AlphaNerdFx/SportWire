@@ -30,6 +30,23 @@ story with a list. `[INFERRED]` A content classifier would be a permanent source
 misattribution, in exchange for catching one item in 128 that feed attribution already handles
 by putting it in the NBA brief where its feed said it belonged.
 
+### Why this also fixes cross-sport leakage in the summary
+
+`[VERIFIED]` Operator's point 2026-08-26: a separate model pass per sport prevents one league
+bleeding into another's brief. That falls out of this decision rather than needing anything
+extra, and the reason is worth stating exactly.
+
+`[VERIFIED]` The summariser is **stateless between calls**. `processing/summarize.py` posts to
+Ollama with `options` and a prompt and no `context` field, so nothing carries from one call to
+the next. `[VERIFIED]` That was measured independently when the concurrency hypothesis for
+fabrication was tested and disproved.
+
+`[INFERRED]` So cross-sport leakage can only enter through the **input batch**, never through
+model memory. A per-league brief summarises a per-league batch, which means the model is never
+shown two sports at once and cannot blend them. No separate process, model or instance is
+required — the isolation is the batch, and a second Ollama instance would cost memory while
+changing nothing.
+
 ### What this costs, stated before it is built
 
 `[VERIFIED]` **Model time multiplies.** The 2026-08-26 00:00 run took 10 minutes 36 seconds
