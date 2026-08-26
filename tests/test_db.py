@@ -13,7 +13,7 @@ across connections. The schema is created by `SeenStore` itself, so these also a
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -408,3 +408,102 @@ def test_an_empty_poll_is_not_an_error(store: SeenStore) -> None:
     """A source can legitimately return nothing, and a poll that found nothing still finishes."""
     assert store.record_fetched([]) == 0
     assert store.fetched_since(hours=24) == []
+
+
+def _fresh(title: str, source: str = "ESPN") -> NewsArticle:
+    """An article that is new against the **real** clock.
+
+    `make_article` dates items from `conftest.NOW`, which is fixed at 2026-08-13 so that age
+    is arithmetic rather than a race (P37). These tests drive the real `main`, which reads the
+    real clock, so a fixture-dated article is a fortnight old and `drop_non_news` discards it
+    before the store ever sees it.
+
+    `[INFERRED]` Both conventions are right for their own callers. What matters is not mixing
+    them: use the fixture clock when testing a function that accepts one, and a real timestamp
+    when driving the pipeline end to end.
+    """
+    return NewsArticle(
+        article_id=f"fresh-{abs(hash(title))}",
+        title=title,
+        url="https://example.com/story",
+        summary="",
+        source=source,
+        published_at=datetime.now(timezone.utc) - timedelta(hours=1),
+    )
+
+
+def test_a_poll_stores_without_delivering(
+    tmp_path: Path, make_article: ArticleFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR-014's write half, driven through the real `main`.
+
+    `--poll-only` exists so ingestion can run on a schedule that suits the sources rather than
+    one that suits the reader. It must store what it found and send nothing.
+    """
+    import main
+
+    path = tmp_path / "poll.db"
+    fetched = [_fresh("Cavs deal Schroder for Hornets' Mann")]
+    monkeypatch.setenv("DATABASE_PATH", str(path))
+    monkeypatch.setenv("EVIDENCE_PATH", str(tmp_path / "evidence"))
+    monkeypatch.setattr(main, "fetch_news", lambda feeds: (fetched, []))
+
+    assert main.main(["--poll-only", "--channel", "stdout"]) == 0
+
+    with SeenStore(path) as store:
+        assert len(store.fetched_since(hours=1)) == 1
+        assert store.seen_article_ids() == set(), (
+            "a poll must not mark anything delivered"
+        )
+
+
+def test_a_brief_can_be_assembled_without_contacting_any_source(
+    tmp_path: Path, make_article: ArticleFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR-014's read half, and the reason the whole decision exists.
+
+    `[VERIFIED]` Otherwise upstream requests scale with how often people want news, and
+    `ingestion/rss_news.py` has recorded since 2026-08-09 that Reddit returns 429 to three
+    requests in two seconds.
+
+    `fetch_news` is replaced with something that fails loudly rather than returning empty,
+    because a flag that promises not to touch a source and then touches it is worse than no
+    flag: it is the one that gets scheduled often.
+    """
+    import main
+
+    path = tmp_path / "brief.db"
+    with SeenStore(path) as store:
+        store.record_fetched([_fresh("Cavs deal Schroder for Hornets' Mann")])
+
+    def explode(feeds: object) -> None:
+        raise AssertionError("--no-poll contacted a source")
+
+    monkeypatch.setenv("DATABASE_PATH", str(path))
+    monkeypatch.setenv("EVIDENCE_PATH", str(tmp_path / "evidence"))
+    monkeypatch.setattr(main, "fetch_news", explode)
+
+    assert main.main(["--no-poll", "--channel", "stdout", "--no-summary"]) == 0
+
+
+def test_a_default_run_still_polls_and_delivers_in_one_pass(
+    tmp_path: Path, make_article: ArticleFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`[INFERRED]` The seam must not change behaviour at today's one brief per 8 hours.
+
+    Splitting a pipeline is exactly the kind of change that works in its new modes and quietly
+    breaks the old one, so the unflagged path is asserted rather than assumed.
+    """
+    import main
+
+    path = tmp_path / "both.db"
+    fetched = [_fresh("Cavs deal Schroder for Hornets' Mann")]
+    monkeypatch.setenv("DATABASE_PATH", str(path))
+    monkeypatch.setenv("EVIDENCE_PATH", str(tmp_path / "evidence"))
+    monkeypatch.setattr(main, "fetch_news", lambda feeds: (fetched, []))
+
+    assert main.main(["--channel", "stdout", "--no-summary"]) == 0
+
+    with SeenStore(path) as store:
+        assert len(store.fetched_since(hours=1)) == 1, "stored"
+        assert store.seen_article_ids(), "and delivered"
