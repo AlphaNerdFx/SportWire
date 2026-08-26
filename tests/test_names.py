@@ -204,3 +204,29 @@ def test_grounding_preset_matches_the_shipped_extractor_exactly(
         assert GROUNDING.findall(text) == _PROPER_NAME.findall(text), (
             f"scanner and shipped extractor disagree on {text!r}"
         )
+
+
+def test_a_possessive_ends_the_name_it_follows() -> None:
+    """`[VERIFIED]` 2026-08-26: ESPN's house style welded a team to a player.
+
+    "Panthers' Canales" is two entities, not one called `Panthers Canales`. The welded form
+    is what gave the refutation rule a fake entity keyed on "panthers", which then refused
+    the real `Carolina Panthers` and cost the first football brief its prose.
+    """
+    assert GROUNDING.findall("Vikings' Jeshaun Jones suspended three games") == [
+        "Jeshaun Jones"
+    ]
+    assert GROUNDING.findall("Panthers' Canales backs Young, defers on deal") == []
+
+
+def test_clustering_still_welds_across_a_possessive() -> None:
+    """The flag is off for clustering, and that is deliberate rather than an oversight.
+
+    `[INFERRED]` Changing how stories group is a separate question with its own evidence, and
+    nothing has shown clustering needs this. Pinned so the default is a decision rather than
+    something that drifts the next time the scanner is touched.
+    """
+    assert CLUSTERING.findall("Panthers' Canales backs Young") == [
+        "Panthers' Canales",
+        "Young",
+    ]
