@@ -931,6 +931,35 @@ def normalise_word(token: str) -> str:
     return _depossess(token.strip(_TRAILING_PUNCTUATION).lower())
 
 
+def _split_at_teams(name: str) -> list[str]:
+    """Split a scanned name after each team nickname in it.
+
+    `[VERIFIED]` 2026-08-26. Headlines put a team, a position and a player in one capitalised
+    run: "Giants WR Calvin Austin III suffers torn ACL". Indexed whole, that is one entity
+    keyed on "giants" which disagrees with `New York Giants` about everything else, and it
+    refused the real team. P48 fixed the same construction when an apostrophe separates the
+    two, "Vikings' Jeshaun Jones"; the feeds write both forms and only one was handled.
+
+    A team is where one name ends and the next begins, so the nickname closes the run it is
+    in. `[INFERRED]` This is applied only when indexing the sources, never to the summary
+    being checked: a summary writing "New York Giants" must stay whole, because the whole
+    thing is the claim being validated.
+
+    Returns the pieces of two words or more, which is what the index takes anyway.
+    """
+    pieces: list[str] = []
+    run: list[str] = []
+    for word in name.split():
+        run.append(word)
+        if normalise_word(word) in _TEAM_NICKNAMES:
+            if len(run) >= 2:
+                pieces.append(" ".join(run))
+            run = []
+    if len(run) >= 2:
+        pieces.append(" ".join(run))
+    return pieces
+
+
 def _index_source_names(
     articles: list[NewsArticle],
     vocabulary_sample: list[NewsArticle] | None = None,
@@ -969,7 +998,12 @@ def _index_source_names(
     for article in articles:
         for field in (article.title, article.summary):
             for sentence in _SENTENCE_BREAK.split(field):
-                for name in _PROPER_NAME.findall(sentence):
+                scanned = [
+                    piece
+                    for name in _PROPER_NAME.findall(sentence)
+                    for piece in _split_at_teams(name)
+                ]
+                for name in scanned:
                     # Competition vocabulary is dropped alongside ordinary words, and for
                     # the same reason: this index answers "who else shares this identifying
                     # word", and a structural term of the sport identifies nobody. That is
