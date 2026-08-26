@@ -41,11 +41,25 @@ Ollama with `options` and a prompt and no `context` field, so nothing carries fr
 the next. `[VERIFIED]` That was measured independently when the concurrency hypothesis for
 fabrication was tested and disproved.
 
-`[INFERRED]` So cross-sport leakage can only enter through the **input batch**, never through
+~~`[INFERRED]` So cross-sport leakage can only enter through the **input batch**, never through
 model memory. A per-league brief summarises a per-league batch, which means the model is never
-shown two sports at once and cannot blend them. No separate process, model or instance is
-required — the isolation is the batch, and a second Ollama instance would cost memory while
-changing nothing.
+shown two sports at once and cannot blend them.~~ **Half right, corrected the same day.**
+
+`[VERIFIED]` The batch half holds: the model is never shown two sports at once, and nothing
+carries between calls. What that argument missed is that the model does not need the batch in
+order to name a basketball team. The first football brief that kept its prose said "Ashton
+Jeanty of the Timberwolves", and "Timberwolves" appears **0 times** in those twelve football
+articles. Jeanty is a running back. The team came from the model's own weights, and the
+validator did not catch it because a lone capitalised word is never treated as a name.
+
+`[INFERRED]` Splitting the briefs makes this more visible rather than less. A mixed brief
+would have carried the same sentence and it would have looked less obviously wrong. So the
+decision is still right, and the claim attached to it was too strong. `TASKS.md` P51 holds
+the measurements and the three options, none of which is chosen yet.
+
+The part that does survive: no separate process, model or instance is required. A second
+Ollama instance would cost memory and would not have prevented this, because the wrong team
+came from weights that both instances would share.
 
 ### What this costs, stated before it is built
 
