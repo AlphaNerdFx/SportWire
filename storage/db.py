@@ -4,9 +4,27 @@
 database is a single file that appears on first run; nothing to install, which is what
 keeps the repo clonable by anyone.
 
-Only identifiers are stored, never article text or scores. The store answers exactly one
+~~Only identifiers are stored, never article text or scores. The store answers exactly one
 question — "have I sent this already?" — and storing more than that would invite this
-module to grow into a second source of truth about content.
+module to grow into a second source of truth about content.~~
+
+**Amended 2026-08-26 by ADR-014, which said this sentence would be amended rather than quietly
+left standing.** The store now answers two questions: *"have I sent this already?"* and *"what
+has been fetched recently?"*
+
+`[VERIFIED]` The second exists so that fetching and delivering can run at different rates. Under
+the obvious design a brief triggers a fetch, so upstream requests scale with how often people
+want news — and `ingestion/rss_news.py` has recorded since 2026-08-09 that Reddit returns 429 to
+three requests in two seconds. Holding what was fetched turns "ask again" into a local query.
+
+`[VERIFIED]` The precedent was already here: `game_results` keeps content for exactly this
+reason, eight days earlier, because asking balldontlie for a season series costs one request per
+fixture and its free tier 429s from about the sixth.
+
+`[INFERRED]` The risk the original sentence guards against is duplication of *truth*, two
+modules disagreeing about what an article is. That is contained by `CLAUDE.md` §5 rule 2:
+`models/schemas.py` stays the only definition of `NewsArticle`, and this module persists and
+returns **that** type rather than inventing a row shape the pipeline has to learn.
 """
 
 from __future__ import annotations
@@ -51,6 +69,27 @@ CREATE TABLE IF NOT EXISTS game_results (
 );
 
 CREATE INDEX IF NOT EXISTS idx_results_teams ON game_results (home_team, away_team);
+
+-- Articles as fetched, so a brief can be assembled without going back upstream (ADR-014).
+--
+-- This is the second place the store keeps content, and the first was `game_results` above
+-- for the same reason: a rate-limited network call becomes a local query.
+--
+-- `fetched_at` is when this process saw the article, which is deliberately not
+-- `published_at`. A brief covers "what arrived since the last one", and an outlet backdating
+-- or an item appearing late in a feed should not move it outside that window.
+CREATE TABLE IF NOT EXISTS fetched_articles (
+    article_id   TEXT PRIMARY KEY,
+    title        TEXT NOT NULL,
+    url          TEXT NOT NULL,
+    summary      TEXT NOT NULL,
+    source       TEXT NOT NULL,
+    author       TEXT,
+    published_at TEXT NOT NULL,
+    fetched_at   TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_fetched_at ON fetched_articles (fetched_at);
 """
 
 
@@ -145,6 +184,75 @@ class SeenStore:
 
         self._connection.commit()
         return cursor.rowcount
+
+    def record_fetched(self, articles: Iterable[NewsArticle]) -> int:
+        """Keep what a poll found. Returns how many were newly stored (ADR-014).
+
+        `INSERT OR IGNORE`, so an article seen in two consecutive polls keeps its **first**
+        `fetched_at`. `[INFERRED]` That is the behaviour a window query needs: feeds list an
+        item for days, and refreshing the timestamp on every poll would make a week-old story
+        look new forever and never leave the window.
+
+        Separate from `record_articles`, which marks something **delivered**. One says "this
+        exists", the other says "the operator has seen it", and collapsing them would make a
+        fetched-but-not-yet-sent article indistinguishable from a sent one.
+        """
+        now = _utc_now()
+        cursor = self._connection.executemany(
+            """
+            INSERT OR IGNORE INTO fetched_articles
+                (article_id, title, url, summary, source, author, published_at, fetched_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    article.article_id,
+                    article.title,
+                    article.url,
+                    article.summary,
+                    article.source,
+                    article.author,
+                    article.published_at.isoformat(),
+                    now,
+                )
+                for article in articles
+            ],
+        )
+        self._connection.commit()
+        return cursor.rowcount
+
+    def fetched_since(self, hours: float) -> list[NewsArticle]:
+        """Everything fetched in the last `hours`, newest first, as real articles.
+
+        This is the read half of ADR-014: a brief assembles from here and sends nothing
+        upstream, so how often briefs are wanted stops driving how often sources are asked.
+
+        Returns `NewsArticle` rather than rows, so nothing above this line learns a database
+        shape. `[VERIFIED]` `CLAUDE.md` §5 rule 2 and the legacy repository's four competing
+        article definitions are why that matters more than the convenience.
+        """
+        since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+        rows = self._connection.execute(
+            """
+            SELECT article_id, title, url, summary, source, author, published_at
+            FROM fetched_articles
+            WHERE fetched_at >= ?
+            ORDER BY fetched_at DESC, article_id
+            """,
+            (since,),
+        ).fetchall()
+        return [
+            NewsArticle(
+                article_id=row[0],
+                title=row[1],
+                url=row[2],
+                summary=row[3],
+                source=row[4],
+                author=row[5],
+                published_at=datetime.fromisoformat(row[6]),
+            )
+            for row in rows
+        ]
 
     def purge_delivered_before(self, hours: int) -> int:
         """Forget articles delivered more than `hours` ago. Returns how many rows went.
