@@ -820,3 +820,43 @@ def test_each_league_gets_its_own_brief(
         basketball = "Doncic" in message or "Celtics" in message
         football = "Mahomes" in message or "Packers" in message
         assert basketball != football, f"a brief mixed the two sports:\n{message}"
+
+
+def test_each_league_records_its_own_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    no_upstream_games: None,
+) -> None:
+    """`[VERIFIED]` 2026-08-26: the label reached `record_batch` but never reached `main`.
+
+    The edit that was supposed to pass the league through silently failed to apply, and two
+    runs recorded `label=None` before anyone looked at a filename. Nothing failed, because
+    the filenames were seconds apart and neither overwrote the other, and no test drove
+    `main` as far as the evidence directory. TASKS.md P36 is the standing version of this.
+    """
+    import main
+
+    evidence = tmp_path / "evidence"
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "labels.db"))
+    monkeypatch.setenv("EVIDENCE_PATH", str(evidence))
+    monkeypatch.setattr(
+        main,
+        "fetch_news",
+        lambda feeds: (
+            [
+                _fresh("Doncic drops 40 on the Clippers", source="ESPN", league="NBA"),
+                _fresh("Mahomes signs an extension", source="ESPN NFL", league="NFL"),
+            ],
+            [],
+        ),
+    )
+
+    assert main.main(["--dry-run", "--no-summary"]) == 0
+    capsys.readouterr()
+
+    recorded = sorted(path.name for path in evidence.glob("*.json"))
+
+    assert len(recorded) == 2, f"one batch per league, got {recorded}"
+    assert any(name.endswith("-nba.json") for name in recorded), recorded
+    assert any(name.endswith("-nfl.json") for name in recorded), recorded
