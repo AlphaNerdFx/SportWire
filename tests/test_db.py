@@ -12,6 +12,7 @@ across connections. The schema is created by `SeenStore` itself, so these also a
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -434,7 +435,7 @@ def test_an_empty_poll_is_not_an_error(store: SeenStore) -> None:
     assert store.fetched_since(hours=24) == []
 
 
-def _fresh(title: str, source: str = "ESPN") -> NewsArticle:
+def _fresh(title: str, source: str = "ESPN", league: str = "NBA") -> NewsArticle:
     """An article that is new against the **real** clock.
 
     `make_article` dates items from `conftest.NOW`, which is fixed at 2026-08-13 so that age
@@ -453,6 +454,7 @@ def _fresh(title: str, source: str = "ESPN") -> NewsArticle:
         summary="",
         source=source,
         published_at=datetime.now(timezone.utc) - timedelta(hours=1),
+        league=league,
     )
 
 
@@ -777,3 +779,44 @@ def test_an_existing_database_gains_the_league_column(tmp_path: Path) -> None:
     assert restored.league == "NBA", (
         "everything recorded before NFL existed was basketball"
     )
+
+
+def test_each_league_gets_its_own_brief(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    no_upstream_games: None,
+) -> None:
+    """ADR-015 driven through the real `main`, which is the only place the split happens.
+
+    `[VERIFIED]` TASKS.md P36: wiring in `main` is invisible to the rest of the suite, so
+    every unit below here can pass while the pipeline still hands the summarizer one mixed
+    batch. The assertion that matters is not the message count, it is that no message
+    contains both sports.
+    """
+    import main
+
+    fetched = [
+        _fresh("Doncic drops 40 on the Clippers", source="ESPN", league="NBA"),
+        _fresh(
+            "Celtics waive a training camp guard", source="CBS Sports", league="NBA"
+        ),
+        _fresh("Mahomes signs a contract extension", source="ESPN NFL", league="NFL"),
+        _fresh(
+            "Packers release a veteran lineman", source="CBS Sports NFL", league="NFL"
+        ),
+    ]
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "leagues.db"))
+    monkeypatch.setenv("EVIDENCE_PATH", str(tmp_path / "evidence"))
+    monkeypatch.setattr(main, "fetch_news", lambda feeds: (fetched, []))
+
+    assert main.main(["--dry-run", "--no-summary"]) == 0
+
+    printed = capsys.readouterr().out
+    messages = re.split(r"--- message \d+ of \d+ [^\n]*---", printed)[1:]
+
+    assert len(messages) == 2, f"expected one brief per league, got {len(messages)}"
+    for message in messages:
+        basketball = "Doncic" in message or "Celtics" in message
+        football = "Mahomes" in message or "Packers" in message
+        assert basketball != football, f"a brief mixed the two sports:\n{message}"
