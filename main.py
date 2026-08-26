@@ -35,7 +35,7 @@ from delivery.brief import build_messages
 from delivery.stdout import StdoutChannel
 from delivery.telegram import TelegramChannel
 from ingestion.nba_games import BallDontLieGamesAdapter
-from ingestion.rss_news import FEEDS, RssNewsAdapter
+from ingestion.rss_news import DEFAULT_LEAGUE, FEED_LEAGUES, FEEDS, RssNewsAdapter
 from models.schemas import GameData, NewsArticle, SeriesContext
 from processing.cluster import group_related, limit_per_source, order_by_relatedness
 from processing.dedup import deduplicate_articles, deduplicate_games
@@ -143,6 +143,8 @@ def assemble_brief(
     settings: Settings,
     failed_sources: list[str],
     no_summary: bool,
+    vocabulary: list[NewsArticle] | None = None,
+    league: str | None = None,
 ) -> Brief:
     """Turn one batch of articles into the messages for one brief.
 
@@ -150,7 +152,14 @@ def assemble_brief(
     called once per league (ADR-015). `[INFERRED]` Pulled out of `main` unchanged rather than
     rewritten, because a behaviour change hidden inside a move is the hardest kind to find
     later. Sends nothing and records nothing as seen, so calling it twice is safe.
+
+    `vocabulary` is the wider sample the validator learns ordinary English from, and it is
+    deliberately not the same list as `articles`. `[VERIFIED]` TASKS.md P32: a twelve-story
+    batch is too small a sample, and splitting the run by league makes each batch smaller
+    still, so the sample stays the whole run while the stories stay one sport.
     """
+    if vocabulary is None:
+        vocabulary = articles
     fresh_games = deduplicate_games(games, store.seen_game_hashes())
     fresh_articles = deduplicate_articles(articles, store.seen_article_ids())
     logger.info(
@@ -428,17 +437,44 @@ def main(argv: list[str] | None = None) -> int:
             articles = store.fetched_since(settings.dedup_window_hours)
             logger.info("no poll: assembled from %d stored articles", len(articles))
 
-        brief = assemble_brief(
-            articles,
-            games,
-            store=store,
-            settings=settings,
-            failed_sources=failed_sources,
-            no_summary=args.no_summary,
+        # One brief per league (ADR-015). Grouped from the single window read rather than
+        # queried per league, so the poll, `--no-poll` and `--dry-run` paths all see one
+        # batch and cannot disagree about what the window held.
+        #
+        # `[INFERRED]` This is the whole leakage defence. Nothing downstream tells the sports
+        # apart, and the summarizer is stateless between calls, so keeping them in separate
+        # batches is what stops one brief describing both.
+        leagues = sorted({article.league for article in articles})
+        logger.info(
+            "assembling %d brief(s): %s", len(leagues), ", ".join(leagues) or "none"
         )
-        messages = brief.messages
-        fresh_articles = brief.fresh_articles
-        fresh_games = brief.fresh_games
+
+        messages: list[str] = []
+        fresh_articles: list[NewsArticle] = []
+        fresh_games: list[GameData] = []
+
+        for league in leagues:
+            brief = assemble_brief(
+                [article for article in articles if article.league == league],
+                # Game data is basketball only: balldontlie is the sole games adapter and
+                # `GameData` carries no league because it has never needed one.
+                games if league == "NBA" else [],
+                store=store,
+                settings=settings,
+                # Only the feeds for this league, so an NFL outage is not reported in the
+                # basketball brief, where the reader can do nothing with it.
+                failed_sources=[
+                    name
+                    for name in failed_sources
+                    if FEED_LEAGUES.get(name, DEFAULT_LEAGUE) == league
+                ],
+                no_summary=args.no_summary,
+                vocabulary=articles,
+                league=league,
+            )
+            messages.extend(brief.messages)
+            fresh_articles.extend(brief.fresh_articles)
+            fresh_games.extend(brief.fresh_games)
 
         if not messages:
             logger.info("nothing new to report")
