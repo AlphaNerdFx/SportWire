@@ -150,7 +150,10 @@ def main(argv: list[str] | None = None) -> int:
     # --- fetch -----------------------------------------------------------------
     # Both adapters swallow their own failures and return [], so one dead source
     # shortens the brief rather than ending the run.
-    if not settings.can_fetch_games:
+    if args.no_poll:
+        # balldontlie is a source like any other, and this flag means no source is contacted.
+        games = []
+    elif not settings.can_fetch_games:
         logger.warning("BALL_DONT_LIE_API_KEY is not set; skipping games")
         games = []
     else:
@@ -168,7 +171,13 @@ def main(argv: list[str] | None = None) -> int:
             target_date.isoformat(),
         )
 
-    articles, failed_sources = fetch_news(FEEDS)
+    # `--no-poll` must contact nothing at all, which means skipping the fetch itself rather
+    # than discarding its result. `[INFERRED]` A flag that promises not to touch a source and
+    # then touches it is worse than no flag, because it is the one that gets scheduled often.
+    if args.no_poll:
+        articles, failed_sources = [], []
+    else:
+        articles, failed_sources = fetch_news(FEEDS)
 
     # Remove items that are not reporting at all — highlight clips, retrospectives,
     # discussion threads. `[VERIFIED]` A community feed carries these alongside news and
@@ -201,6 +210,37 @@ def main(argv: list[str] | None = None) -> int:
                 logger.info(
                     "forgot %d articles delivered over %dh ago", purged, forget_after
                 )
+
+        # ADR-014, the seam between polling and delivering.
+        #
+        # The **poll** writes what was just fetched. The **brief** then reads a window out of
+        # the store rather than using the in-memory list, so the two can run at different
+        # rates: `--no-poll` assembles a brief without touching a single upstream source.
+        #
+        # `[VERIFIED]` That matters because otherwise requests scale with how often people
+        # want news, and `ingestion/rss_news.py` has recorded since 2026-08-09 that Reddit
+        # returns 429 to three requests in two seconds.
+        #
+        # `[INFERRED]` Behaviour at today's one-brief-per-8-hours is unchanged: the poll runs
+        # immediately before the read, so the window contains what was just fetched plus
+        # anything earlier that has not yet been delivered. Dedup then removes what was sent.
+        if not args.dry_run and not args.no_poll:
+            stored = store.record_fetched(articles)
+            logger.info(
+                "polled %d articles, %d new to the store", len(articles), stored
+            )
+
+        if args.poll_only:
+            logger.info("poll only: nothing assembled, nothing sent")
+            return 0
+
+        # Read the window rather than trust the fetch. On a dry run nothing was written, so
+        # fall back to what is in hand rather than reporting on an empty store.
+        if not args.dry_run and not args.no_poll:
+            articles = store.fetched_since(settings.dedup_window_hours)
+        elif args.no_poll:
+            articles = store.fetched_since(settings.dedup_window_hours)
+            logger.info("no poll: assembled from %d stored articles", len(articles))
 
         fresh_games = deduplicate_games(games, store.seen_game_hashes())
         fresh_articles = deduplicate_articles(articles, store.seen_article_ids())
@@ -435,6 +475,22 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
             "where to deliver. 'stdout' prints the brief AND records it as delivered, so an "
             "external relay can forward it without re-sending stories; unlike --dry-run, "
             "which records nothing"
+        ),
+    )
+    parser.add_argument(
+        "--poll-only",
+        action="store_true",
+        help=(
+            "fetch and store, then stop. For running ingestion on its own schedule, "
+            "independent of how often a brief is wanted (ADR-014)"
+        ),
+    )
+    parser.add_argument(
+        "--no-poll",
+        action="store_true",
+        help=(
+            "assemble a brief from what is already stored, without contacting any source. "
+            "The other half of --poll-only"
         ),
     )
     parser.add_argument(
