@@ -348,24 +348,27 @@ def test_the_vocabulary_sample_reaches_the_validator(
     forwards the sample, so the widening could have been silently inert in production while
     every unit test of the validator still passed.
 
-    The batch below refuses `Toronto Raptors`, because "Raptors Reacts:" is indexed as a rival
-    entity. One extra article writing "reacts" in lower case is enough to teach the validator
-    that it is an ordinary word, and it can only do so if the sample actually arrives.
-    TASKS.md P32.
+    The batch below refuses `Commissioner Adam Silver`, because the post "Fire Adam Silver" is
+    indexed as a rival entity. One extra article writing "fire" in lower case is enough to
+    teach the validator that it is an ordinary word, and it can only do so if the sample
+    actually arrives. TASKS.md P32.
+
+    `[VERIFIED]` This used the Raptors case until 2026-08-26, when `_split_at_teams` began
+    ending a scanned name at a team nickname, so "Raptors Reacts" stopped being one name and
+    the example stopped demonstrating anything. The commissioner is the other rejection from
+    the same run and no team rule can reach it.
     """
     batch = [
-        make_article(
-            "Raptors Reacts: Which player needs to elevate their game next to Kawhi?"
-        ),
-        make_article("Raptors fans confused about when Kawhi nightmare ends"),
+        make_article("Fire Adam Silver: the case against the commissioner"),
+        make_article("Adam Silver defends the new schedule"),
     ]
-    claim = "Toronto Raptors have options."
+    claim = "Commissioner Adam Silver spoke."
 
     assert StubSummarizer(claim).summarise(batch) is None, (
         "without the wider sample this batch must still refuse the team"
     )
 
-    wider = [*batch, make_article("The crowd reacts to a late three in Denver")]
+    wider = [*batch, make_article("Sources say the Lakers fire their head coach")]
 
     assert StubSummarizer(claim).summarise(batch, vocabulary_sample=wider) == claim
 
