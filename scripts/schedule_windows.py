@@ -24,6 +24,18 @@ import re
 import sys
 from pathlib import Path
 
+# Run directly (`python scripts/schedule_windows.py`), so the project root is not on the path.
+# `[INFERRED]` The alternative is duplicating the interval choices here, and two places holding
+# the same set is how they come to disagree.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from config.settings import (
+    DEFAULT_POLL_INTERVAL_HOURS,
+    POLL_INTERVAL_CHOICES,
+    Settings,
+    SettingsError,
+)
+
 TASK_NAME = "SportWire"
 
 # `/mnt/c/Users/...` -> `C:\Users\...`. WSL mounts each Windows drive under /mnt/<letter>.
@@ -89,8 +101,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--interval-hours",
         type=int,
-        default=8,
-        help="how often to deliver a brief (default: 8, matching the cron entry)",
+        default=None,
+        help=(
+            "how often to deliver a brief. Defaults to POLL_INTERVAL_HOURS from your "
+            "configuration, so the schedule and the brief's size cannot disagree"
+        ),
     )
     parser.add_argument(
         "--task-name",
@@ -99,12 +114,25 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    if args.interval_hours < 1:
-        parser.error("--interval-hours must be at least 1")
+    # Default to the configured interval rather than a second hardcoded 8. `[INFERRED]` Two
+    # places holding the cadence is how a schedule and a brief quietly come to disagree: the
+    # task would fire every 12 hours while the brief was still sized for 8.
+    interval = args.interval_hours
+    if interval is None:
+        try:
+            interval = Settings.from_env().poll_interval_hours
+        except SettingsError:
+            # Configuration may be incomplete on a machine that has not been set up yet, and
+            # printing a scheduler command is exactly what you do *before* that is finished.
+            interval = DEFAULT_POLL_INTERVAL_HOURS
+
+    if interval not in POLL_INTERVAL_CHOICES:
+        offered = ", ".join(str(choice) for choice in POLL_INTERVAL_CHOICES)
+        parser.error(f"--interval-hours must be one of {offered}, got {interval}")
 
     project = Path(__file__).resolve().parent.parent
     try:
-        print(build_command(project, args.interval_hours, args.task_name))
+        print(build_command(project, interval, args.task_name))
     except ValueError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
