@@ -144,6 +144,21 @@ _COMPETITION_VOCABULARY = frozenset(
         "wnba",
         "nbpa",
         "league",
+        # NFL, added 2026-08-26 with the football feeds. Counts are from the 113 articles
+        # those three feeds returned that day, so these are words the validator is already
+        # meeting, not a guess at what football writing contains.
+        "nfl",  # 57
+        "nflpa",  # 0 in that batch, the direct counterpart of nbpa above
+        "afc",  # 3
+        "nfc",  # 3
+        "north",  # 4, as in AFC North. "east" and "west" were already here, "north" and
+        "south",  # 3, "south" were not, because no NBA division is named for them.
+        "week",  # 15, as in Week 1. The unit the football calendar is counted in.
+        "preseason",  # 27, and missing for basketball too: only "postseason" was here
+        "qb",  # 13
+        "qbs",  # 3
+        "super",  # 1, and "bowl" 2. Rare in one August batch and certain in January, the
+        "bowl",  # same reason "semifinals" is listed for basketball.
         # how the league is divided
         "conference",
         "conferences",
@@ -487,6 +502,7 @@ def validate_summary(
     source = comparable(" ".join(f"{a.title} {a.summary}" for a in articles))
     source_lower = source.lower()
     source_names = _index_source_names(articles, vocabulary_sample or articles)
+    ordinary = ordinary_words(vocabulary_sample or articles)
 
     candidates: list[str] = []
     for sentence in _SENTENCE_BREAK.split(summary):
@@ -496,7 +512,7 @@ def validate_summary(
     invented_names = [
         name
         for name in dict.fromkeys(candidates)
-        if name and not _grounded(name, source, source_lower, source_names)
+        if name and not _grounded(name, source, source_lower, source_names, ordinary)
     ]
 
     invented_figures = [
@@ -595,6 +611,7 @@ def _grounded(
     source: str,
     source_lower: str,
     source_names: dict[str, list[frozenset[str]]],
+    ordinary: frozenset[str] = frozenset(),
 ) -> bool:
     """Whether a proper name is traceable to the sources.
 
@@ -666,8 +683,18 @@ def _grounded(
     # `[INFERRED]` This is the mirror of the bug the last-word rule was added to fix. P11
     # fixed `Knicks` written out as `New York Knicks`, where the last word identifies. Here
     # the first word does, and one rule caused both.
-    return _appears(words[-1], normalised_source) or _appears(
-        words[0], normalised_source
+    #
+    # An end only identifies a name when it is not itself ordinary English. `[VERIFIED]`
+    # 2026-08-26: without this, `New England Patriots` is grounded by any source containing
+    # the word "new", and the source used was "LeBron tests new talent with YouTube golf
+    # page". The same held for `New York Knicks` and `New Orleans Pelicans`, so this is
+    # older than the football feeds that surfaced it; no team in the earlier list began with
+    # an ordinary word. `[INFERRED]` It is the generous rule meeting the fact that some
+    # cities are spelled like adjectives, and the cure is the one already used when indexing
+    # source names: a word the sources write in lower case is not evidence of anyone.
+    return any(
+        word not in ordinary and _appears(word, normalised_source)
+        for word in (words[-1], words[0])
     )
 
 
