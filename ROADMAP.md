@@ -119,7 +119,21 @@ Also folds in the small independent defect found alongside it: a rate-limited or
 source currently returns an empty list and vanishes from the brief with only a log line.
 `[VERIFIED]` CBS did exactly that at 16:00, contributing 0 articles after a read timeout.
 
-### → `v0.4.0` — the operator chooses the interval **and the scheduler** **(current)**
+### `v0.4.0` — the operator chooses the interval **and the scheduler** **(done 2026-08-26)**
+
+`[VERIFIED]` Both halves. The scheduler is a real choice with `scripts/schedule_windows.py`
+generating the Windows task, and the interval is a bounded set `(2, 4, 8, 12, 24, 48)` that
+the settings refuse to leave. Brief size derives from whichever is chosen, and at the default
+8 hours it is exactly the brief that shipped before, so nothing changes unless the interval
+does.
+
+`[VERIFIED]` One source of truth for the cadence: the generator reads `POLL_INTERVAL_HOURS`
+rather than holding its own default, so a task cannot fire every 12 hours while the brief is
+still sized for 8.
+
+`[UNKNOWN]` Whether the bounds are right in season. They come from offseason arrival rates of
+roughly 3.9 articles an hour, and `SeenStore.arrivals_per_hour` exists so they can be
+re-derived from what actually arrived rather than re-guessed.
 
 **Done when both the delivery schedule and the thing that triggers it are configuration, not a
 cron line someone edited by hand.**
@@ -172,7 +186,7 @@ work is a small module plus documentation rather than a new architecture.
 plausible prose. It needs its own investigation, and `TASKS.md` L10 already holds the phone
 port as deferred pending a concrete definition.
 
-### `v0.5.0` — NFL
+### → `v0.5.0` — NFL **(current)**
 
 Promoted from after the line to before it on 2026-08-17, see the note under `v1.0.0`.
 `[VERIFIED]` `TASKS.md` records the L1 trigger as already fired, so this is held back by
