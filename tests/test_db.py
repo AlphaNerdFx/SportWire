@@ -12,6 +12,7 @@ across connections. The schema is created by `SeenStore` itself, so these also a
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
@@ -1091,3 +1092,129 @@ def test_a_brief_after_a_missed_run_is_allowed_to_be_longer(
         f"a 24 hour brief showed {shown} stories, no more than the {at_eight_hours} "
         "allowed for 8 hours, so the missed run cost the reader news"
     )
+
+
+# --- P36: wiring in main that no test reached ------------------------------------------------
+
+
+def test_main_builds_the_model_ladder_when_configured(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    no_upstream_games: None,
+) -> None:
+    """`[VERIFIED]` 2026-08-27: measured reach of `main.py` was 82.1%, and this branch was in
+    the missing 17.9% on the day it was written.
+
+    Deleting the whole `elif settings.escalates_model` arm left 533 tests green, so nothing
+    checked that the small model is ever chosen first. That is P36's pattern exactly: the
+    decision sits inline in `main`, where the units below it cannot see it.
+    """
+    import main
+
+    built: list[tuple[str, str]] = []
+
+    class FakeLadder:
+        def __init__(self, first: object, then: object) -> None:
+            built.append((getattr(first, "model", "?"), getattr(then, "model", "?")))
+
+        def summarise(self, *args: object, **kwargs: object) -> str | None:
+            return None
+
+        def release(self) -> None:
+            return None
+
+        @property
+        def summarizer_name(self) -> str:
+            return "fake ladder"
+
+    class FakeOllama:
+        def __init__(self, model: str) -> None:
+            self.model = model
+
+    monkeypatch.setenv("OLLAMA_FIRST_MODEL", "llama3.2:3b")
+    monkeypatch.setenv("OLLAMA_MODEL", "mistral:7b")
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "ladder.db"))
+    monkeypatch.setenv("EVIDENCE_PATH", str(tmp_path / "evidence"))
+    monkeypatch.setattr(main, "EscalatingSummarizer", FakeLadder)
+    monkeypatch.setattr(main, "OllamaSummarizer", FakeOllama)
+    monkeypatch.setattr(
+        main,
+        "fetch_news",
+        lambda feeds: ([_fresh("Doncic drops 40 on the Clippers")], []),
+    )
+
+    assert main.main(["--dry-run"]) == 0
+    capsys.readouterr()
+
+    assert built == [("llama3.2:3b", "mistral:7b")], (
+        f"the small model must be tried first and the capable one second, got {built}"
+    )
+
+
+def test_main_checks_the_accepted_summary_for_unsupported_claims(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    no_upstream_games: None,
+) -> None:
+    """`[VERIFIED]` 2026-08-27: this call was also in the unreached 17.9% of `main.py`.
+
+    It is the check that flagged both errors the operator found by reading a delivered brief,
+    one sentence in each of two briefs, and it is what `--audit` reads back. Deleting the call
+    left the suite green, so nothing noticed if the pipeline simply stopped looking.
+
+    Asserted on the recorded evidence rather than the log, because that is where the result is
+    kept and where anything downstream reads it from.
+    """
+    import main
+    from storage.evidence import load_batch
+
+    evidence = tmp_path / "evidence"
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "claims.db"))
+    monkeypatch.setenv("EVIDENCE_PATH", str(evidence))
+    monkeypatch.setenv("OLLAMA_FIRST_MODEL", "one-model")
+    monkeypatch.setenv("OLLAMA_MODEL", "one-model")
+
+    class Summarizer:
+        def __init__(self, model: str) -> None:
+            self.model = model
+
+        @property
+        def summarizer_name(self) -> str:
+            return "stub"
+
+        def release(self) -> None:
+            return None
+
+        def summarise(self, *args: object, **kwargs: object) -> str:
+            # Both names are in the batch, but never in the same article, which is exactly
+            # the shape the pair check exists to notice. Full names on purpose: the check
+            # treats a lone capitalised word as no entity at all, which a first draft of this
+            # test did not know and discovered by failing.
+            return "Luka Doncic and Patrick Mahomes met on Tuesday."
+
+    monkeypatch.setattr(main, "OllamaSummarizer", Summarizer)
+    monkeypatch.setattr(
+        main,
+        "fetch_news",
+        lambda feeds: (
+            [
+                _fresh("Luka Doncic drops 40 on the Clippers", source="ESPN"),
+                _fresh("Patrick Mahomes signs an extension", source="CBS Sports"),
+            ],
+            [],
+        ),
+    )
+
+    assert main.main(["--dry-run"]) == 0
+    capsys.readouterr()
+
+    recorded = sorted(evidence.glob("*.json"))
+    assert recorded, "the run should have recorded a batch"
+    payload = json.loads(recorded[0].read_text())
+
+    assert payload["unsupported_claims"], (
+        "a sentence whose names never share an article must be recorded as unsupported"
+    )
+    assert load_batch(recorded[0]), "the batch must still round trip"
