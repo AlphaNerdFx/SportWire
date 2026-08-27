@@ -254,22 +254,39 @@ def assemble_brief(
         # fabrication repeats identically across attempts -- "Joe Dumars" invented three
         # times from one Pistons story -- so retry cannot rescue it and parameter count
         # is the only remaining lever (ADR-012).
-        summarizer: Summarizer
-        if settings.prefers_hosted_summariser:
-            summarizer = OpenRouterSummarizer(
-                api_key=settings.openrouter_api_key,
-                model=settings.openrouter_model,
-            )
-        elif settings.escalates_model:
+        # The local ladder is built first and is always the last resort, even when a hosted
+        # model is configured. `[VERIFIED]` 2026-08-27: the operator added an OpenRouter key
+        # and every attempt returned HTTP 429, "temporarily rate-limited upstream ...
+        # upstream_provider_shared_pool", which is the free model's shared pool rather than
+        # anything wrong with the key. Before this, a key meant hosted *instead of* local, so
+        # a throttled pool produced a headline list while a working local model sat idle.
+        #
+        # `[INFERRED]` Falling back to a worse model is plainly better than falling back to no
+        # prose at all, and it costs nothing when the hosted call succeeds.
+        local: Summarizer
+        if settings.escalates_model:
             # Small model first, the big one only when the validator refuses what it wrote.
             # `[VERIFIED]` 2026-08-27: 7.4 GB of RAM under WSL2 against a 4.4 GB model is
             # what made the desktop unusable during a run. TASKS.md P55.
-            summarizer = EscalatingSummarizer(
+            local = EscalatingSummarizer(
                 first=OllamaSummarizer(model=settings.ollama_first_model),
                 then=OllamaSummarizer(model=settings.ollama_model),
             )
         else:
-            summarizer = OllamaSummarizer(model=settings.ollama_model)
+            local = OllamaSummarizer(model=settings.ollama_model)
+
+        summarizer: Summarizer = local
+        if settings.prefers_hosted_summariser:
+            # One attempt hosted, the rest local. `[INFERRED]` A 429 is not fixed by asking
+            # again a second later, so spending more of the budget upstream buys nothing.
+            summarizer = EscalatingSummarizer(
+                first=OpenRouterSummarizer(
+                    api_key=settings.openrouter_api_key,
+                    model=settings.openrouter_model,
+                ),
+                then=local,
+                first_attempts=1,
+            )
         logger.info(
             "summarising %d stories via %s",
             len(to_summarise),
