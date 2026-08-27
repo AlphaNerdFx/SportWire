@@ -24,13 +24,23 @@ Portable, and the right choice if you are publishing or running on a server.
 crontab -e
 ```
 
-Add one line, replacing the path with your own. Every 8 hours, on the hour:
+Add one line, replacing the path with your own. **On a laptop, use this form:**
 
 ```cron
-0 */8 * * * cd "/path/to/SportWire" && ./.venv/bin/python main.py >> /tmp/sportwire.log 2>&1
+*/30 * * * * cd "/path/to/SportWire" && ./.venv/bin/python main.py --if-due >> /tmp/sportwire.log 2>&1
 ```
 
-- `0 */8 * * *` — minute 0, every 8th hour (00:00, 08:00, 16:00)
+- `*/30 * * * *` with `--if-due` — cron wakes the program every half hour and the program
+  decides whether a brief is actually due, from when it last delivered one.
+- `[VERIFIED]` 2026-08-27, and this is why the form changed. The old line was
+  `0 */8 * * *`, minute 0 of every eighth hour, which fires **only if the machine happens to
+  be awake at that exact minute**. On the operator's laptop it slept through both the 08:00
+  and the 16:00 slot in a single day, so no brief arrived at all. Syslog shows cron silent
+  from 03:28 to 10:55 and again from 15:25 to 16:25.
+- `[INFERRED]` `--if-due` costs almost nothing on the wake-ups where nothing is due: it reads
+  one row from the database and exits before contacting any source.
+- On a machine that is always on, `0 */8 * * *` without `--if-due` is still fine and is one
+  fewer moving part.
 - **Use the venv's Python directly.** `cron` has almost no `PATH`; a bare `python` will
   usually not be found, and if it is found it will be the system one without your dependencies.
 - `>> /tmp/sportwire.log 2>&1` — cron mails output by default, which usually goes nowhere.
