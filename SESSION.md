@@ -100,10 +100,16 @@ test assertions while the agent writes only bodies. **The operator reversed this
 
 ## 5. Decisions
 
-`[VERIFIED]` **Only six ADRs exist as files:** 003, 009, 010, 011, 012, 013
-(`ls docs/decisions/`). Decisions 001–008 were taken on 2026-08-03 and recorded **in this
-table only** — the numbering implies files that were never written. Either backfill them or
-stop citing them as documents; do not assume a reader can open one.
+~~`[VERIFIED]` **Only six ADRs exist as files:** 003, 009, 010, 011, 012, 013.~~ **Stale, and
+corrected 2026-08-27.** `[VERIFIED]` `ls docs/decisions/` now lists **nine**: 003, 009, 010,
+011, 012, 013, 014, 015, 016. Decisions 001–008 were taken on 2026-08-03 and recorded **in
+this table only** — the numbering implies files that were never written. Either backfill them
+or stop citing them as documents; do not assume a reader can open one.
+
+`[INFERRED]` The stale count is worth leaving visible rather than quietly editing. A
+`[VERIFIED]` claim with a command beside it went false because three ADRs were added and this
+line was not re-run, which is exactly the decay `OPERATING_RULES.md` §2 warns about: a tag
+records when something was checked, not that it stays true.
 
 | ADR | Decision | File? |
 |---|---|---|
@@ -118,6 +124,9 @@ stop citing them as documents; do not assume a reader can open one.
 | 011 | Slice 1 retrospective | **yes** |
 | 012 | Summarisation: off → **on**, with a validator and retry | **yes** |
 | 013 | OpenClaw may orchestrate SportWire externally, but must never be a dependency | **yes** |
+| 014 | Fetching runs on its own cadence, independent of when briefs are delivered | **yes** |
+| 015 | One brief per league, each on its own schedule | **yes** |
+| 016 | The smallest model that survives validation writes the brief; bigger ones are the fallback | **yes** |
 
 ---
 
