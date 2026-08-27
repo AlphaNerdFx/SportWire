@@ -3069,3 +3069,50 @@ Standing items not otherwise listed above:
   and wrong for a configuration the project already offers is invisible until someone changes
   the setting, which here would have been the operator, months later, wondering why long
   briefs end halfway.
+
+- [ ] **P56. Rankings, mock drafts and forecasts invite the model to invent.** Rule shipped
+  2026-08-27, effect on the fabrication rate not yet measured.
+
+  `[VERIFIED]` The 00:00 cron run delivered **two headline lists**, both leagues, all three
+  attempts each, and it spent eight minutes doing it. The rejected names were not close
+  calls:
+
+  ```
+  NBA  Damian Lillard, Zion Williamson, Slam Dunk Contest, Obi Toppin,
+       Ben Simmons, Brooklyn Nets, James Harden, DeMar DeRozan, San Antonio Spurs
+  NFL  Dalvin Cook, Kirk Cousins, Adrian Peterson, Brandon Scherff,
+       Trent Williams, N'Keal Harry, Jalen Mills
+  ```
+
+  `[VERIFIED]` Checked against the recorded batches: **not one of them appears**. Every
+  rejection was correct, and the model that produced them was `mistral:7b`, not the small one.
+
+  `[INFERRED]` The cause is in the input rather than the model. Four of the twenty-three
+  articles were rankings, forecasts or a mock draft:
+
+  ```
+  2026-27 NBA Summer Forecast: Experts predict MVP, ROY and other major awards
+  CBS Sports NFL roster rankings 2026: Sorting the league's bottom half from 32
+  Reid's preseason 2027 NFL mock draft: Quarterbacks go 1-2-3
+  NFL top 100 of 2026: Where each Detroit Lions player ranked
+  ```
+
+  Each promises content the feed does not carry. "Where each Detroit Lions player ranked"
+  arrives with a summary that ranks nobody. Asked to summarise a list with no list attached, a
+  model completes it from memory, and its memory is several seasons old, which is exactly the
+  shape of the names above.
+
+  **Rule added**, alongside the retrospective phrases and for the same stated reason: a piece
+  with no current facts cannot be summarised, only imagined. `[VERIFIED]` Against those two
+  batches it drops 1 of 11 basketball articles and 3 of 12 football ones, leaving 10 and 9.
+
+  `[VERIFIED]` Deliberately narrow, and the boundary was measured rather than guessed.
+  "grades", "grading" and "preview" were all candidates and all **rejected**: "Giants-Chiefs
+  trade grades" is a real trade being reported with an opinion attached, and dropping it would
+  lose the transaction along with the commentary. The distinction is not whether a piece
+  contains opinion, it is whether anything happened.
+
+  `[UNKNOWN]` Whether this actually lowers the fabrication rate. Removing the articles that
+  most plausibly caused it is a mechanism argument, not a measurement of the outcome, and this
+  project has already paid for treating one as the other (P4). Resolve by counting acceptances
+  per league across the soak, the same instrument P54 is waiting on.
