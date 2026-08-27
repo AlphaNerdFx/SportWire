@@ -3249,3 +3249,36 @@ Standing items not otherwise listed above:
   article factory defaults to the community feed and the existing community rule already
   rejects an untagged question. The poll came from Yahoo, where no such rule applies, so the
   test now says so. A test that passes for the wrong reason is worse than no test.
+
+- [x] **P61. Two plausible clustering changes, both measured and both declined.** Closed
+  2026-08-27. Recorded because the measurements are the useful part, not the outcome.
+
+  **Grouping on a single rare name**, to catch the two Jeanie Buss articles P59 left apart.
+  `[VERIFIED]` Measured over 109 captured articles: 67 pairs would newly join on one shared
+  personal name, and they are not all the same story. The clearest counter-example:
+
+  ```
+  [Thompson]  "Thompson clears waivers, joins Giannis, Heat"
+              "Draymond believes Klay Thompson would have left Warriors if not for ..."
+  ```
+
+  A waiver claim and a Draymond opinion piece are two stories about one player, and merging
+  them means the brief reports one and silently drops the other. `[INFERRED]` The module's
+  existing comment is right and the refinement does not rescue it: restricting the rule to
+  personal names rather than team names removes the "two unrelated Warriors items" case and
+  leaves this one untouched. **Not done.** The Buss duplicate stays.
+
+  **Filtering junk names out of the grouping signal.** `[VERIFIED]` 39 of 265 extracted names
+  are made entirely of words the sources write in lower case: `Where`, `Three`, `Free`,
+  `Week`, `Star`, `Deal`, `Agree`, `Borrowed`, `Latest`, `Odds`, `Will`. Sentence openers and
+  ordinary nouns, treated as identifying names.
+
+  It looks like an obvious defect and it is, but `[VERIFIED]` removing them changes **0 of 85
+  groups** on that corpus. Two articles must share *two* names, and junk names do not coincide
+  in pairs often enough to matter. **Not done, under P6:** a mechanism that cannot change a
+  verdict reads as protection, survives review, and costs a mutation campaign to disprove.
+
+  `[VERIFIED]` One detail worth keeping if this is ever revisited. "Lakers" appears in that
+  junk list, because a Reddit headline wrote it in lower case: "Luka signs a baby, the lakers
+  visit the maternity ward". Any filter of this kind has to exempt known team names, which is
+  the same trap that removed a guard in P51.
