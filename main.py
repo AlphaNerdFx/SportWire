@@ -54,6 +54,12 @@ from storage.evidence import record_batch
 
 logger = logging.getLogger("sportwire")
 
+# How early a brief may be considered due. `[INFERRED]` Without it, a trigger running every
+# half hour delivers at 8h00 the first day, 8h20 the next and so on, because each brief is
+# measured from the previous delivery rather than from a fixed clock. Five minutes is smaller
+# than any interval offered and large enough to stop the drift.
+DUE_TOLERANCE_HOURS = 5 / 60
+
 
 def fetch_news(feed_names: Iterable[str]) -> tuple[list[NewsArticle], list[str]]:
     """Every configured feed in one list, plus the names of the ones that failed.
@@ -81,6 +87,28 @@ def fetch_news(feed_names: Iterable[str]) -> tuple[list[NewsArticle], list[str]]
             failed.append(source_name)
         articles.extend(fetched)
     return articles, failed
+
+
+def brief_is_due(elapsed_hours: float | None, interval_hours: int) -> bool:
+    """Whether enough time has passed since the last delivered brief.
+
+    `[VERIFIED]` 2026-08-27, and the operator confirmed the cause: *"pc was idle so no
+    message"*. Cron fires `0 */8 * * *` only if the machine happens to be awake at that exact
+    minute, and this one suspends. Both the 08:00 and the 16:00 slots were slept through in a
+    single day, so no brief arrived at all: syslog shows cron silent 03:28 to 10:55 and again
+    15:25 to 16:25.
+
+    With `--if-due` the scheduler can run often and this decides, so any wake-up after the
+    brief became due delivers it. `[INFERRED]` That is the standard shape for a machine that
+    sleeps, and it needs no cooperation from Windows, unlike the Task Scheduler route in
+    `docs/SCHEDULING.md`, which solves the same problem the other way.
+
+    A tolerance, because a scheduler firing every half hour would otherwise drift the brief
+    later by up to that much on every cycle, and eight hours would slowly become nine.
+    """
+    if elapsed_hours is None:
+        return True
+    return elapsed_hours >= interval_hours - DUE_TOLERANCE_HOURS
 
 
 def forget_window(dedup_window_hours: int) -> int:
@@ -147,6 +175,7 @@ def assemble_brief(
     settings: Settings,
     failed_sources: list[str],
     no_summary: bool,
+    covering_hours: float,
     vocabulary: list[NewsArticle] | None = None,
     league: str | None = None,
 ) -> Brief:
@@ -211,7 +240,13 @@ def assemble_brief(
     # 8 of 22 logged runs at 8 hours, so a longer interval would discard more news and
     # still write twelve stories. `[INFERRED]` At the default 8 hours these are exactly
     # today's values, so nothing changes unless the interval does.
-    max_stories, summary_chars = brief_size_for(settings.poll_interval_hours)
+    # Sized by the period this brief actually covers, not by the configured interval.
+    # `[VERIFIED]` 2026-08-27: the machine slept through both scheduled runs, so the next
+    # brief spanned sixteen hours and was still sized for eight, twelve stories. Everything
+    # past the cap is recorded as delivered whether or not it was shown, so the extra stories
+    # are not held over, they are gone. `brief_size_for` already bounds the growth, so a very
+    # long gap cannot produce an unreadable brief.
+    max_stories, summary_chars = brief_size_for(round(covering_hours))
     to_summarise = [group[0] for group in story_groups[:max_stories]]
 
     if story_groups and not no_summary:
@@ -391,6 +426,23 @@ def main(argv: list[str] | None = None) -> int:
     # `--no-poll` must contact nothing at all, which means skipping the fetch itself rather
     # than discarding its result. `[INFERRED]` A flag that promises not to touch a source and
     # then touches it is worse than no flag, because it is the one that gets scheduled often.
+    # Asked before anything is fetched, so a scheduler that runs often costs nothing on the
+    # wake-ups where no brief is due.
+    with SeenStore(settings.database_path) as store:
+        elapsed_hours = store.hours_since_last_delivery()
+
+    if args.if_due and not brief_is_due(elapsed_hours, settings.poll_interval_hours):
+        logger.info(
+            "not due: %.1fh since the last brief, interval is %dh",
+            elapsed_hours or 0.0,
+            settings.poll_interval_hours,
+        )
+        return 0
+
+    # What this brief covers: the real gap when there was one, the configured interval
+    # otherwise. Never less than the interval, so a run triggered early is not shortchanged.
+    covering_hours = max(float(settings.poll_interval_hours), elapsed_hours or 0.0)
+
     if args.no_poll:
         articles, failed_sources = [], []
     else:
@@ -491,6 +543,7 @@ def main(argv: list[str] | None = None) -> int:
                     if FEED_LEAGUES.get(name, DEFAULT_LEAGUE) == league
                 ],
                 no_summary=args.no_summary,
+                covering_hours=covering_hours,
                 vocabulary=articles,
                 league=league,
             )
@@ -604,6 +657,15 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         help=(
             "assemble a brief from what is already stored, without contacting any source. "
             "The other half of --poll-only"
+        ),
+    )
+    parser.add_argument(
+        "--if-due",
+        action="store_true",
+        help=(
+            "do nothing unless a brief is actually due. Lets the scheduler run often and "
+            "leaves the timing to this program, so a machine that was asleep at the exact "
+            "minute still gets its brief on the next wake-up"
         ),
     )
     parser.add_argument(
