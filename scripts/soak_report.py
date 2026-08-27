@@ -116,6 +116,62 @@ def report(batches: list[dict[str, object]], unreadable: int) -> str:
     return "\n".join(lines)
 
 
+def audit(batches: list[dict[str, object]]) -> str:
+    """The most recent brief for each league, beside what the checker doubted about it.
+
+    `[VERIFIED]` 2026-08-27 the operator read a delivered brief and asked whether the football
+    news was invented. Two of its seven claims were: it said Watson had *visited* Jim Brown's
+    statue when someone had taped signs on it criticising him, and it merged a separate
+    training-camp skirmish into a team-mate's injury story.
+
+    The pipeline had already noticed. The entity-pair check flagged exactly that sentence, the
+    only one it flagged in the whole brief, and the flag went into the log and the evidence
+    file and nowhere the reader would see it, because the operator asked for the warning to be
+    taken out of the brief itself. `[INFERRED]` That instruction was about the brief, not about
+    the evidence, so this shows the same information on request instead of unasked.
+
+    A flagged sentence is a prompt to check, not a verdict. It means the entities in it never
+    appear together in any single source article, which is what an invented relationship looks
+    like and also what a correct summary of two related items looks like.
+    """
+    latest: dict[str, dict[str, object]] = {}
+    for batch in batches:
+        if not batch.get("summary"):
+            continue
+        latest[str(batch.get("label") or "unlabelled")] = batch
+
+    if not latest:
+        return "No brief with prose recorded yet."
+
+    lines: list[str] = []
+    for league in sorted(latest):
+        batch = latest[league]
+        articles = batch.get("articles")
+        count = len(articles) if isinstance(articles, list) else 0
+        lines.append(
+            f"=== {league} · {str(batch.get('recorded_at'))[:16]} · from {count} articles"
+        )
+        lines.append("")
+        lines.append(str(batch.get("summary")))
+        lines.append("")
+        flagged = batch.get("unsupported_claims") or []
+        if isinstance(flagged, list) and flagged:
+            lines.append("Sentences whose names never share a source article:")
+            for claim in flagged:
+                lines.append(f"  ? {claim}")
+        else:
+            lines.append(
+                "Nothing flagged: every sentence's names co-occur in some article."
+            )
+        lines.append("")
+        lines.append("Built from:")
+        if isinstance(articles, list):
+            for article in articles:
+                lines.append(f"  - {str(article.get('title'))[:92]}")
+        lines.append("")
+    return "\n".join(lines)
+
+
 def main(argv: list[str] | None = None) -> int:
     """Print the report. Always succeeds: this describes, it does not judge."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -125,6 +181,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--evidence", type=Path, default=None, help="override the evidence directory"
     )
+    parser.add_argument(
+        "--audit",
+        action="store_true",
+        help=(
+            "show the latest brief per league beside the sentences the checker doubted "
+            "and the headlines it was built from, for reading against the sources"
+        ),
+    )
     args = parser.parse_args(argv)
 
     directory = args.evidence or Settings.from_env().evidence_path
@@ -133,7 +197,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     batches, unreadable = read_batches(directory)
-    print(report(within(batches, args.days), unreadable))
+    selected = within(batches, args.days)
+    print(audit(selected) if args.audit else report(selected, unreadable))
     return 0
 
 
