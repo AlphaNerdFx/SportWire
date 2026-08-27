@@ -2236,8 +2236,35 @@ what each turned into, since several changed shape on contact with real data.
   `[INFERRED]` Extracting a function per defect works but is reactive, and the next inline
   step will be just as invisible. The question worth answering is whether `main.run` should be
   a sequence of named, individually testable steps by construction.
-  `[UNKNOWN]` Whether that is worth the churn. Resolve by counting how much of `main` is
-  currently unreachable from the suite before restructuring anything.
+  ~~`[UNKNOWN]` Whether that is worth the churn.~~ **Counted 2026-08-27, and the answer is
+  no.** `[VERIFIED]` Measured by tracing `main.py` through a full suite run: **238 of 290
+  executable lines reached, 82.1%**. Restructuring `main` into named steps by construction
+  would be churn against an 18% gap, most of which cannot be reached by any restructuring.
+
+  `[VERIFIED]` What the 52 unreached lines actually are:
+
+  ```
+  OpenRouterSummarizer construction     needs a hosted key
+  TelegramChannel construction          the real send path
+  head_to_head / series context         needs games; offseason has none
+  logging.basicConfig, one warning      startup and an error branch
+  EscalatingSummarizer construction     ordinary code, now tested
+  unsupported_sentences call            ordinary code, now tested
+  ```
+
+  `[INFERRED]` Two thirds of the gap is the boundary with something external, which is where
+  a test should stop anyway. The other two were ordinary decisions sitting inline, exactly
+  P36's pattern, and both got a test rather than a refactor: deleting the ladder branch or the
+  pair-check call left all 533 tests green beforehand.
+
+  **So the pattern is real and the proposed cure is not.** `[INFERRED]` The working answer is
+  the measurement itself: re-run the trace after adding a step to `main`, and if the new lines
+  are unreached, decide then whether they are boundary code or a decision that needs pinning.
+
+  `[UNKNOWN]` One distinction still uncovered: the pair check runs against `to_summarise`
+  rather than the wider `articles`, and swapping them survives mutation because no test has a
+  batch where the two differ. Checking against the wider set would make the check more
+  permissive, so it is worth its own test if anyone touches that line.
 
 ---
 
