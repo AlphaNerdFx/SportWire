@@ -14,6 +14,8 @@ import json
 from collections.abc import Callable
 from pathlib import Path
 
+import pytest
+
 from models.schemas import NewsArticle
 from storage.evidence import load_batch, record_batch
 
@@ -153,3 +155,50 @@ def test_a_recorded_article_keeps_its_league(
     )
 
     assert load_batch(path)[0].league == "NFL"
+
+
+def test_an_interrupted_write_leaves_no_broken_file(
+    tmp_path: Path,
+    make_article: Callable[..., NewsArticle],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`[VERIFIED]` 2026-08-27: a run killed mid-write left a 0 byte `.json` in `evidence/`.
+
+    Every reader of that directory then died on it rather than skipping it, which is the
+    opposite of what an evidence store is for. It exists to be trustworthy after something has
+    gone wrong, and a run that was killed is exactly the case it is meant to record.
+
+    Written to a neighbouring file and renamed, so a reader sees the finished file or nothing.
+    """
+    original = Path.write_text
+
+    def fail_halfway(self: Path, *args: object, **kwargs: object) -> int:
+        if self.suffix == ".partial":
+            original(self, "{ truncated", encoding="utf-8")
+            raise OSError("killed mid-write")
+        return original(self, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(Path, "write_text", fail_halfway)
+
+    result = record_batch(
+        [make_article("Doncic drops 40")], summary=None, directory=tmp_path
+    )
+
+    assert result is None, "a failed recording reports failure"
+    assert list(tmp_path.glob("*.json")) == [], (
+        "no half-written file may be left behind"
+    )
+
+
+def test_a_finished_recording_leaves_no_temporary_file(
+    tmp_path: Path, make_article: Callable[..., NewsArticle]
+) -> None:
+    """The complement: the scratch file must not survive a successful write either.
+
+    `[INFERRED]` A stray `.partial` accumulating next to every batch would quietly fill the
+    directory and confuse the pruning, which counts `*.json`.
+    """
+    record_batch([make_article("Doncic drops 40")], summary=None, directory=tmp_path)
+
+    assert list(tmp_path.glob("*.partial")) == []
+    assert len(list(tmp_path.glob("*.json"))) == 1
