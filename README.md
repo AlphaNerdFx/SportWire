@@ -23,6 +23,7 @@ make dry-run                # fetch and print a brief, sending nothing
 make run                    # fetch and send
 make check                  # what CI runs: lint + tests
 python scripts/soak_report.py   # how often briefs keep their prose, per league
+python scripts/soak_report.py --audit   # the latest brief beside its sources and doubts
 ```
 
 Requires a free [balldontlie.io](https://www.balldontlie.io/) API key and a Telegram bot
