@@ -1132,6 +1132,11 @@ def test_main_builds_the_model_ladder_when_configured(
         def __init__(self, model: str) -> None:
             self.model = model
 
+    # Cleared explicitly. `[VERIFIED]` 2026-08-27 this test broke the moment the operator put
+    # a real OpenRouter key in `.env`, because `Settings.from_env` reads that file and a
+    # hosted key changes which summarizer `main` builds. A test that passes or fails on the
+    # contents of one machine's `.env` is the P37 fault in a new place.
+    monkeypatch.setenv("OPENROUTER_API_KEY", "")
     monkeypatch.setenv("OLLAMA_FIRST_MODEL", "llama3.2:3b")
     monkeypatch.setenv("OLLAMA_MODEL", "mistral:7b")
     monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "ladder.db"))
@@ -1218,3 +1223,77 @@ def test_main_checks_the_accepted_summary_for_unsupported_claims(
         "a sentence whose names never share an article must be recorded as unsupported"
     )
     assert load_batch(recorded[0]), "the batch must still round trip"
+
+
+def test_a_hosted_key_still_falls_back_to_the_local_model(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    no_upstream_games: None,
+) -> None:
+    """`[VERIFIED]` 2026-08-27: the operator set an OpenRouter key and every call returned 429.
+
+    The free model shares an upstream pool at the provider and that pool was throttled, which
+    has nothing to do with the key. Before this, configuring a hosted model meant hosted
+    *instead of* local, so a throttled pool delivered a headline list while a working local
+    model sat idle on the same machine.
+
+    `[INFERRED]` Falling back to a worse model beats falling back to no prose, and the brief
+    the operator asked never to see again is the headline list.
+    """
+    import main
+
+    chain: list[str] = []
+
+    class Recorder:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            chain.append(type(self).__name__)
+
+    class FakeHosted(Recorder):
+        pass
+
+    class FakeLocal(Recorder):
+        def __init__(self, model: str) -> None:
+            super().__init__()
+            self.model = model
+
+    built: list[tuple[object, object]] = []
+
+    class FakeLadder:
+        def __init__(
+            self, first: object, then: object, first_attempts: int = 2
+        ) -> None:
+            built.append((first, then))
+
+        @property
+        def summarizer_name(self) -> str:
+            return "ladder"
+
+        def release(self) -> None:
+            return None
+
+        def summarise(self, *args: object, **kwargs: object) -> str | None:
+            return None
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "hosted.db"))
+    monkeypatch.setenv("EVIDENCE_PATH", str(tmp_path / "evidence"))
+    monkeypatch.setattr(main, "OpenRouterSummarizer", FakeHosted)
+    monkeypatch.setattr(main, "OllamaSummarizer", FakeLocal)
+    monkeypatch.setattr(main, "EscalatingSummarizer", FakeLadder)
+    monkeypatch.setattr(
+        main,
+        "fetch_news",
+        lambda feeds: ([_fresh("Doncic drops 40 on the Clippers")], []),
+    )
+
+    assert main.main(["--dry-run"]) == 0
+    capsys.readouterr()
+
+    # The outermost ladder is built last, and it is the one that decides what happens when
+    # the hosted call fails.
+    outer_first, outer_then = built[-1]
+    assert isinstance(outer_first, FakeHosted), "the hosted model should be tried first"
+    assert not isinstance(outer_then, FakeHosted), (
+        "the fallback must be something other than the hosted model that just failed"
+    )
