@@ -78,7 +78,18 @@ def record_batch(
         stamp = recorded_at.strftime("%Y-%m-%dT%H-%M-%S")
         suffix = "" if label is None else f"-{_slug(label)}"
         path = directory / f"{stamp}{suffix}.json"
-        path.write_text(
+
+        # Written beside the target and renamed into place. `[VERIFIED]` 2026-08-27 a run
+        # interrupted mid-write left a **0 byte** `.json` behind, and every reader of the
+        # evidence directory then died on it rather than skipping it. A rename is atomic on
+        # the same filesystem, so a reader sees either the previous state or the finished
+        # file and never a half-written one.
+        #
+        # `[INFERRED]` This matters more here than the size of the fix suggests. The whole
+        # point of this directory is to be trustworthy after something went wrong, and a run
+        # that was killed is exactly the kind of thing it exists to record.
+        temporary = path.with_suffix(".json.partial")
+        temporary.write_text(
             json.dumps(
                 {
                     "recorded_at": recorded_at.isoformat(),
@@ -105,6 +116,7 @@ def record_batch(
             ),
             encoding="utf-8",
         )
+        temporary.replace(path)
         _prune(directory, keep)
         return path
     except Exception:
