@@ -3116,3 +3116,37 @@ Standing items not otherwise listed above:
   most plausibly caused it is a mechanism argument, not a measurement of the outcome, and this
   project has already paid for treating one as the other (P4). Resolve by counting acceptances
   per league across the soak, the same instrument P54 is waiting on.
+
+- [x] **P57. There was no way to count what the briefs actually did.** Closed 2026-08-27.
+
+  P4 was closed with a hand-counted rate. P54 and P56 are both open and both say "resolve by
+  counting acceptances per league across the soak", and there was nothing to count with. The
+  numbers were being read out of the log by eye, which is the shape that produced this
+  project's worst measurement mistake: a comment claiming ~84% from a single sitting of 3 of
+  5, contradicted by the next two runs.
+
+  `scripts/soak_report.py` reads `evidence/` and prints, per league, how many briefs delivered
+  prose and how many fell back. Evidence rather than the log, because a batch file records the
+  outcome beside the articles it was built from, survives log rotation, and is already written
+  by every run.
+
+  `[VERIFIED]` First reading, 2026-08-27:
+
+  ```
+  NBA            8 of 9   ( 88.9%)   fell back 1
+  NFL            5 of 8   ( 62.5%)   fell back 3
+  unlabelled     3 of 14  ( 21.4%)   fell back 11
+  ```
+
+  **Do not quote those numbers as the rate.** `[VERIFIED]` Six releases landed on 2026-08-26
+  and 2026-08-27, so these batches were produced by at least six different versions of the
+  validator and two different models. "unlabelled" is the pre-ADR-015 shape, before briefs
+  were split by league, and it is not comparable to the two below it. `[INFERRED]` The report
+  is the instrument; a usable reading needs runs from one version, which the soak will provide
+  and today did not.
+
+  `[INFERRED]` Split per league on purpose. Averaged into one figure, 13 of 17 looks healthy
+  and says nothing about football being the half that struggles.
+
+  It exits 0 always and is not part of `make check`. A rate is evidence to argue with, not a
+  gate to pass.
