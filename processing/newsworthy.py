@@ -106,6 +106,36 @@ RETROSPECTIVE_PHRASES = (
 )
 
 
+# Phrases that mark a piece as a list, a ranking or a guess rather than something that
+# happened. `[VERIFIED]` 2026-08-27, and this is the most expensive rule in the file to have
+# been missing. The 00:00 run fell back to a headline list on **both** leagues, all three
+# attempts each, and the rejected names were wholesale inventions: Damian Lillard, Zion
+# Williamson, Slam Dunk Contest, Obi Toppin, Ben Simmons, James Harden on the basketball side,
+# Dalvin Cook, Kirk Cousins and Adrian Peterson on the football side. None appears anywhere in
+# either batch.
+#
+# `[INFERRED]` The model was not being unusually bad. It was handed titles that promise
+# content the feed never carries: "NFL top 100 of 2026: Where each Detroit Lions player
+# ranked" comes with a summary that lists nobody, and "Summer Forecast predictions for every
+# major award" reports nothing at all. Asked to summarise a ranking with no ranking attached,
+# a model completes it from what it remembers, and what it remembers is several seasons old.
+# That is the same reasoning that put `RETROSPECTIVE_PHRASES` above: a piece with no current
+# facts in it cannot be summarised, only imagined.
+#
+# Deliberately narrow. "grades" and "grading" were measured and **left out**, because
+# "Giants-Chiefs trade grades" is a real trade being reported with an opinion attached, and
+# "preview" was left out for the same reason.
+SPECULATIVE_PHRASES = (
+    "mock draft",
+    "power rankings",
+    "roster rankings",
+    "top 100",
+    "experts predict",
+    "forecast",
+    "predictions",
+)
+
+
 def _strip_invisible(text: str) -> str:
     """Remove zero-width and directional marks that break prefix matching."""
     return "".join(ch for ch in text if ord(ch) not in _INVISIBLE_CODEPOINTS)
@@ -156,6 +186,12 @@ def rejection_reason(article: NewsArticle, now: datetime | None = None) -> str |
     for phrase in RETROSPECTIVE_PHRASES:
         if phrase in lowered:
             return f"retrospective phrase {phrase!r}"
+
+    # Rule 1c — a ranking, a mock draft or a forecast. Same test as 1b and the same reason:
+    # the piece has no reportable facts, so the model supplies its own.
+    for phrase in SPECULATIVE_PHRASES:
+        if phrase in lowered:
+            return f"speculation phrase {phrase!r}"
 
     # Rule 3 — posted by the subreddit itself rather than by a reader.
     if _posted_by_a_moderator(article.author):
