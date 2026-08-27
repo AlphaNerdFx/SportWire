@@ -2194,8 +2194,16 @@ what each turned into, since several changed shape on contact with real data.
 
 ---
 
-- [ ] **P35. NFL stories reach the NBA brief.** Open, noticed 2026-08-18 in two separate
-  runs. **Not investigated.**
+- [ ] **P35. NFL stories reach the NBA brief.** Open, and **reduced rather than fixed** by
+  ADR-015 on 2026-08-26. Noticed 2026-08-18 in two separate runs.
+
+  `[VERIFIED]` 2026-08-27: every article now carries the league of the feed it came from, and
+  the briefs are built one per league, so a football story can no longer arrive in the
+  basketball brief *by way of the pipeline losing track of it*. `[INFERRED]` The residual is
+  narrower and still real: the league is taken from the **feed**, not the text, so a football
+  item published inside a basketball feed is stamped basketball and belongs to that brief as
+  far as everything downstream is concerned. P51's lone-team check cannot catch it either,
+  because the team is genuinely in the batch.
   `[VERIFIED]` A dry run's prose carried *"Za'Darius Smith may choose the Falcons over the
   Browns due to Stefanski connection, but football news is for another day"*, and the live
   ordering check showed *"Za'Darius Smith free agency update: Could spurn Browns for..."* as
@@ -2415,8 +2423,14 @@ what each turned into, since several changed shape on contact with real data.
 ---
 
 - [ ] **P42. Interval becomes a bounded choice, and the brief's size scales with it.**
-  Open, specified by the operator 2026-08-26. **Belongs to v0.4.0 and v1.0.0; not started.**
-  8 hours stays the standard until then.
+  Open, specified by the operator 2026-08-26. ~~**Not started.**~~ **Mostly built; what is
+  left is the operator-facing choice at v1.0.0.** 8 hours stays the standard until then.
+
+  `[VERIFIED]` 2026-08-27, what exists now: `POLL_INTERVAL_CHOICES` is `(2, 4, 8, 12, 24, 48)`
+  and `_interval_choice` refuses anything else by name; `brief_size_for` scales both the story
+  cap and the character budget, giving 12 stories at 8 hours and 24 at 48; and P58 made the
+  brief size itself from the period it *actually* covers rather than the configured interval,
+  which is the same machinery reused. `[UNKNOWN]` How the operator picks one at v1.0.0.
 
   `[VERIFIED]` **The bounds are measured, not guessed.** Across 13 scheduled runs at 8 hours,
   new articles surviving deduplication were min 10, median 23, max 81 — about **3.9 an hour**
