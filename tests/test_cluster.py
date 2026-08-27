@@ -525,3 +525,73 @@ def test_the_pipeline_groups_caps_and_orders_in_that_sequence(
     assert positions == list(range(positions[0], positions[0] + len(positions))), (
         f"reports of one trade are not adjacent: {titles}"
     )
+
+
+def test_one_signing_written_five_ways_is_one_story(
+    make_article: Callable[..., NewsArticle],
+) -> None:
+    """`[VERIFIED]` 2026-08-27, from a brief the operator read.
+
+    It announced that Kuminga had signed with the Timberwolves and then, a sentence later,
+    that the Wolves had added him to their roster. Five headlines covered that one signing and
+    grouping put them in four groups, so the summarizer was handed the same event four times.
+
+    Three ways of failing to match, all present here: a surname against a full name, a team
+    with its city attached against the team alone, and a nickname against its longer form.
+    """
+    headlines = [
+        "Jonathan Kuminga reportedly signs with Timberwolves, choosing short-term deal",
+        "Former Warriors wing Jonathan Kuminga signs with Timberwolves",
+        "Jonathan Kuminga signs two-year, $13 million deal with Wolves",
+        "Kuminga joining Wolves on 2-year, $12.4M deal",
+        "Jonathan Kuminga agreed a deal with the Minnesota Timberwolves",
+    ]
+
+    groups = group_related([make_article(title) for title in headlines])
+
+    assert len(groups) == 1, (
+        "one signing reported five ways is one story: "
+        f"{[[a.title[:40] for a in g] for g in groups]}"
+    )
+
+
+def test_unrelated_stories_are_still_kept_apart(
+    make_article: Callable[..., NewsArticle],
+) -> None:
+    """The complement, and the reason short forms are not a free win.
+
+    `[INFERRED]` Adding a name's last word makes matches easier, which is exactly what could
+    weld unrelated stories together. These two share a common surname and nothing else, which
+    is the case this module's own docstring warns about: "James" appeared in 21 of 73 articles
+    across unrelated stories.
+    """
+    groups = group_related(
+        [
+            make_article("LeBron James signs a one-year extension in Los Angeles"),
+            make_article("Bronny James assigned to the South Bay affiliate"),
+        ]
+    )
+
+    assert len(groups) == 2, "a shared surname alone is not a shared subject"
+
+
+def test_a_team_and_its_nickname_are_one_subject(
+    make_article: Callable[..., NewsArticle],
+) -> None:
+    """The alias half, isolated so it cannot pass on the surname rule instead.
+
+    `[VERIFIED]` The Kuminga headlines group on "Kuminga" alone once a surname counts, so they
+    never exercise the team table. These two share exactly one ordinary name and one team
+    written two ways, which is the pair that needs "Wolves" and "Timberwolves" to be the same
+    subject. Without that they hold one name in common and stay apart.
+    """
+    groups = group_related(
+        [
+            make_article("Wolves waive Terrence Shannon before the deadline"),
+            make_article("Timberwolves cut Shannon after a quiet camp"),
+        ]
+    )
+
+    assert len(groups) == 1, (
+        f"the Wolves are the Timberwolves: {[[a.title for a in g] for g in groups]}"
+    )
