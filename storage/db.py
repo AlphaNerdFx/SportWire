@@ -269,6 +269,33 @@ class SeenStore:
             for row in rows
         ]
 
+    def hours_since_last_delivery(self) -> float | None:
+        """How long since anything was last recorded as delivered, or None if nothing ever was.
+
+        `[VERIFIED]` 2026-08-27, and the operator confirmed the cause: *"pc was idle so no
+        message"*. The 08:00 run never fired because WSL2 was suspended with the machine, and
+        cron cannot run a job it slept through. That makes a missed run a normal condition
+        here rather than an incident.
+
+        It matters because the brief is sized from the *configured* interval. After an eleven
+        hour gap the 11:02 run still showed twelve stories, the number chosen for eight hours,
+        and everything past the cap is recorded as delivered whether or not it was shown. So a
+        night of sleep quietly costs a handful of stories that never appear anywhere.
+
+        Read from `seen_articles`, because that table is written only after a send succeeds.
+        `[INFERRED]` A dry run therefore leaves it untouched, which is right: nothing reached
+        the reader, so nothing was delivered.
+        """
+        row = self._connection.execute(
+            "SELECT MAX(seen_at) FROM seen_articles"
+        ).fetchone()
+        if not row or not row[0]:
+            return None
+        delivered = datetime.fromisoformat(row[0])
+        gap = (datetime.now(timezone.utc) - delivered).total_seconds() / 3600.0
+        # A clock that has gone backwards should not shrink the brief.
+        return max(0.0, gap)
+
     def arrivals_per_hour(self, over_hours: float = 168.0) -> float:
         """How fast news has actually been arriving, from what polling has recorded.
 
