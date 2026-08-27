@@ -14,7 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from scripts.soak_report import main, read_batches, report, within
+from scripts.soak_report import audit, main, read_batches, report, within
 
 
 def _batch(path: Path, *, label: str, prose: bool, days_ago: float = 0.0) -> None:
@@ -95,3 +95,100 @@ def test_an_empty_directory_says_so_rather_than_dividing_by_zero(
 def test_a_missing_directory_is_not_an_error(tmp_path: Path) -> None:
     """Reporting is never a gate. It describes; it does not judge."""
     assert main(["--evidence", str(tmp_path / "nope")]) == 0
+
+
+def _brief(path: Path, *, label: str, summary: str, flagged: list[str]) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "recorded_at": datetime.now(timezone.utc).isoformat(),
+                "label": label,
+                "delivered_prose": True,
+                "summary": summary,
+                "unsupported_claims": flagged,
+                "articles": [{"title": "Kuminga joining Wolves on a 2-year deal"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_the_audit_shows_what_the_checker_doubted(tmp_path: Path) -> None:
+    """`[VERIFIED]` 2026-08-27 this would have answered the operator's question immediately.
+
+    He read a brief and asked whether the football news was invented. Two of its claims were,
+    and the entity-pair check had flagged exactly that sentence, the only one it flagged. The
+    flag went to the log and the evidence file and nowhere he would see it, because he had
+    asked for the warning to be removed from the brief itself.
+
+    `[INFERRED]` That instruction was about the brief, not the evidence. This shows the same
+    information on request rather than unasked.
+    """
+    _brief(
+        tmp_path / "a.json",
+        label="NFL",
+        summary="Watson faced criticism after visiting the statue.",
+        flagged=["Watson faced criticism after visiting the statue."],
+    )
+
+    text = audit(read_batches(tmp_path)[0])
+
+    assert "NFL" in text
+    assert "never share a source article" in text
+    # The marker, not the sentence. `[VERIFIED]` Asserting the sentence text passed even with
+    # the flags hidden, because the summary containing it is printed directly above it.
+    assert "  ? Watson faced criticism" in text
+    assert "Kuminga joining Wolves" in text, (
+        "the sources have to be shown to check against"
+    )
+
+
+def test_a_clean_brief_says_so_rather_than_staying_silent(tmp_path: Path) -> None:
+    """`[INFERRED]` "Nothing flagged" and "this tool did not run" must not look identical.
+
+    A blank space where a warning would be is exactly the shape that gets misread as
+    reassurance, and the whole point here is to be readable about what was and was not checked.
+    """
+    _brief(
+        tmp_path / "a.json",
+        label="NBA",
+        summary="Kuminga signed with the Wolves.",
+        flagged=[],
+    )
+
+    text = audit(read_batches(tmp_path)[0])
+
+    assert "Nothing flagged" in text
+
+
+def test_only_the_latest_brief_per_league_is_audited(tmp_path: Path) -> None:
+    """`[INFERRED]` Reading a brief against its sources is a per-brief act, not a history.
+
+    Split by league because both arrive together and each has its own sources.
+    """
+    _brief(
+        tmp_path / "1.json",
+        label="NBA",
+        summary="An older basketball brief.",
+        flagged=[],
+    )
+    _brief(
+        tmp_path / "2.json",
+        label="NBA",
+        summary="The newest basketball brief.",
+        flagged=[],
+    )
+    _brief(tmp_path / "3.json", label="NFL", summary="The football brief.", flagged=[])
+
+    text = audit(read_batches(tmp_path)[0])
+
+    assert "The newest basketball brief" in text
+    assert "An older basketball brief" not in text
+    assert "The football brief" in text
+
+
+def test_the_audit_is_calm_when_nothing_has_prose(tmp_path: Path) -> None:
+    """A run that fell back to headlines records no summary, and that is not an error."""
+    _batch(tmp_path / "a.json", label="NBA", prose=False)
+
+    assert "No brief with prose" in audit(read_batches(tmp_path)[0])
