@@ -133,6 +133,20 @@ SPECULATIVE_PHRASES = (
     "experts predict",
     "forecast",
     "predictions",
+    # A reader poll, which is the same failure wearing different clothes. `[VERIFIED]`
+    # 2026-08-27 the brief said "Warriors fan Brandon Williams and Georges Niang were
+    # surveyed about recent signings". Both are players. The source was Yahoo's "Warriors fan
+    # survey: How do you like the recent signings? Are you a fan of signing Brandon Williams
+    # and Georges Niang?", which reports nothing and asks the reader a question, so the model
+    # turned "are you a fan of signing X" into "fan X was surveyed".
+    #
+    # `[VERIFIED]` Only "fan survey" occurs in the 109 captured articles; the other two are
+    # the same shape and are `[INFERRED]`. A blanket rule on titles ending in a question mark
+    # was measured and **rejected**: 5 titles match and 2 are real news, including "DeMar
+    # DeRozan reportedly signing with Nuggets: How does the six-time All-Star fit?".
+    "fan survey",
+    "reader survey",
+    "fan poll",
 )
 
 
