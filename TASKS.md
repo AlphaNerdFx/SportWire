@@ -3398,3 +3398,30 @@ Standing items not otherwise listed above:
   It has not produced a single summary yet, so nothing is known about its writing, its
   fabrication rate, or whether its larger context window helps. That needs the pool to be
   free, and then the soak.
+
+- [x] **P64. The suite read the operator's own `.env`.** Closed 2026-08-27, after it broke two
+  tests in one hour on one machine.
+
+  `[VERIFIED]` `Settings.from_env` calls `load_dotenv(PROJECT_ROOT / ".env")`, so any test
+  driving `main` inherited whatever that file contained. When the operator added a real
+  `OPENROUTER_API_KEY`, two tests written earlier the same day began failing, and neither was
+  wrong about the behaviour it described. They were reading configuration they never asked
+  for.
+
+  `[INFERRED]` Same family as P37, where four tests depended on the wall clock, and P43, where
+  one depended on the filesystem layout. A suite that passes or fails on the contents of one
+  developer's `.env` is not testing the code.
+
+  **Fix:** an autouse fixture blanks every setting `.env` can supply, before each test body. A
+  test that wants a value still sets it with `monkeypatch.setenv` exactly as before, because
+  the clearing happens first.
+
+  `[VERIFIED]` Proven by disabling it: `test_the_model_is_released_even_when_summarising_fails`
+  fails without the fixture and passes with it, on this machine, with this `.env`.
+
+  `[UNKNOWN]` **Which variable that test actually depends on.** Removing each of the twelve
+  names from the list one at a time was tried and **no single removal reproduces the failure**,
+  so it is not the OpenRouter key alone, which is what I first assumed and said. Either several
+  variables can cause it independently or it needs a combination. `[INFERRED]` Not worth
+  chasing: the fixture is right whichever it is, and the alternative is twelve explanations
+  where one rule does.
