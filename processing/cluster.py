@@ -29,6 +29,7 @@ import re
 from collections import Counter
 
 from models.schemas import NewsArticle
+from processing.names import canonical_team
 from processing.validate import comparable
 
 logger = logging.getLogger(__name__)
@@ -134,7 +135,40 @@ def _names(article: NewsArticle) -> set[str]:
         if len(name) > 3:
             found.add(name)
 
-    return found
+    return _also_short_forms(found)
+
+
+def _also_short_forms(names: set[str]) -> set[str]:
+    """Add the forms the same subject is written in elsewhere, so headlines can meet.
+
+    `[VERIFIED]` 2026-08-27, from a brief the operator read: it announced that Kuminga had
+    signed with the Timberwolves and then, a sentence later, that the Wolves had added him.
+    Five headlines covered that one signing and grouping put them in **four** groups, so the
+    summarizer was handed the same event four times and wrote it twice. The names it
+    extracted were:
+
+    ```
+    {Jonathan Kuminga, Timberwolves}          {Jonathan Kuminga, Wolves}
+    {Jonathan Kuminga, Minnesota Timberwolves}  {Kuminga, Wolves}
+    ```
+
+    Three different ways of failing to match: a surname against a full name, a team against
+    the same team with its city attached, and a nickname against its longer form. Two
+    articles need two names in common, and these pairs could only ever find one.
+
+    So a name also contributes its last word, and any team alias contributes one agreed
+    spelling. `[INFERRED]` This does not weaken the rarity rule that stops "James" grouping
+    unrelated stories: a word that turns up in too many articles is still ignored, and adding
+    short forms feeds that rule rather than bypassing it.
+    """
+    expanded = set(names)
+    for name in names:
+        words = name.split()
+        if len(words) > 1:
+            # "Jonathan Kuminga" also answers to "Kuminga", "Minnesota Timberwolves" to
+            # "Timberwolves". The last word is the one headlines drop to.
+            expanded.add(words[-1])
+    return {canonical_team(name) for name in expanded}
 
 
 # How many stories a single source may *lead* in one brief. Only community feeds are
