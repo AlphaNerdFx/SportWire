@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pytest
 
+from config.settings import brief_size_for
 from models.schemas import GameData, NewsArticle
 from storage.db import SeenStore
 
@@ -905,4 +906,188 @@ def test_the_model_is_released_even_when_summarising_fails(
 
     assert released == ["mistral:7b"], (
         "a summarizer that raised is exactly the one still holding the model"
+    )
+
+
+# --- P58: a machine that sleeps through its own schedule ------------------------------------
+
+
+def test_nothing_delivered_yet_reports_no_gap(store: SeenStore) -> None:
+    """`[INFERRED]` A fresh install has never delivered, which is not a gap of zero hours.
+
+    None and 0.0 would send `brief_is_due` opposite ways, so the distinction is the whole
+    point: a first run is always due.
+    """
+    assert store.hours_since_last_delivery() is None
+
+
+def test_the_gap_is_measured_from_the_last_delivery(
+    store: SeenStore, make_article: ArticleFactory
+) -> None:
+    """`[VERIFIED]` 2026-08-27: the real store read 16.5 hours after both runs were slept
+    through, against a configured interval of 8.
+    """
+    store.record_articles([make_article("Doncic drops 40")])
+    store._connection.execute(
+        "UPDATE seen_articles SET seen_at = ?",
+        ((datetime.now(timezone.utc) - timedelta(hours=9)).isoformat(),),
+    )
+    store._connection.commit()
+
+    gap = store.hours_since_last_delivery()
+
+    assert gap is not None
+    assert 8.9 < gap < 9.1, gap
+
+
+def test_a_dry_run_does_not_look_like_a_delivery(
+    store: SeenStore, make_article: ArticleFactory
+) -> None:
+    """`[INFERRED]` The gap is read from `seen_articles`, written only after a send succeeds.
+
+    If a dry run counted, inspecting the pipeline would postpone the next real brief, which is
+    the same class of mistake as P39 where a dry run purged the store.
+    """
+    store.record_fetched([make_article("Doncic drops 40")])
+
+    assert store.hours_since_last_delivery() is None, (
+        "polling is not delivering; only a successful send counts"
+    )
+
+
+def test_a_clock_that_went_backwards_does_not_shrink_the_brief(
+    store: SeenStore, make_article: ArticleFactory
+) -> None:
+    """`[INFERRED]` A negative gap would size the brief below its own interval.
+
+    Worth guarding rather than assuming: this machine suspends and resumes constantly, which
+    is exactly where clocks jump.
+    """
+    store.record_articles([make_article("Doncic drops 40")])
+    store._connection.execute(
+        "UPDATE seen_articles SET seen_at = ?",
+        ((datetime.now(timezone.utc) + timedelta(hours=3)).isoformat(),),
+    )
+    store._connection.commit()
+
+    assert store.hours_since_last_delivery() == 0.0
+
+
+@pytest.mark.parametrize(
+    ("elapsed", "expected"),
+    [
+        (None, True),
+        (0.0, False),
+        (7.0, False),
+        (7.95, True),
+        (8.0, True),
+        (16.5, True),
+    ],
+)
+def test_whether_a_brief_is_due(elapsed: float | None, expected: bool) -> None:
+    """`[VERIFIED]` 7.95 is the tolerance case and it is why the tolerance exists.
+
+    A trigger running every half hour measures each brief from the previous delivery, so
+    without slack the eight hour brief lands at 8h00, then 8h20, then 8h40, drifting later
+    every cycle. Five minutes early stops that and is smaller than any offered interval.
+    """
+    import main
+
+    assert main.brief_is_due(elapsed, 8) is expected
+
+
+def test_a_run_that_is_not_due_touches_nothing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    no_upstream_games: None,
+) -> None:
+    """`[VERIFIED]` 2026-08-27: cron slept through both slots and no brief arrived all day.
+
+    `--if-due` exists so the scheduler can run often and this program decides, which means the
+    cheap path has to be genuinely cheap. Asserted by making `fetch_news` fail the test if it
+    is called at all: a wake-up that is not due must not touch a single source.
+    """
+    import main
+
+    path = tmp_path / "due.db"
+    monkeypatch.setenv("DATABASE_PATH", str(path))
+    monkeypatch.setenv("EVIDENCE_PATH", str(tmp_path / "evidence"))
+
+    with SeenStore(path) as store:
+        store.record_articles([_fresh("Doncic drops 40 on the Clippers")])
+
+    def must_not_run(feeds: object) -> None:
+        raise AssertionError("a run that is not due must not contact any source")
+
+    monkeypatch.setattr(main, "fetch_news", must_not_run)
+
+    assert main.main(["--if-due", "--dry-run", "--no-summary"]) == 0
+
+
+def test_a_brief_after_a_missed_run_is_allowed_to_be_longer(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    no_upstream_games: None,
+) -> None:
+    """`[VERIFIED]` 2026-08-27: the gap was 16.5 hours and the brief was sized for 8.
+
+    Everything past the story cap is recorded as delivered whether or not it was shown, so
+    the surplus is not held over for next time, it is gone. A brief covering twice its usual
+    period therefore has to be allowed to carry more, or sleeping through a run silently costs
+    the reader stories. TASKS.md P36: this is wiring in `main`, invisible to every unit below.
+    """
+    import main
+
+    path = tmp_path / "long.db"
+    monkeypatch.setenv("DATABASE_PATH", str(path))
+    monkeypatch.setenv("EVIDENCE_PATH", str(tmp_path / "evidence"))
+
+    # Delivered a day ago, so the next brief covers 24 hours rather than the configured 8.
+    with SeenStore(path) as store:
+        store.record_articles([_fresh("An old story already sent")])
+        store._connection.execute(
+            "UPDATE seen_articles SET seen_at = ?",
+            ((datetime.now(timezone.utc) - timedelta(hours=24)).isoformat(),),
+        )
+        store._connection.commit()
+
+    # Unrelated on purpose. `[VERIFIED]` Titles sharing a phrase cluster into one story, so
+    # a first attempt at this test showed exactly 1 and proved nothing about the cap.
+    subjects = [
+        "Warriors sign Niang",
+        "Pelicans reach deal with Mathurin",
+        "Curry extension talks open",
+        "Kuminga joins the Wolves",
+        "Bucks waive a camp guard",
+        "Heat trade for a wing",
+        "Knicks hire an assistant",
+        "Nuggets pick up an option",
+        "Spurs recall a rookie",
+        "Magic extend their centre",
+        "Kings part with a forward",
+        "Suns add a shooter",
+        "Raptors promote a coach",
+        "Jazz claim a guard",
+        "Hornets release a veteran",
+        "Pacers sign a big",
+        "Pistons agree a buyout",
+        "Wizards add depth",
+        "Blazers move a pick",
+        "Grizzlies convert a contract",
+    ]
+    many = [
+        _fresh(title, source=f"Source {index}") for index, title in enumerate(subjects)
+    ]
+    monkeypatch.setattr(main, "fetch_news", lambda feeds: (many, []))
+
+    assert main.main(["--dry-run", "--no-summary"]) == 0
+    printed = capsys.readouterr().out
+
+    shown = sum(1 for subject in subjects if subject in printed)
+    at_eight_hours, _ = brief_size_for(8)
+
+    assert shown > at_eight_hours, (
+        f"a 24 hour brief showed {shown} stories, no more than the {at_eight_hours} "
+        "allowed for 8 hours, so the missed run cost the reader news"
     )
