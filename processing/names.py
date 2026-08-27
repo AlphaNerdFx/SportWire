@@ -174,3 +174,65 @@ GROUNDING = NameScanner(
 # the before/after grouping measurement P17 asks for — today's baseline is 76 articles → 68
 # stories, 6 multi-article — and that is a decision, not a refactor.
 CLUSTERING = NameScanner(min_words=1, break_run_on_punctuation=True)
+
+
+# Other names for the same team. `[VERIFIED]` 2026-08-17 16:00: the run fell back because all
+# three attempts were rejected for `Philadelphia Sixers`, while the feeds wrote `76ers` 11
+# times and `Sixers` once. `76ers` starts with a digit, so `_is_name_word` refuses it on
+# purpose, which means grounding can never see it. A real team was called invented.
+#
+# Every group is one team under the names the feeds actually print. Each was counted across
+# 331 live and fixture articles, and the counts are why some obvious candidates are absent:
+#
+#   sixers (4), sixer (1)     against 76ers (51)
+#   cavs (13)                 against cavaliers (13)
+#   wolves (4), twolves (1)   against timberwolves (11)
+#   knick (4)                 against knicks (30)
+#   mavs (1)                  against mavericks (2)
+#   okc (1)                   against thunder (6)
+#
+# `[VERIFIED]` Deliberately excluded after measuring, because the short form is an ordinary
+# word here rather than a team: `king` occurs 5 times and never means the Sacramento Kings
+# (it is LeBron, and a quarterback named Haynes King); `clips` occurs once and means video;
+# `net` occurs once and is not the Nets. Aliasing any of those would ground a team on a word
+# that has nothing to do with it.
+#
+# Singular forms only need an entry in one direction. A source writing `Lakers` already
+# grounds a summary's `Laker`, because the shorter string occurs inside the longer one. It is
+# the other direction that fails, which is why `knick` is listed and `laker` is not.
+TEAM_NAME_GROUPS = (
+    frozenset({"76ers", "sixers", "sixer"}),
+    frozenset({"cavaliers", "cavs"}),
+    frozenset({"timberwolves", "wolves", "twolves", "t-wolves"}),
+    frozenset({"mavericks", "mavs"}),
+    frozenset({"knicks", "knick"}),
+    frozenset({"thunder", "okc"}),
+    # `[INFERRED]` Not yet seen in a captured feed, but the same kind of name and unambiguous:
+    # none of these is an ordinary English word, so none can ground a team by accident.
+    frozenset({"nuggets", "nugs"}),
+    frozenset({"grizzlies", "grizz"}),
+    frozenset({"pelicans", "pels"}),
+    frozenset({"warriors", "dubs"}),
+)
+
+TEAM_ALIASES: dict[str, frozenset[str]] = {
+    name: group - {name} for group in TEAM_NAME_GROUPS for name in group
+}
+
+
+def canonical_team(word: str) -> str:
+    """One agreed spelling for a team, so two modules do not disagree about the Wolves.
+
+    `[VERIFIED]` 2026-08-27 this is why it moved out of `validate.py`. A brief said Kuminga
+    signed with the Timberwolves and then said the Wolves had added him, because clustering
+    treated "Wolves" and "Timberwolves" as different subjects and handed the summarizer the
+    same signing five times over. The validator already knew they were one team; clustering
+    could not see the table because it was private to another module.
+
+    Returns the word unchanged when it names no team, so callers can apply it to everything.
+    """
+    lowered = word.lower()
+    group = TEAM_ALIASES.get(lowered)
+    if group is None:
+        return word
+    return min({lowered, *group})
