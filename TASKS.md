@@ -3362,3 +3362,39 @@ Standing items not otherwise listed above:
   on the sentence text and the summary printed above contains the same sentence. It asserts on
   the marker now. That is the second time today a test has passed for the wrong reason and
   only mutation found it.
+
+- [x] **P63. A hosted key meant no local fallback, so a throttled provider cost the prose.**
+  Closed 2026-08-27, within minutes of the operator adding an OpenRouter key.
+
+  `[VERIFIED]` The key was set and every attempt failed:
+
+  ```
+  HTTP 429  "google/gemma-4-31b-it:free is temporarily rate-limited upstream.
+             ... limit_source: upstream_provider_shared_pool"
+  ```
+
+  Nothing wrong with the key: a bad one returns 401. The free model shares an upstream pool at
+  Google AI Studio and that pool was throttled. `[INFERRED]` A shared free pool will be
+  throttled again, so this is the normal case rather than an incident.
+
+  The fault was the wiring. `prefers_hosted_summariser` chose hosted **instead of** local, so
+  both briefs fell back to headline lists while `llama3.2:3b` sat idle on the same machine.
+  That is the outcome the operator asked never to see, produced by adding a key that was
+  supposed to improve things.
+
+  **Fix:** the local ladder is built first and is always the last resort. With a key the chain
+  is hosted, then small local, then large local. The hosted rung gets **one** attempt, because
+  a 429 is not fixed by asking again a second later.
+
+  `[VERIFIED]` Measured immediately after: both leagues accepted on the first local attempt,
+  100.9 s for the run, no headline lists.
+
+  `[VERIFIED]` It also broke a test written an hour earlier, which is the useful part. That
+  test drove `main` and read the operator's real `.env`, so a key appearing on one machine
+  changed what it asserted. `[INFERRED]` Same fault as P37 in a new place: a test that depends
+  on the machine it runs on. Now cleared explicitly.
+
+  `[UNKNOWN]` Whether the hosted model is any better than the local one when it is reachable.
+  It has not produced a single summary yet, so nothing is known about its writing, its
+  fabrication rate, or whether its larger context window helps. That needs the pool to be
+  free, and then the soak.
