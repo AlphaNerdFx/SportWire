@@ -41,6 +41,39 @@ def now() -> datetime:
     return NOW
 
 
+# Every test starts without the operator's own `.env`. `[VERIFIED]` 2026-08-27 this bit twice
+# in one hour: adding a real `OPENROUTER_API_KEY` to `.env` changed which summarizer `main`
+# builds, and two tests written earlier that day began failing on that machine alone. Neither
+# test was wrong about the behaviour it described; both were reading configuration they never
+# asked for.
+#
+# `[INFERRED]` Same family as P37 and P43, where tests depended on the wall clock and on the
+# filesystem layout. A suite that passes or fails on what is in one developer's `.env` is not
+# testing the code. Autouse so it cannot be forgotten, and cleared *before* the test body, so
+# any test that wants a value still sets it with `monkeypatch.setenv` as usual.
+_CONFIGURED_BY_ENV = (
+    "BALL_DONT_LIE_API_KEY",
+    "TELEGRAM_BOT_TOKEN",
+    "TELEGRAM_CHAT_ID",
+    "DATABASE_PATH",
+    "EVIDENCE_PATH",
+    "LOG_LEVEL",
+    "POLL_INTERVAL_HOURS",
+    "DEDUP_WINDOW_HOURS",
+    "OLLAMA_MODEL",
+    "OLLAMA_FIRST_MODEL",
+    "OPENROUTER_API_KEY",
+    "OPENROUTER_MODEL",
+)
+
+
+@pytest.fixture(autouse=True)
+def _without_the_operators_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Blank every setting `.env` can supply, so no test inherits this machine's setup."""
+    for name in _CONFIGURED_BY_ENV:
+        monkeypatch.setenv(name, "")
+
+
 @pytest.fixture
 def make_article() -> Callable[..., NewsArticle]:
     """Build a real `NewsArticle`, for tests that need a specific title or summary.
