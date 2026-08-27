@@ -213,3 +213,57 @@ def test_order_within_a_tier_follows_the_source(make_article: ArticleFactory) ->
 def test_an_empty_list_sorts_to_an_empty_list() -> None:
     """The nothing-to-report path."""
     assert sort_by_priority([]) == []
+
+
+@pytest.mark.parametrize(
+    "word", ["baby", "babies", "newborn", "maternity", "pregnant", "pregnancy"]
+)
+def test_a_birth_is_not_a_signing(
+    make_article: Callable[..., NewsArticle], word: str
+) -> None:
+    """`[VERIFIED]` 2026-08-27, from a real captured post: "Luka signs a baby, the lakers visit
+    the maternity ward of the hospital".
+
+    It was classified **high**, the same tier as a max contract, because the title contains
+    "signs". It then competed for one of the twelve story slots against actual roster news.
+
+    `[INFERRED]` The list already covered weddings, engagements and divorces, and the module's
+    own docstring gives the rule: an article about a player's private life that happens to use
+    a transaction word is still a private-life story. A birth was missing from a family the
+    rule already knew about.
+
+    One word per case, on purpose. `[VERIFIED]` A first version used the real headline, which
+    contains both "baby" and "maternity", so deleting either one from the list left the other
+    doing the work and the test passed anyway. Every word here has to carry its own case or
+    the list can rot a word at a time without anything failing.
+    """
+    article = make_article(f"Luka signs a {word} deal announcement at the arena")
+
+    assert classify(article) == "low"
+
+
+def test_the_real_headline_that_prompted_this_is_low(
+    make_article: Callable[..., NewsArticle],
+) -> None:
+    """The captured post itself, kept because a constructed phrase is not evidence."""
+    assert (
+        classify(
+            make_article(
+                "Luka signs a baby, the lakers visit the maternity ward of the hospital"
+            )
+        )
+        == "low"
+    )
+
+
+def test_an_actual_signing_is_still_high(
+    make_article: Callable[..., NewsArticle],
+) -> None:
+    """The complement, and the reason the fix went in the low list rather than the high one.
+
+    `[VERIFIED]` TASKS.md P7 warned that narrowing the transaction keywords produces invisible
+    false negatives, and this project has done that twice already (P3). Adding to the low
+    signals cannot: a real signing contains no birth word, so nothing about it changes.
+    """
+    assert classify(make_article("Kuminga signs with the Timberwolves")) == "high"
+    assert classify(make_article("Jokic signs a max extension")) == "high"
