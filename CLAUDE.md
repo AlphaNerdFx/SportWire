@@ -301,6 +301,37 @@ print(scoreboard.ScoreBoard().get_dict())
 - A feature is "done" only when a test asserting its behaviour passes **and** the human can
   explain the implementation.
 
+### Write the test after the change is checked, then prove the test
+
+Set by the operator on 2026-08-27, after four tests in one day passed for reasons other than
+the change they named.
+
+The order is: **make the change, check it does what you think by running or measuring it, and
+only then write the test.** A test written beside a change tends to assert what you intended
+rather than what happened, and both look green.
+
+Then, before the test is trusted, **turn the change off and confirm the test fails.** This is
+not the final audit it has been treated as, it is the moment the test earns its place. Two
+rules make the difference:
+
+- **The thing you switch off must be the exact mechanism the test names.** A mutation
+  somewhere adjacent proves nothing about this test.
+- **A test that survives is wrong and gets rewritten, not supplemented.** Adding a second test
+  beside a broken one leaves the broken one asserting nothing.
+
+`[VERIFIED]` The four from 2026-08-27, all found by mutation and none by review:
+
+| Test | Passed because |
+|---|---|
+| a reader poll is rejected | the article factory defaults to the community feed, where a different rule already rejected it |
+| a flagged sentence is shown | the summary printed above it contains the same sentence |
+| a lower-case nickname is left alone | the word appeared in the sources anyway, so the guard never ran |
+| the model is released after a run | it asserted `"0s"`, which was the wrong value to want |
+
+`[INFERRED]` Three of those four were assertions that could pass through more than one
+mechanism. That is the shape to watch for: if a second explanation for green exists, the test
+is not measuring what its name says.
+
 ---
 
 ## 9. Conventions
