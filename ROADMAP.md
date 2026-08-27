@@ -229,7 +229,27 @@ conferences, divisions and honours; `_TEAM_NAME_GROUPS` holds ten groups of NBA 
 Four leagues means four of each, or one structure keyed by league. `processing/priority.py` team
 keywords are NBA only in the same way.
 
-### `v0.7.0` — delivery beyond Telegram, through OpenClaw
+### ~~`v0.7.0` — delivery beyond Telegram, through OpenClaw~~ — **moved past v1.0.0, 2026-08-27**
+
+> **Decided by the operator on 2026-08-27, after reading the risk:** *"let's just stick to
+> Telegram as risk of a ban is high. A likely expansion to Discord, Signal, Slack and Matrix
+> may be considered as future beyond initial release of SportWire."*
+>
+> **WhatsApp is declined, not deferred.** `[VERIFIED]` OpenClaw's WhatsApp channel uses
+> Baileys, an unofficial WhatsApp Web client that links a real personal number by QR code, and
+> routing it through OpenClaw moves where the risk sits without reducing it. The account at
+> stake is the operator's own. `[INFERRED]` A brief that arrives on Telegram for free is worth
+> more than the same brief on WhatsApp with a ban hanging over it, and ADR-002 reached that
+> conclusion on cost before this reached it on risk.
+>
+> **The other four channels are still wanted, just later.** Discord, Signal, Slack and Matrix
+> need no impersonation of a web client, so none carries the Baileys problem. They move behind
+> `v1.0.0` because a second channel proves a boundary that `delivery/base.py` has already made
+> cheap, and nothing about the first release depends on it.
+>
+> `[INFERRED]` Nothing is lost by waiting. The interface exists, `StdoutChannel` already
+> demonstrates that a second implementation costs one file, and the work is the same size
+> whenever it happens.
 
 **Done when the operator can receive the brief on a channel other than Telegram without this
 repository containing a line of channel specific code.**
