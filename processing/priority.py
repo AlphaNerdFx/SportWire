@@ -92,6 +92,23 @@ LOW_SIGNALS = frozenset(
         "fashion",
         "album",
         "romance",
+        # Births, which the list covered for every other family occasion but not this one.
+        # `[VERIFIED]` 2026-08-27: "Luka signs a baby, the lakers visit the maternity ward of
+        # the hospital" was classified **high**, the same tier as a max contract, because it
+        # contains "signs". It then competed for one of the twelve story slots against actual
+        # roster news. This is the exact shape the docstring below already describes: an
+        # article about a player's private life that happens to use a transaction word.
+        #
+        # `[VERIFIED]` Only "baby" and "maternity" occur in the 109 captured articles, both in
+        # that one post; the rest are `[INFERRED]` siblings. "born" was measured too and
+        # **left out** on judgement rather than evidence: it happens to be safe in this corpus
+        # and a bio saying "born in Athens" would be a false low.
+        "baby",
+        "babies",
+        "newborn",
+        "maternity",
+        "pregnant",
+        "pregnancy",
     }
 )
 
