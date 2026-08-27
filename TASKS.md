@@ -3189,3 +3189,63 @@ Standing items not otherwise listed above:
   `[UNKNOWN]` Whether the operator switches to Windows Task Scheduler instead, which solves
   the same problem from the other side with `-StartWhenAvailable` and is already written.
   `docs/SCHEDULING.md` now documents the cron form that survives a sleeping laptop.
+
+- [x] **P59. One signing was reported twice in the same paragraph.** Closed 2026-08-27, raised
+  by the operator reading a delivered brief.
+
+  > "Jonathan Kuminga signs a two-year deal with the Timberwolves worth $12.4 million ...
+  > **The Wolves have added Kuminga to their roster.**"
+
+  `[VERIFIED]` Five headlines covered that one signing and grouping put them in **four**
+  groups, so the summarizer was handed the same event four times and wrote it twice. The names
+  grouping extracted:
+
+  ```
+  {Jonathan Kuminga, Timberwolves}            {Jonathan Kuminga, Wolves}
+  {Jonathan Kuminga, Minnesota Timberwolves}  {Kuminga, Wolves}
+  ```
+
+  Three ways of failing to match: a surname against a full name, a team with its city attached
+  against the team alone, and a nickname against its longer form. Two articles need two names
+  in common and these pairs could only ever find one.
+
+  **Fix:** a name also contributes its last word, and a team contributes one agreed spelling.
+  `[VERIFIED]` The five headlines now form **one** group, and the twelve-article batch goes
+  from 11 groups to 8.
+
+  `[VERIFIED]` The team table moved from `processing/validate.py` to `processing/names.py`.
+  The validator already knew the Wolves are the Timberwolves; clustering could not see it
+  because the table was private to another module, and the brief contradicted itself as a
+  result. `[INFERRED]` That is the argument for the shared module in one sentence.
+
+  `[INFERRED]` It does not weaken the rarity rule that keeps "James" from grouping unrelated
+  stories: a word appearing in too many articles is still ignored, so short forms feed that
+  rule rather than bypass it. A test pins two unrelated James stories staying apart.
+
+  **Still not grouped, and left that way:** the two Jeanie Buss articles. The second headline,
+  "Buss asks court to block siblings' vote to sell", contains exactly one name, so it can
+  never reach two in common with anything. `[INFERRED]` Fixing it means grouping on a single
+  rare name, which is a change to this module's core principle and deserves its own
+  measurement rather than being smuggled in here.
+
+- [x] **P60. Two players were described as fans.** Closed 2026-08-27, same brief.
+
+  > "Warriors **fan** Brandon Williams and Georges Niang were surveyed about recent signings"
+
+  Both are players. `[VERIFIED]` The source was Yahoo's "Warriors fan survey: How do you like
+  the recent signings? Are you a fan of signing Brandon Williams and Georges Niang?" — a
+  reader poll that reports nothing, so the model made a story out of the question and turned
+  two players into fans.
+
+  Same rule as P56 and the same reason: a piece with no reportable facts cannot be summarised,
+  only imagined. `[VERIFIED]` Only "fan survey" occurs in the 109 captured articles; "reader
+  survey" and "fan poll" are `[INFERRED]` siblings.
+
+  `[VERIFIED]` A blanket rule on titles ending in a question mark was measured and
+  **rejected**: 5 titles match and 2 are real reporting, including "DeMar DeRozan reportedly
+  signing with Nuggets: How does the six-time All-Star fit?".
+
+  `[VERIFIED]` The first version of the test passed without the rule existing, because the
+  article factory defaults to the community feed and the existing community rule already
+  rejects an untagged question. The poll came from Yahoo, where no such rule applies, so the
+  test now says so. A test that passes for the wrong reason is worse than no test.
