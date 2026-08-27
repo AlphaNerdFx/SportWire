@@ -578,3 +578,43 @@ def test_an_opinion_attached_to_a_real_event_is_still_news(
     is not whether a piece contains opinion, it is whether anything happened.
     """
     assert is_newsworthy(make_article(title), now)
+
+
+def test_a_fan_poll_is_not_news(
+    make_article: Callable[..., NewsArticle], now: datetime
+) -> None:
+    """`[VERIFIED]` 2026-08-27: this produced "Warriors fan Brandon Williams and Georges Niang
+    were surveyed about recent signings" in a delivered brief.
+
+    Both are players. The source asks the reader "Are you a fan of signing Brandon Williams
+    and Georges Niang?", which reports nothing, so the model made a story out of the question
+    and turned two players into fans.
+    """
+    # An editorial source on purpose. `[VERIFIED]` With the factory's default of "r/nba" this
+    # test passed without the new phrase existing at all, because the community rule already
+    # rejects an untagged question. The poll came from Yahoo, where no such rule applies.
+    assert not is_newsworthy(
+        make_article(
+            "Warriors fan survey: How do you like the recent signings?",
+            source="Yahoo Sports",
+        ),
+        now,
+    )
+
+
+def test_a_signing_with_a_question_in_the_title_is_still_news(
+    make_article: Callable[..., NewsArticle], now: datetime
+) -> None:
+    """The boundary, measured rather than assumed.
+
+    `[VERIFIED]` A blanket rule on titles ending in a question mark was tried against the 109
+    captured articles: 5 match and 2 of those are real reporting. This is one of them, and
+    dropping it would lose an actual signing to catch a poll.
+    """
+    assert is_newsworthy(
+        make_article(
+            "DeMar DeRozan reportedly signing with Nuggets: How does the All-Star fit?",
+            source="Yahoo Sports",
+        ),
+        now,
+    )
