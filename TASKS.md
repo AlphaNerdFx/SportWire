@@ -3282,3 +3282,42 @@ Standing items not otherwise listed above:
   junk list, because a Reddit headline wrote it in lower case: "Luka signs a baby, the lakers
   visit the maternity ward". Any filter of this kind has to exempt known team names, which is
   the same trap that removed a guard in P51.
+
+- [x] **P62. The checker found the operator's two errors and told nobody.** Closed 2026-08-27.
+
+  The operator read a delivered brief and reported three things: Kuminga announced twice
+  (P59), two players described as fans (P60), and *"NFL structure looks good but idk if the
+  news are hallucinated or not"*.
+
+  Checking the football brief against its batch by hand, five of seven claims were sound and
+  two were wrong, both relationship inversions rather than invented names:
+
+  ```
+  said: Watson faced criticism after visiting Jim Brown's statue
+  was : someone taped signs on the statue criticising him; he never visited it
+
+  said: Giants players Skattebo and Malik Nabers downplayed an injury scare
+  was : the Giants downplayed Nabers' injury; Skattebo is a separate camp skirmish
+  ```
+
+  `[VERIFIED]` **The pipeline had already caught it.** The entity-pair check flagged exactly
+  that sentence, the only one it flagged in the brief. In the basketball brief it flagged
+  exactly one sentence too, and that was the "Warriors fan Brandon Williams and Georges Niang"
+  line the operator had also spotted. Two briefs, one flag each, both correct.
+
+  The flags were in the log and the evidence file and nowhere the reader would see them,
+  because the operator asked on 2026-08-26 for the name warning to be taken out of the brief.
+
+  `[INFERRED]` That instruction was about the brief, not about the evidence, so the brief is
+  left exactly as he asked and `scripts/soak_report.py --audit` shows the latest brief per
+  league beside the sentences the checker doubted and the headlines it was built from. Asked
+  for rather than delivered unasked.
+
+  `[UNKNOWN]` Whether he wants any of this back in the brief itself. Three options were put to
+  him and none is chosen: leave it hidden, mark only sentences whose entities never co-occur,
+  or reject such sentences outright, which risks the headline lists he does not want.
+
+  `[VERIFIED]` The first version of the test passed with the flags hidden, because it asserted
+  on the sentence text and the summary printed above contains the same sentence. It asserts on
+  the marker now. That is the second time today a test has passed for the wrong reason and
+  only mutation found it.
