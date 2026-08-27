@@ -3150,3 +3150,42 @@ Standing items not otherwise listed above:
 
   It exits 0 always and is not part of `make check`. A rate is evidence to argue with, not a
   gate to pass.
+
+- [x] **P58. Cron slept through every scheduled run and no brief arrived all day.** Closed
+  2026-08-27.
+
+  `[VERIFIED]` The operator: *"pc was idle so no message"*. Confirmed in syslog. Cron was
+  alive the whole time and firing root jobs, but silent across both slots:
+
+  ```
+  03:28 -> 10:55   no cron at all     (08:00 brief never fired)
+  15:25 -> 16:25   no cron at all     (16:00 brief never fired)
+  ```
+
+  `0 */8 * * *` fires at minute 0 of every eighth hour, and only if the machine is awake at
+  that minute. This one suspends with Windows, so the schedule is a coin flip. Two slots, both
+  lost, on the day the pipeline was finally producing prose reliably.
+
+  **Two things were wrong and both are fixed.**
+
+  1. **The trigger.** `--if-due` lets the scheduler run every half hour while the program
+     decides, from the last recorded delivery, whether a brief is owed. Any wake-up after it
+     becomes due delivers it. `[INFERRED]` It costs one row read on the wake-ups where nothing
+     is due, and the test asserts it contacts no source on those.
+  2. **The size of the brief that follows a gap.** `[VERIFIED]` The 11:02 run spanned sixteen
+     hours and was still sized for eight, twelve stories, because `brief_size_for` was given
+     the *configured* interval. Everything past the cap is recorded as delivered whether or
+     not it was shown, so the surplus is not held over, it is gone. On the live store this is
+     the difference between **12 stories and 17**.
+
+  `[INFERRED]` The second is the one that would never have been noticed. A missed run is
+  visible, a brief quietly capped at two thirds of what it covered is not, and the articles it
+  dropped are marked delivered on the way out.
+
+  Tolerance of five minutes on the due check. `[INFERRED]` Without it a half-hourly trigger
+  measures each brief from the previous delivery and drifts later every cycle, so eight hours
+  slowly becomes nine.
+
+  `[UNKNOWN]` Whether the operator switches to Windows Task Scheduler instead, which solves
+  the same problem from the other side with `-StartWhenAvailable` and is already written.
+  `docs/SCHEDULING.md` now documents the cron form that survives a sleeping laptop.
