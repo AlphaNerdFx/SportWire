@@ -530,3 +530,51 @@ def test_the_opinion_rule_does_not_touch_editorial_sources(
     ]
 
     assert len(drop_non_news(batch, now=now)) == 2
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Reid's preseason 2027 NFL mock draft: Quarterbacks go 1-2-3",
+        "CBS Sports NFL roster rankings 2026: Sorting the league's bottom half",
+        "NFL top 100 of 2026: Where each Detroit Lions player ranked",
+        "Where ESPN experts predict Warriors, Kings will finish 2026-27",
+        "MVP, ROY races? Summer Forecast predictions for every major award",
+        "2026 Fantasy football predictions at Polymarket",
+    ],
+)
+def test_a_ranking_or_a_guess_is_not_news(
+    make_article: Callable[..., NewsArticle], title: str, now: datetime
+) -> None:
+    """`[VERIFIED]` 2026-08-27: these titles are why the 00:00 run delivered two headline lists.
+
+    Every one promises content the feed does not carry. Asked to summarise "where each Lions
+    player ranked" with no ranking attached, the model supplied names from memory, and the
+    names it supplied were several seasons out of date: Damian Lillard, Zion Williamson,
+    Dalvin Cook, Kirk Cousins. None of them appears anywhere in either batch.
+
+    The rule is the same one `RETROSPECTIVE_PHRASES` implements: a piece with no current facts
+    cannot be summarised, only imagined.
+    """
+    assert not is_newsworthy(make_article(title), now)
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Giants-Chiefs trade grades: Kansas City adds OL depth piece",
+        "Grading NFL offseason trades: Assessing four deals",
+        "Warriors offseason recap and early season preview: Continuity over change",
+    ],
+)
+def test_an_opinion_attached_to_a_real_event_is_still_news(
+    make_article: Callable[..., NewsArticle], title: str, now: datetime
+) -> None:
+    """The line this rule must not cross, and it was drawn by measuring rather than taste.
+
+    `[VERIFIED]` "grades", "grading" and "preview" were all candidates and all rejected. A
+    trade grade is a real trade being reported with an opinion attached, and dropping it would
+    lose the transaction along with the commentary. `[INFERRED]` The distinction that matters
+    is not whether a piece contains opinion, it is whether anything happened.
+    """
+    assert is_newsworthy(make_article(title), now)
