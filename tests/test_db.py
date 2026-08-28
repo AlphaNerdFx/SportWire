@@ -1297,3 +1297,40 @@ def test_a_hosted_key_still_falls_back_to_the_local_model(
     assert not isinstance(outer_then, FakeHosted), (
         "the fallback must be something other than the hosted model that just failed"
     )
+
+
+def test_the_poll_store_forgets_what_nothing_reads(
+    store: SeenStore, make_article: ArticleFactory
+) -> None:
+    """`[VERIFIED]` 2026-08-28: `fetched_articles` had no purge at all and grew forever.
+
+    `seen_articles` got one the day it existed. The poll store, added later by ADR-014, never
+    did, so it held the full title and description of every article ever fetched.
+
+    Backdated directly, because `fetched_at` is set by the store rather than passed in: it
+    records when *this process* saw the item, which is the whole point of the column.
+    """
+    store.record_fetched([make_article("An article polled long ago")])
+    store._connection.execute(
+        "UPDATE fetched_articles SET fetched_at = ?", ("2020-01-01T00:00:00+00:00",)
+    )
+    store._connection.commit()
+
+    assert store.purge_fetched_before(168) == 1
+    assert store.fetched_since(hours=24 * 365 * 100) == []
+
+
+def test_the_purge_keeps_what_the_window_still_covers(
+    store: SeenStore, make_article: ArticleFactory
+) -> None:
+    """The half that matters: a purge cutting inside a reader's window loses live news.
+
+    `[INFERRED]` `fetched_since` is called with the dedup window and `arrivals_per_hour`
+    defaults to 168 hours, so a row inside those has to survive. This is the same failure
+    `purge_delivered_before` warns about, where too short a window made delivered stories look
+    new again on every run.
+    """
+    store.record_fetched([make_article("An article polled just now")])
+
+    assert store.purge_fetched_before(168) == 0
+    assert len(store.fetched_since(hours=1)) == 1
