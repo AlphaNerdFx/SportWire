@@ -3444,3 +3444,36 @@ Standing items not otherwise listed above:
   variables can cause it independently or it needs a combination. `[INFERRED]` Not worth
   chasing: the fixture is right whichever it is, and the alternative is twelve explanations
   where one rule does.
+
+- [x] **P65. The poll store was never purged and grew for as long as the program ran.**
+  Closed 2026-08-28, found while checking whether anything grows without bound before a long
+  unattended soak.
+
+  `[VERIFIED]` `seen_articles` has had a purge since the day it existed. `fetched_articles`,
+  added later by ADR-014, never got one, so the store held the full title and description of
+  every article ever fetched:
+
+  ```
+  seen_articles     498 rows   purged after forget_window hours
+  fetched_articles  427 rows   purged never
+  ```
+
+  `[INFERRED]` Nothing reads a row that old. Both readers take a window: `fetched_since` is
+  called with the dedup window and `arrivals_per_hour` defaults to 168 hours. Everything older
+  was still being written, indexed and carried in every backup.
+
+  `[VERIFIED]` Not urgent and worth fixing anyway. At the measured offseason rate of about 3.9
+  new articles an hour, two days of running had produced 427 rows and roughly 370 KB, so this
+  was years from being a problem. `[INFERRED]` It is the kind of thing that is cheap now and
+  awkward once someone has a large database, and the 14-day gate in issue #1 is the first time
+  this will run unattended for long enough to notice.
+
+  **Fix:** `purge_fetched_before`, called from `main` beside the existing purge, on the same
+  window, behind the same `--dry-run` guard.
+
+  `[VERIFIED]` Checked on a copy of the live database rather than a fixture: 427 rows in, all
+  aged past the window, 427 dropped, and the real database untouched.
+
+  `[VERIFIED]` Four mutations, all caught: never deleting, deleting regardless of age, purging
+  the wrong table, and removing the `--dry-run` guard. The last was re-run after the first
+  attempt broke indentation, since a syntax error is not evidence the guard is tested.
