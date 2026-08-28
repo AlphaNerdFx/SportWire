@@ -496,6 +496,14 @@ def main(argv: list[str] | None = None) -> int:
                 logger.info(
                     "forgot %d articles delivered over %dh ago", purged, forget_after
                 )
+            # The poll store too. `[VERIFIED]` 2026-08-28 it had no purge at all and grew
+            # for as long as the program ran, holding the full text of every article ever
+            # fetched. Same window, because it is already outside every reader's.
+            dropped = store.purge_fetched_before(forget_after)
+            if dropped:
+                logger.info(
+                    "dropped %d polled articles older than %dh", dropped, forget_after
+                )
 
         # ADR-014, the seam between polling and delivering.
         #
