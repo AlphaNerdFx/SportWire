@@ -361,6 +361,35 @@ class SeenStore:
         self._connection.commit()
         return cursor.rowcount
 
+    def purge_fetched_before(self, hours: int) -> int:
+        """Forget polled articles older than `hours`. Returns how many rows went.
+
+        `[VERIFIED]` 2026-08-28: nothing purged this table. `seen_articles` had a purge from
+        the day it existed and `fetched_articles`, added later by ADR-014, never got one, so
+        the poll store held the full title and description of every article ever fetched and
+        grew for as long as the program ran.
+
+        `[INFERRED]` Nothing reads a row this old. Both readers take a window: `fetched_since`
+        is called with the dedup window, and `arrivals_per_hour` defaults to 168 hours. A row
+        older than the larger of those is dead weight that is still written, indexed and
+        backed up.
+
+        **The caller decides the window and must not cut inside a reader's.** `forget_window`
+        already computes a value that is never below `MAX_ARTICLE_AGE_HOURS`, which is what
+        `main` passes here, and that is comfortably outside both.
+
+        `[INFERRED]` Kept separate from `purge_delivered_before` rather than folded into it.
+        The two tables answer different questions, "have I sent this" and "what did I see",
+        and a single purge would tie two windows together that have no reason to move
+        together.
+        """
+        cursor = self._connection.execute(
+            "DELETE FROM fetched_articles WHERE fetched_at < ?",
+            ((datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat(),),
+        )
+        self._connection.commit()
+        return cursor.rowcount
+
     def head_to_head(self, game: GameData) -> tuple[int, int, int]:
         """Prior meetings between this game's teams: `(home_wins, away_wins, meetings)`.
 
