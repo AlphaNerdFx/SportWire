@@ -1047,8 +1047,27 @@ what each turned into, since several changed shape on contact with real data.
     threshold question (options a/b) becomes real and there will be data to settle it with.
     `[VERIFIED]` The dated log format from `ec7bc3c` makes that countable.
 
-- [ ] **P10. A superlative category can be silently emptied by an earlier one.** Found
-  2026-08-13 by testing. **User-facing, and it happens on the committed fixture.**
+- [x] **P10. A superlative category can be silently emptied by an earlier one.** Found
+  2026-08-13 by testing. **Fixed with option (a); the entry was simply never ticked.**
+
+  `[VERIFIED]` 2026-08-28, re-checked on the committed fixture rather than assumed from the
+  code comment. `find_notable_games` recomputes each superlative over the still-unclaimed
+  games, and the nine-game slate produces:
+
+  ```
+  biggest_period     Utah at Dallas          margin 22, total 266
+  largest_margin     Oklahoma City at Houston margin 20
+  highest_scoring    Charlotte at LA Lakers   total 252
+  ```
+
+  Dallas holds the widest margin *and* the highest total *and* the biggest quarter, and both
+  of the categories it would have shadowed now name the next best game instead of going
+  silent. `tests/test_highlights.py::test_a_claimed_superlative_falls_through_to_the_best_
+  unclaimed_game` guards it.
+
+  `[INFERRED]` Worth noting why this sat open: the code, its comment and a test all said
+  "fixed", and only the task list disagreed. A stale open task is cheaper than a stale closed
+  one, but it still costs the next reader time deciding which to believe.
   `[VERIFIED]` `_CATEGORY_ORDER` puts `biggest_period` before `largest_margin`, and a game is
   reported once under its first matching category. On the real 2026-01-15 slate, Dallas beat
   Utah by **22 — the widest margin of the night — with a 43-point quarter**, so
