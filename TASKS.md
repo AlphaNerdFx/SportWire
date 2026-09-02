@@ -2640,6 +2640,38 @@ what each turned into, since several changed shape on contact with real data.
   operator and someone without his technical background wants to run it. Operator flagged
   2026-08-03 that `.env`/API-key setup (e.g. ADR-003's `balldontlie.io` key) is acceptable
   for now but not the intended final shape — see `SESSION.md` §9 Q10.
+- [ ] **L14. Work on `slice/` branches, and protect `main` so the only way in is a pull
+  request.** Trigger: **v1.0.0 is released, or features start being built separately**,
+  whichever comes first. Both halves were asked for by the operator on 2026-09-03 and
+  deferred the same day, in the operator's own words: *"right now we're still building the
+  core product"* and *"branching would make sense once we're adding features separately"*.
+
+  `[VERIFIED]` Until then, work commits straight to `main`, which is what the repository has
+  actually done since it was created. `CLAUDE.md` §9 was corrected to say so rather than
+  keep a rule nothing follows.
+
+  `[VERIFIED]` It was applied and then removed on 2026-09-03, so the settings below are
+  known to work on this repository rather than guessed:
+
+  ```
+  required pull request     0 approvals
+  applies to admins         true
+  required status check     check   (the CI job name), strict
+  force pushes, deletions   blocked
+  ```
+
+  `[VERIFIED]` Approvals must be **0**. GitHub does not let anyone approve their own pull
+  request, so any higher number locks the only maintainer out of merging entirely.
+
+  `[VERIFIED]` It does not block releases. `release.yml` fires on a tag push, and branch
+  protection on `main` does not apply to tags.
+
+  `[INFERRED]` What it does cost while the core is still being built is a pull request for
+  every version bump and every one-line fix, which is the friction the operator deferred it
+  over. After v1.0.0 that friction is the point.
+
+  Apply with `gh api -X PUT repos/AlphaNerdFx/SportWire/branches/main/protection`, remove
+  with the same path and `-X DELETE`.
 
 ---
 
