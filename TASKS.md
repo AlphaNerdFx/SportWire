@@ -2213,8 +2213,9 @@ what each turned into, since several changed shape on contact with real data.
 
 ---
 
-- [ ] **P35. NFL stories reach the NBA brief.** Open, and **reduced rather than fixed** by
-  ADR-015 on 2026-08-26. Noticed 2026-08-18 in two separate runs.
+- [x] **P35. Another sport's stories reach the brief.** Closed 2026-09-03 by rule 1d,
+  after the 2026-08-26 measurement was found to have counted only one of the ways it happens.
+  Noticed 2026-08-18 in two separate runs, reduced by ADR-015 on 2026-08-26.
 
   `[VERIFIED]` 2026-08-27: every article now carries the league of the feed it came from, and
   the briefs are built one per league, so a football story can no longer arrive in the
@@ -2231,11 +2232,65 @@ what each turned into, since several changed shape on contact with real data.
   not because it was football.
   `[INFERRED]` The cause is the feeds, not the pipeline: CBS and Yahoo publish league-wide
   sports RSS, and nothing downstream asks which sport an item is about.
-  ~~`[UNKNOWN]` How often~~ **Measured 2026-08-26: rare.** Across 128 live articles from the
+  ~~`[UNKNOWN]` How often~~ ~~**Measured 2026-08-26: rare.** Across 128 live articles from the
   four NBA-scoped feeds, **1 (0.8%)** reads as another sport, a CBS item pairing an NFL
   contract story with a list. `[INFERRED]` The feed URLs are league-scoped
   (`/rss/nba/`, `/nba/rss/`), so the leakage is cross-promotional rather than systematic, and
-  a filter built to catch 0.8% would be more machinery than the problem deserves.
+  a filter built to catch 0.8% would be more machinery than the problem deserves.~~
+
+  **Re-measured 2026-09-03, and that reading was wrong by an order of magnitude.** It counted
+  only football words in basketball feeds. The feeds leak hockey, baseball and college too.
+
+  `[VERIFIED]` Of the 63 Yahoo articles that reached NBA briefs between 08-28 and 09-02, **12
+  are another sport**: four NHL, three NFL, one MLB, one WNBA, two college, one hockey
+  community post. That is 19% of that source and about 10% of the basketball brief.
+
+  `[VERIFIED]` **Three of them reached the delivered text**, which the earlier reading assumed
+  they did not:
+
+  ```
+  2026-08-28 23:01  "Cale Makar has signed an 8-year NHL extension with the Colorado
+                     Avalanche worth $20M+, and Jonathan Kuminga has signed..."
+  2026-08-28 23:01  "...and Vancouver Canucks fans ca[n]..."
+  2026-08-28 15:00  "Meanwhile, David Halprin interviewed Cowboys, but no specifics
+                     were mentioned."
+  ```
+
+  **Fixed** by rule 1d in `processing/newsworthy.py`, using the vocabulary in
+  `processing/names.py`. It fires on positive evidence of another sport **and** no evidence of
+  this one. Both halves were measured:
+
+  `[VERIFIED]` Across all 397 articles in league-labelled batches it drops **13 (3.3%)**, every
+  one from a Yahoo feed. Twelve are unarguable. The thirteenth is the known cost and is
+  recorded rather than hidden: *"Joey, Jesse Buss join new Padres ownership group"* is baseball
+  news about the family that owns the Lakers, and it goes.
+
+  `[VERIFIED]` Deliberately short vocabulary. A word that also names an NBA or NFL team is
+  refused by an assertion at import, not by care: the Kings are Sacramento and Los Angeles, the
+  Jets are New York and Winnipeg, the Panthers are Carolina in two sports. Adding `kings` to
+  the hockey list fails the import with `a word cannot name two sports at once: ['kings']`,
+  checked by mutation. Ordinary English words (`wild`, `lightning`, `capitals`, `stars`,
+  `blues`) are left out for the same reason.
+
+  `[VERIFIED]` Five mutations, each killing exactly the test that names it:
+
+  | Mutation | Test that failed |
+  |---|---|
+  | own-league guard removed | the Rams-and-Bulls story, wrongly dropped from the NBA brief |
+  | other-sport word loop disabled | the Makar NHL contract |
+  | phrase loop disabled | the ACC and Big Ten item |
+  | other-league loop disabled | `Kansas City Chiefs roster` |
+  | rule never called from `rejection_reason` | all four drop cases |
+
+  `[VERIFIED]` The last one matters most here. Three pipeline-wiring mutants have survived in
+  this repository before, so a rule that works in isolation and is never reached is a shape
+  this project has already paid for.
+
+  `[UNKNOWN]` What it does not catch. `Angel Reese avoids automatic suspension` (WNBA) and an
+  SB Nation hockey thread both survive, because neither title carries a listed word. One
+  college item survives too, because "basketball" counts as basketball evidence and
+  `Marquette Men's Basketball` says it. Removing that safety net gains exactly one drop across
+  397 articles and costs a guard on every teamless NBA story, so it stays.
 
   `[INFERRED]` **The priority is therefore not the filter, it is the routing**, and they are
   different problems that happen to share a symptom. `ROADMAP.md` v0.5.0 and v0.6.0 add NFL,
