@@ -3,6 +3,11 @@
 Written 2026-08-28. Everything below was checked by running a command in this session, not
 recalled. Tags follow `CLAUDE.md` §0.
 
+**Patched 2026-09-03, and only in two places:** open decision 4 and the STASHES section, because
+the 95 stashes they describe were dropped that day and a `[VERIFIED]` claim about something that
+no longer exists is the failure this file was written to avoid. Everything else is untouched and
+is a snapshot of 2026-08-28, so STATE and IN PROGRESS are older than the repository.
+
 > `[INFERRED]` This file is the one the project's own history warns about: the previous
 > handover described a system that did not exist. Nothing here is carried forward from an
 > earlier session without re-checking, and where I do not know, it says so.
@@ -148,12 +153,9 @@ single accepted summary**, so nothing is known about its writing or its fabricat
 **Recommendation: keep it. The cost is two failed requests per run and the fallback is
 proven; if the pool frees up, the soak will show whether it is worth anything.**
 
-**4. 95 stashes.**
-`[VERIFIED]` `git stash list | wc -l` reports **95**, nearly all named `mut:` or similar from
-mutation testing. They are labelled but they are clutter.
-`[UNKNOWN]` Whether any is still wanted. **Not deleted, because deleting recoverable work
-without being asked is not mine to do.**
-**Recommendation: review and drop the `mut:` ones, which were only ever scaffolding.**
+**4. ~~95 stashes.~~ Settled 2026-09-03: all 95 dropped, on the operator's instruction.**
+`[VERIFIED]` `git stash list` now returns nothing. See STASHES below for what was checked
+first and how to get them back.
 
 ---
 
@@ -190,19 +192,21 @@ rows above it. `[INFERRED]` The instrument is sound; the reading is not yet.
 
 ## STASHES
 
-`[VERIFIED]` **95 entries**, from `git stash list`. All were created by mutation testing:
-a change is stashed, the mutated file restored, and the stash left rather than dropped.
+~~`[VERIFIED]` **95 entries**, from `git stash list`.~~ **Emptied 2026-09-03**, on the
+operator's instruction. `[VERIFIED]` `git stash list` returns nothing and `make check` is
+still green afterwards: exit 0, 547 passed, 1 xfailed.
 
-Newest five, as a sample of the whole:
+`[VERIFIED]` What was checked before they went, rather than assuming the earlier reading:
 
-```
-stash@{0}  lg mut3: one stamp only
-stash@{1}  lg mut2: stop stamping the league (both sites)
-stash@{2}  lg mut: stop stamping the league
-stash@{3}  lg mut: drop a feed from the league map
-stash@{4}  lg mut: ignore the explicit league
-```
+- All 95 touched only files that still exist. None created a file living nowhere else.
+- The whole set was 1264 diff lines across 95 stashes, about 13 lines each, which is the shape
+  of a one-line deliberate bug rather than work.
+- 94 were mutation scaffolding. The 95th, `pre-autonomous-checkpoint` from 2026-08-14, held
+  four untracked files: `.claude/settings.json`, both skill files, and
+  `tests/test_check_links.py`. All four are tracked now, three byte-identical to the stashed
+  copies, and the fourth is an older copy of the commit skill from before the 2026-08-17
+  rules. Nothing unique, so it went with the rest.
 
-`[INFERRED]` None contains work that is not already in the tree: each is a deliberate bug that
-was introduced, tested against, and reverted. They are safe to drop, and none has been dropped
-without the operator saying so.
+`[VERIFIED]` They are recoverable. Dropped stash commits are unreachable rather than deleted:
+`git fsck --unreachable --no-reflogs` lists them, and git does not garbage-collect unreachable
+objects for 90 days by default, so until roughly **2026-12-02**.
