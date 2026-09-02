@@ -236,3 +236,91 @@ def canonical_team(word: str) -> str:
     if group is None:
         return word
     return min({lowered, *group})
+
+
+# Team nicknames, split by league. `[VERIFIED]` 2026-09-03 this moved here from
+# `processing/validate.py`, where it was a private flat set of 62 commented `# NBA` and
+# `# NFL` but not keyed by either. The move is the same one `canonical_team` made and for the
+# same reason: a table that two modules need cannot stay private to one of them.
+#
+# `[INFERRED]` Split rather than moved whole, because the caller that needed it needs to ask
+# "is this word one of *this* league's teams", and a flat set cannot answer that. The union is
+# published too, so nothing that only wanted "is this a team at all" has to change.
+NBA_TEAM_NICKNAMES = frozenset(
+    {
+        "hawks",
+        "celtics",
+        "nets",
+        "hornets",
+        "bulls",
+        "cavaliers",
+        "mavericks",
+        "nuggets",
+        "pistons",
+        "warriors",
+        "rockets",
+        "pacers",
+        "clippers",
+        "lakers",
+        "grizzlies",
+        "heat",
+        "bucks",
+        "timberwolves",
+        "pelicans",
+        "knicks",
+        "thunder",
+        "magic",
+        "76ers",
+        "suns",
+        "blazers",
+        "kings",
+        "spurs",
+        "raptors",
+        "jazz",
+        "wizards",
+    }
+)
+
+NFL_TEAM_NICKNAMES = frozenset(
+    {
+        "cardinals",
+        "falcons",
+        "ravens",
+        "bills",
+        "panthers",
+        "bears",
+        "bengals",
+        "browns",
+        "cowboys",
+        "broncos",
+        "lions",
+        "packers",
+        "texans",
+        "colts",
+        "jaguars",
+        "chiefs",
+        "raiders",
+        "chargers",
+        "rams",
+        "dolphins",
+        "vikings",
+        "patriots",
+        "saints",
+        "giants",
+        "jets",
+        "eagles",
+        "steelers",
+        "49ers",
+        "seahawks",
+        "buccaneers",
+        "titans",
+        "commanders",
+    }
+)
+
+TEAM_NICKNAMES = NBA_TEAM_NICKNAMES | NFL_TEAM_NICKNAMES
+
+TEAM_NICKNAMES_BY_LEAGUE: dict[str, frozenset[str]] = {
+    "NBA": NBA_TEAM_NICKNAMES,
+    "NFL": NFL_TEAM_NICKNAMES,
+}
