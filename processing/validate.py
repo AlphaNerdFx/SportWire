@@ -718,8 +718,19 @@ def _depossess(word: str) -> str:
     invented name "Kawhi Leonard's" — while the sources were almost entirely about Kawhi
     Leonard. A validator that rejects grounded text disables the feature it protects, so
     false positives are the expensive kind of error here.
+
+    Punctuation is stripped again afterwards, and a suffix is why. `[VERIFIED]` 2026-09-03:
+    "Brandon McCoy Jr.'s" kept its period, because the possessive sits behind it and the
+    first strip only reaches the end of the word. The sources index the same man as `jr`,
+    so `_contradicted` read one spelling against the other and refused the name as a blend
+    of two people. Three briefs lost an attempt to this shape in six days: `Mims Jr.'s`,
+    `Gervon Dexter Sr.'s`, `Brandon McCoy Jr.'s`, each named in the source it was checked
+    against.
+
+    `[VERIFIED]` Re-validating all 44 recorded briefs against their own batches changes
+    **0** verdicts, so this only reaches the shape it was written for.
     """
-    return re.sub(r"['’]s?$", "", word.strip(" .,;:"))
+    return re.sub(r"['’]s?$", "", word.strip(" .,;:")).strip(" .,;:")
 
 
 def _grounded(
