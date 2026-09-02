@@ -358,6 +358,10 @@ is not measuring what its name says.
     `[UNKNOWN]`, but the measurement itself now lives in `TASKS.md` and the commit points at
     the item. `[INFERRED]` A tag with no room for its evidence is worse than a short message
     that says where the evidence is, so name the task id when there is one.
+- **Changelog:** `CHANGELOG.md` gets an entry for every release, one or two plain lines saying
+  what changed for a reader. Work lands under `## Unreleased` as it is committed and moves under
+  the version heading when the tag is cut. The full notes still live in the tag; the changelog is
+  the index to them, so do not paste a tag message into it.
 - **Tags:** `git tag -a vX.Y.Z -F <file>`, and the message becomes the release notes.
   **Do not start the notes with the version or a headline.** `[VERIFIED]` 2026-08-17:
   `release.yml` already passes `--title "$GITHUB_REF_NAME"`, so the GitHub title is correct on
