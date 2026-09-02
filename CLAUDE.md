@@ -368,7 +368,13 @@ is not measuring what its name says.
   its own, and `gh release view v0.1.2` confirms it reads `v0.1.2`. What made the release page
   look wrong was the first line of the notes body, which repeated the version and a headline
   after a dash. Open with a plain sentence about what changed instead.
-- **Branches:** `main` stays runnable at all times. Work on `slice/<name>`.
+- **Branches:** `main` stays runnable at all times. ~~Work on `slice/<name>`.~~ **Corrected
+  2026-09-03.** `[VERIFIED]` Nothing has ever followed that rule: `main` carries 412 commits
+  and **zero** merge commits, so no branch has ever been merged into it, and no `slice/`
+  branch appears anywhere in the reflog. The operator decided to keep it that way for now,
+  because *"branching would make sense once we're adding features separately"* and the core
+  product is still being built. Commit to `main`, keep it runnable, and see `TASKS.md` L14 for
+  the trigger that turns branching and pull-request-only merges on.
 - **Documentation:** ADRs in `docs/decisions/`. `SESSION.md` updated at the end of every
   working session. `TASKS.md` updated as tasks complete, with proof.
 
