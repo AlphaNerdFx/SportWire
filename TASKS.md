@@ -3057,6 +3057,26 @@ Standing items not otherwise listed above:
   `[UNKNOWN]` Whether the rule costs anything. A brief that refuses to name a team when the
   source names one would be worse, not better, and nothing here has measured that direction.
 
+  **Measured 2026-09-03, and the answer is no.** `[VERIFIED]` `scripts/soak_report.py --days 6`
+  covers 30 briefs on one settled version, `v0.5.11` onwards, rather than the twelve versions
+  the first reading mixed:
+
+  ```
+  NBA   11 of 15  (73.3%)   fell back 4
+  NFL   13 of 15  (86.7%)   fell back 2
+  ```
+
+  `[VERIFIED]` Teams are still invented. Of 48 names rejected between 08-28 and 09-02, **20**
+  are teams: Golden State Warriors five times, Lakers three, and Nuggets, Rockets, Bucks,
+  Timberwolves, Raptors and Bulls once or twice each. Every rejection was matched to its own
+  batch by time and checked against it.
+
+  `[UNKNOWN]` Whether the prompt helped at all, and the log cannot say. The only earlier window
+  it still holds is 08-15 to 08-19, which predates P51's bare-team check, so the team share
+  rising from 22% to 42% mostly measures the validator learning to see one-word teams. There is
+  no clean before to compare against. `[INFERRED]` Keep P54 open on the outcome rate above, not
+  on the share, and judge the next prompt change by the fallback counts per league.
+
 - [x] **P55. A run made the whole machine unusable, and spent minutes doing it.** Closed
   2026-08-27, raised by the operator: *"pc spent like 8 minutes processing to just get proses
   ... whole PC goes down to halt, imagine this on weaker systems."*
@@ -3176,6 +3196,27 @@ Standing items not otherwise listed above:
   most plausibly caused it is a mechanism argument, not a measurement of the outcome, and this
   project has already paid for treating one as the other (P4). Resolve by counting acceptances
   per league across the soak, the same instrument P54 is waiting on.
+
+  **Measured 2026-09-03. The rule fires, and it is narrower than the class it describes.**
+  `[VERIFIED]` 14 of the 266 articles that reached the summarizer since 08-28 are rankings or
+  predictions:
+
+  ```
+  Ranking the NBA's 12 best duos: Three new-look pairs make the list
+  Utah Jazz Top 10 Trade Value Rankings - 2026/27
+  Ranking every NFL team's WR room: Cowboys and Bengals battle for top spot
+  2027 NFL Draft WR rankings: Former FCS product rises
+  One bold prediction for every NFL team in 2026
+  Chicago Bears 53 Man Roster Prediction (Our last one, I promise)
+  ```
+
+  `SPECULATIVE_PHRASES` holds `"power rankings"` and `"roster rankings"` but not plain
+  `"ranking"`, and `"predictions"` but not `"prediction"`. `[UNKNOWN]` What widening those two
+  would cost. It has not been measured against the captured batches, and the list was narrow on
+  purpose: "grades" and "preview" were both measured and left out because a real transaction
+  can carry either word.
+
+  `[VERIFIED]` The per-league rates this was waiting on are recorded in P54 above.
 
 - [x] **P57. There was no way to count what the briefs actually did.** Closed 2026-08-27.
 
@@ -3477,3 +3518,58 @@ Standing items not otherwise listed above:
   `[VERIFIED]` Four mutations, all caught: never deleting, deleting regardless of age, purging
   the wrong table, and removing the `--dry-run` guard. The last was re-run after the first
   attempt broke indentation, since a syntax error is not evidence the guard is tested.
+
+- [x] **P66. A name ending in `Jr.` or `Sr.` plus a possessive was refused although the source
+  names the person.** Closed 2026-09-03, found while classifying six days of rejections rather
+  than by a test.
+
+  `[VERIFIED]` Three briefs lost an attempt to this shape in six days, each name written by
+  the source it was checked against:
+
+  ```
+  Brandon McCoy Jr.'s    "Brandon McCoy Jr. injury update: Michigan star to miss 2026-27 season"
+  Gervon Dexter Sr.'s    "Bears-Falcons trade grades: Gervon Dexter Sr. bolsters Atlanta's..."
+  Mims Jr.'s             "...wide receiver Marvin Mims Jr. left Friday's preseason finale..."
+  ```
+
+  **Cause.** `_depossess` stripped trailing punctuation first and the possessive second. In
+  `Jr.'s` the period is not trailing, so it survived and the summary's word stayed `jr.` while
+  `_index_source_names` holds the same man as `jr`. `_contradicted` then compared the two
+  spellings, found a name in the sources that shares an end and disagrees about the rest, and
+  refused the whole name as a blend of two people. `[INFERRED]` The refutation check is doing
+  exactly what P25 asked of it; it was handed two normalisations of one word.
+
+  **Fix:** strip punctuation again after the possessive comes off, one line.
+
+  `[VERIFIED]` Measured before shipping, on the recorded briefs rather than a fixture: all
+  **44** briefs in `evidence/` re-validated against their own batches, **0** verdicts changed.
+  It clears two of the three cases above.
+
+  `[VERIFIED]` The third is a different bug and is open as P67.
+
+  `[VERIFIED]` Mutation: the trailing strip removed, the removal confirmed present in the tree,
+  suite run bare. `1 failed, 546 passed, 1 xfailed`, the failure being exactly
+  `test_a_suffix_before_a_possessive_does_not_break_grounding`. Restored by copy, not by a
+  destructive git verb.
+
+- [ ] **P67. A position abbreviation welds to a player and then refutes them.** Open, found
+  2026-09-03 while fixing P66.
+
+  `[VERIFIED]` `Mims Jr.'s` is still refused after P66. The batch carries both
+  `Broncos WR Mims exits, avoids serious foot injury` and, in the same article's body,
+  `wide receiver Marvin Mims Jr. left Friday's preseason finale`. `_split_at_teams` cuts the
+  headline after `Broncos` and indexes what is left as the name `{wr, mims}`. Keyed on `mims`,
+  that entity disagrees with `{mims, jr}` about the rest, so the real man refutes himself.
+
+  `[INFERRED]` The same construction P48 and P52 fixed, one word further along: a headline
+  writes team, position, player as one capitalised run, and only the team is treated as a
+  boundary. `Giants WR Calvin Austin III` is indexed as `{wr, calvin, austin, iii}` for the
+  same reason.
+
+  **Not fixed, because the boundary is a decision.** A position list is a table like
+  `_TEAM_NICKNAMES`, and the same objection applies that P26 recorded: `WR`, `RB`, `CB` are
+  unambiguous, while `G` is a guard and a grade and `C` is a centre and a letter. Whether the
+  table is worth its false matches has not been measured.
+
+  `[UNKNOWN]` How often this costs an attempt. One instance in six days is what the log shows,
+  so it is smaller than P66 was.
