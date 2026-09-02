@@ -14,6 +14,9 @@ tag is cut. See `CLAUDE.md` §9.
 
 - A player whose name ends in `Jr.` or `Sr.` is no longer accused of being invented when the
   brief writes about something of his. Three briefs in six days lost an attempt to it (P66).
+- The basketball brief no longer carries hockey, baseball or college stories, and the football
+  brief no longer carries hockey. The feeds are scoped by web address, not by content, so one
+  of them had been delivering an NHL contract to a basketball reader (P35).
 
 ## v0.5.12 - 2026-08-28
 
