@@ -182,6 +182,82 @@ def test_all_time_wording_is_kept(make_article: ArticleFactory, now: datetime) -
     )
 
 
+# --- rule 1d: another sport entirely ----------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("title", "league", "expected"),
+    [
+        (
+            "Avalanche D Cale Makar becomes NHL's first $20M player in massive deal",
+            "NBA",
+            "NHL",
+        ),
+        (
+            "The ACC Joins The Big Ten, SEC & Big 12 Actually Agree On Something",
+            "NBA",
+            "college",
+        ),
+        ("Kansas City Chiefs roster", "NBA", "NFL"),
+        (
+            "Three NHL PTO Candidates For The Maple Leafs Ahead Of Training Camp",
+            "NFL",
+            "NHL",
+        ),
+    ],
+)
+def test_a_story_about_another_sport_is_dropped(
+    title: str, league: str, expected: str, make_article: ArticleFactory, now: datetime
+) -> None:
+    """`[VERIFIED]` All four are real, and the first two reached a delivered brief.
+
+    The basketball brief on 2026-08-28 told the operator that "Cale Makar has signed an 8-year
+    NHL extension with the Colorado Avalanche", and another that Canucks fans could attend
+    training camp. The feeds are league-scoped by URL and not by content, so
+    `https://sports.yahoo.com/nba/rss/` carries hockey, baseball and college stories.
+
+    The four cover the three ways the rule can fire: a word ("avalanche"), a phrase that is
+    only unambiguous written out ("big ten"), and the other league this project itself covers.
+    The last one runs the rule the other way round, football brief and hockey story, because a
+    check that only worked in one direction would pass every basketball test it was given.
+    """
+    reason = rejection_reason(make_article(title, league=league), now)
+
+    assert reason is not None, f"kept a {expected} story in the {league} brief"
+    assert "another sport" in reason
+    assert expected in reason
+
+
+@pytest.mark.parametrize(
+    ("title", "league"),
+    [
+        # Names another sport's team, but also this league's own, so the rule stands down.
+        ("Aaron Donald's return to Rams is like Michael Jordan and Bulls", "NBA"),
+        ("Bengals star Chase 'fine' after knee injury scare", "NFL"),
+        # Names no team at all, which is the common shape and must never be enough on its own.
+        (
+            (
+                "Cooper Flagg's 1-of-1 Rookie Debut Patch Will Headline Record "
+                "Fanatics Collect Auction"
+            ),
+            "NBA",
+        ),
+    ],
+)
+def test_a_story_about_this_sport_survives_the_other_sport_rule(
+    title: str, league: str, make_article: ArticleFactory, now: datetime
+) -> None:
+    """The two halves the rule needs, asserted separately because either alone is a bug.
+
+    `[VERIFIED]` All three titles are real. The first is the reason the rule demands *no*
+    evidence of this league before it fires: it names the Rams and would otherwise be thrown
+    out of the basketball brief it belongs in. The third is the reason it demands positive
+    evidence of another sport rather than absence of this one, since a basketball story naming
+    no team is ordinary and dropping those would be a silent cull.
+    """
+    assert is_newsworthy(make_article(title, league=league), now)
+
+
 # --- the deleted rule 2: years ---------------------------------------------------------
 
 
@@ -560,15 +636,18 @@ def test_a_ranking_or_a_guess_is_not_news(
 
 
 @pytest.mark.parametrize(
-    "title",
+    ("title", "league"),
     [
-        "Giants-Chiefs trade grades: Kansas City adds OL depth piece",
-        "Grading NFL offseason trades: Assessing four deals",
-        "Warriors offseason recap and early season preview: Continuity over change",
+        ("Giants-Chiefs trade grades: Kansas City adds OL depth piece", "NFL"),
+        ("Grading NFL offseason trades: Assessing four deals", "NFL"),
+        (
+            "Warriors offseason recap and early season preview: Continuity over change",
+            "NBA",
+        ),
     ],
 )
 def test_an_opinion_attached_to_a_real_event_is_still_news(
-    make_article: Callable[..., NewsArticle], title: str, now: datetime
+    make_article: Callable[..., NewsArticle], title: str, league: str, now: datetime
 ) -> None:
     """The line this rule must not cross, and it was drawn by measuring rather than taste.
 
@@ -576,8 +655,14 @@ def test_an_opinion_attached_to_a_real_event_is_still_news(
     trade grade is a real trade being reported with an opinion attached, and dropping it would
     lose the transaction along with the commentary. `[INFERRED]` The distinction that matters
     is not whether a piece contains opinion, it is whether anything happened.
+
+    `[VERIFIED]` The league moved into the parameters on 2026-09-03. Two of these three cases
+    are football and were built with the factory's default of NBA, so rule 1d read them as a
+    football story sitting in the basketball brief and dropped them, which is what that rule
+    is for. The fixture was wrong rather than the rule: this test is about the grades and
+    preview boundary, and it still asserts exactly that.
     """
-    assert is_newsworthy(make_article(title), now)
+    assert is_newsworthy(make_article(title, league=league), now)
 
 
 def test_a_fan_poll_is_not_news(
