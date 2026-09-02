@@ -24,7 +24,7 @@ import unicodedata
 from difflib import SequenceMatcher
 
 from models.schemas import NewsArticle
-from processing.names import TEAM_ALIASES, NameScanner
+from processing.names import TEAM_ALIASES, TEAM_NICKNAMES, NameScanner
 
 logger = logging.getLogger(__name__)
 
@@ -486,74 +486,11 @@ class ValidationResult:
 # ones sitting inside a longer run.
 _LONE_WORD = re.compile(r"\b[A-Z0-9][A-Za-z0-9]+\b")
 
-_TEAM_NICKNAMES = frozenset(
-    {
-        # NBA
-        "hawks",
-        "celtics",
-        "nets",
-        "hornets",
-        "bulls",
-        "cavaliers",
-        "mavericks",
-        "nuggets",
-        "pistons",
-        "warriors",
-        "rockets",
-        "pacers",
-        "clippers",
-        "lakers",
-        "grizzlies",
-        "heat",
-        "bucks",
-        "timberwolves",
-        "pelicans",
-        "knicks",
-        "thunder",
-        "magic",
-        "76ers",
-        "suns",
-        "blazers",
-        "kings",
-        "spurs",
-        "raptors",
-        "jazz",
-        "wizards",
-        # NFL
-        "cardinals",
-        "falcons",
-        "ravens",
-        "bills",
-        "panthers",
-        "bears",
-        "bengals",
-        "browns",
-        "cowboys",
-        "broncos",
-        "lions",
-        "packers",
-        "texans",
-        "colts",
-        "jaguars",
-        "chiefs",
-        "raiders",
-        "chargers",
-        "rams",
-        "dolphins",
-        "vikings",
-        "patriots",
-        "saints",
-        "giants",
-        "jets",
-        "eagles",
-        "steelers",
-        "49ers",
-        "seahawks",
-        "buccaneers",
-        "titans",
-        "commanders",
-    }
-)
+# ~~The table lived here.~~ **Moved to `processing/names.py` 2026-09-03**, split by
+# league, because `processing/newsworthy.py` needs to ask whether a word names a team of
+# *this* article's league and a flat private set cannot answer that. `[VERIFIED]` The union
+# is the same 62 words this file held, checked by comparing the sets before the move.
+_TEAM_NICKNAMES = TEAM_NICKNAMES
 
 
 def _ungrounded_teams(summary: str, source: str) -> list[str]:
