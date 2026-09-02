@@ -23,6 +23,11 @@ import re
 from datetime import datetime, timezone
 
 from models.schemas import NewsArticle
+from processing.names import (
+    OTHER_SPORT_PHRASES,
+    OTHER_SPORT_WORDS,
+    TEAM_NICKNAMES_BY_LEAGUE,
+)
 from processing.validate import normalise_word, ordinary_words
 
 logger = logging.getLogger(__name__)
@@ -207,6 +212,13 @@ def rejection_reason(article: NewsArticle, now: datetime | None = None) -> str |
         if phrase in lowered:
             return f"speculation phrase {phrase!r}"
 
+    # Rule 1d — about a different sport entirely. The feeds are league-scoped by URL and not
+    # by content, so this is the last thing standing between a hockey contract and the
+    # basketball brief. See `_another_sport`.
+    other_sport = _another_sport(lowered, article.league)
+    if other_sport:
+        return f"another sport, {other_sport}"
+
     # Rule 3 — posted by the subreddit itself rather than by a reader.
     if _posted_by_a_moderator(article.author):
         return f"subreddit business, posted by {article.author}"
@@ -218,6 +230,61 @@ def rejection_reason(article: NewsArticle, now: datetime | None = None) -> str |
     # Rule 5 — a short untagged community post that does not open with a name. Needs the
     # whole batch to know what an ordinary word looks like, so it is applied in
     # `drop_non_news` rather than here, where only one article is in scope.
+
+    return None
+
+
+# A league's own vocabulary: its teams, its acronym, and its sport. `[INFERRED]` The sport word
+# is here as a safety net rather than for the teams. A basketball story naming no team at all
+# is common ("Cooper Flagg's rookie debut patch"), and the word "basketball" is the only thing
+# keeping a piece like it out of reach of the rule below.
+_LEAGUE_WORDS: dict[str, frozenset[str]] = {
+    "NBA": TEAM_NICKNAMES_BY_LEAGUE["NBA"] | frozenset({"nba", "basketball"}),
+    "NFL": TEAM_NICKNAMES_BY_LEAGUE["NFL"] | frozenset({"nfl", "football"}),
+}
+
+_TITLE_WORD = re.compile(r"[a-z0-9'\u2019]+")
+
+
+def _another_sport(lowered: str, league: str) -> str | None:
+    """Which other sport a title is about, or None when it is this league's own.
+
+    `[VERIFIED]` 2026-09-03. Of the 63 Yahoo articles that reached NBA briefs between 08-28
+    and 09-02, 12 were another sport, and three reached the delivered text: a Cale Makar NHL
+    contract, a Canucks item, and one about the Cowboys. `TASKS.md` P35 had recorded this leak
+    as 0.8% and not worth machinery, but that measurement counted only football words in
+    basketball feeds. Counting hockey, baseball and college too it is 19% of that one source.
+
+    **Positive evidence of another sport, and no evidence of this one.** Both halves matter.
+    The second is what keeps "Aaron Donald's return to Rams is like Michael Jordan and Bulls"
+    in the basketball brief where it belongs; the first is what stops this becoming a rule
+    that drops every article whose title happens to name no team.
+
+    `[VERIFIED]` Measured across all 397 articles in league-labelled batches before shipping:
+    13 dropped, 3.3%, every one from a Yahoo feed. Twelve are unarguable. The thirteenth is
+    the judgement call and a real cost: "Joey, Jesse Buss join new Padres ownership group" is
+    baseball news about the family that owns the Lakers, and it goes.
+    """
+    tokens = set(_TITLE_WORD.findall(lowered))
+    if tokens & _LEAGUE_WORDS.get(league, frozenset()):
+        return None
+
+    for sport, words in OTHER_SPORT_WORDS.items():
+        found = tokens & words
+        if found:
+            return f"{sport} ({min(found)})"
+
+    for sport, phrases in OTHER_SPORT_PHRASES.items():
+        for phrase in phrases:
+            if phrase in lowered:
+                return f"{sport} ({phrase})"
+
+    for other_league, words in _LEAGUE_WORDS.items():
+        if other_league == league:
+            continue
+        found = tokens & words
+        if found:
+            return f"{other_league} ({min(found)})"
 
     return None
 
