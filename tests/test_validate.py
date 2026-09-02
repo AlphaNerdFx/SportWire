@@ -15,6 +15,7 @@ found by reading live output rather than by a test:
   - every-word grounding rejected `New York Knicks` -> `test_expanded_or_shortened_*`
   - `Kawhi Leonard's` rejected over a possessive    -> `test_possessive_*`
   - `Mavericks. Le` matched across a sentence break -> `test_names_are_not_matched_across_*`
+  - `Brandon McCoy Jr.'s` rejected over a suffix   -> `test_a_suffix_before_a_possessive_*`
 
 `test_false_relationship_*` is different: it is an **xfail**, marking a real gap found on
 2026-08-13 that has not been fixed and is not yet decided (TASKS.md P5). It asserts what the
@@ -192,6 +193,27 @@ def test_possessive_does_not_break_grounding(make_article: ArticleFactory) -> No
     ]
 
     result = validate_summary("Kawhi Leonard's situation remains unresolved.", articles)
+
+    assert result.is_safe, f"wrongly flagged: {result.invented_names}"
+
+
+def test_a_suffix_before_a_possessive_does_not_break_grounding(
+    make_article: ArticleFactory,
+) -> None:
+    """`[VERIFIED]` 2026-09-03: "Brandon McCoy Jr.'s" rejected while the source names him.
+
+    The possessive sits behind the suffix's period, so stripping punctuation before the
+    possessive leaves `jr.` where the source index holds `jr`, and the refutation check reads
+    the two spellings as two people. Three live briefs lost an attempt to this in six days.
+    """
+    articles = [
+        make_article(
+            "Brandon McCoy Jr. injury update: Michigan star to miss season",
+            summary="The centre will not play this year.",
+        )
+    ]
+
+    result = validate_summary("Brandon McCoy Jr.'s season is over.", articles)
 
     assert result.is_safe, f"wrongly flagged: {result.invented_names}"
 
