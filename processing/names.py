@@ -324,3 +324,78 @@ TEAM_NICKNAMES_BY_LEAGUE: dict[str, frozenset[str]] = {
     "NBA": NBA_TEAM_NICKNAMES,
     "NFL": NFL_TEAM_NICKNAMES,
 }
+
+
+# Words that name a sport this project does not cover. `[VERIFIED]` 2026-09-03 this exists
+# because the basketball brief delivered hockey: "Cale Makar has signed an 8-year NHL
+# extension with the Colorado Avalanche" went to the phone in an NBA brief on 2026-08-28,
+# alongside a Canucks item and one about the Cowboys. The feeds are league-scoped by URL and
+# not by content, so `https://sports.yahoo.com/nba/rss/` carries hockey, baseball and college
+# stories, and nothing downstream asked what sport an item was about.
+#
+# **Every word here is checked against the nickname tables above and any collision is refused,
+# by the assertion below rather than by care.** `[VERIFIED]` The collisions are real and would
+# each have cost a whole league: the Kings are Sacramento and Los Angeles, the Jets are New
+# York and Winnipeg, the Panthers are Carolina in two different sports. A shared word cannot
+# tell you which sport you are reading about, so it is not evidence of anything.
+#
+# Deliberately short. `[INFERRED]` This is a list of the unmistakable ones, not an attempt at
+# every franchise: a word that is also ordinary English ("wild", "lightning", "capitals",
+# "stars", "blues") would fire on sentences that have nothing to do with hockey, and the cost
+# of a wrong drop is an article nobody can see was lost.
+OTHER_SPORT_WORDS: dict[str, frozenset[str]] = {
+    "NHL": frozenset(
+        {
+            "nhl",
+            "canucks",
+            "avalanche",
+            "oilers",
+            "bruins",
+            "sabres",
+            "blackhawks",
+            "penguins",
+            "islanders",
+            "kraken",
+            "canadiens",
+            "flyers",
+            "coyotes",
+        }
+    ),
+    "MLB": frozenset(
+        {
+            "mlb",
+            "yankees",
+            "dodgers",
+            "mets",
+            "astros",
+            "cubs",
+            "orioles",
+            "phillies",
+            "padres",
+            "brewers",
+            "marlins",
+            "pirates",
+        }
+    ),
+    "college": frozenset({"ncaa", "marquette", "gonzaga", "villanova", "unlv"}),
+    "soccer": frozenset({"uefa", "fifa", "laliga", "bundesliga"}),
+    "WNBA": frozenset({"wnba"}),
+}
+
+# The same idea for names that are only unambiguous as a phrase. `[INFERRED]` "leafs" alone is
+# a misspelling waiting to happen and "wings" is an ordinary word; both are safe written out.
+OTHER_SPORT_PHRASES: dict[str, tuple[str, ...]] = {
+    "NHL": (
+        "maple leafs",
+        "blue jackets",
+        "golden knights",
+        "red wings",
+        "stanley cup",
+    ),
+    "college": ("big ten", "big 12", "college football", "transfer portal"),
+    "soccer": ("premier league", "champions league"),
+}
+
+_shared = TEAM_NICKNAMES & frozenset().union(*OTHER_SPORT_WORDS.values())
+assert not _shared, f"a word cannot name two sports at once: {sorted(_shared)}"
+del _shared
