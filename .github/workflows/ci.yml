@@ -16,9 +16,9 @@ on:
     tags: ["v*"]
   pull_request:
     branches: [main]
-  # The wiki is a separate repository and can be edited in the browser, so a wiki-only
-  # change never triggers a push event here. A daily run is what catches a wiki edit that
-  # points at a file this repository does not have.
+  # ~~A daily run catches a wiki edit that points at a file this repository does not have.~~
+  # The wiki was retired on 2026-09-03, so that reason is gone. Kept anyway: a daily run is
+  # also what notices a dependency or runner change breaking the build on a quiet day.
   schedule:
     - cron: "0 6 * * *"
   workflow_dispatch:
@@ -40,16 +40,8 @@ jobs:
       - name: Install dependencies
         run: make install
 
-      # Cloned so `make check` can verify the wiki's links into this repository.
-      # `[VERIFIED]` 2026-08-14: the wiki pointed at a renamed ADR for four days, and
-      # README.md and SECURITY.md had the same broken link. Failure is tolerated here
-      # because a fork has no wiki -- `scripts/check_links.py` then skips that portion
-      # loudly rather than reporting a success it has not earned.
-      - name: Clone the wiki
-        continue-on-error: true
-        run: git clone --depth 1 "${{ github.server_url }}/${{ github.repository }}.wiki.git" ../wiki
-
+      # `[VERIFIED]` 2026-09-03: the wiki was retired into docs/, so there is no second
+      # repository to clone and no environment variable to set. `make check` verifies every
+      # documentation link on its own.
       - name: Run checks
-        env:
-          SPORTWIRE_WIKI: ../wiki
         run: make check
