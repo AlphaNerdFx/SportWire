@@ -24,7 +24,12 @@ import unicodedata
 from difflib import SequenceMatcher
 
 from models.schemas import NewsArticle
-from processing.names import TEAM_ALIASES, TEAM_NICKNAMES, NameScanner
+from processing.names import (
+    POSITION_ABBREVIATIONS,
+    TEAM_ALIASES,
+    TEAM_NICKNAMES,
+    NameScanner,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -835,8 +840,8 @@ def normalise_word(token: str) -> str:
     return _depossess(token.strip(_TRAILING_PUNCTUATION).lower())
 
 
-def _split_at_teams(name: str) -> list[str]:
-    """Split a scanned name after each team nickname in it.
+def _split_at_teams_and_positions(name: str) -> list[str]:
+    """Split a scanned name after each team nickname or position abbreviation in it.
 
     `[VERIFIED]` 2026-08-26. Headlines put a team, a position and a player in one capitalised
     run: "Giants WR Calvin Austin III suffers torn ACL". Indexed whole, that is one entity
@@ -844,10 +849,28 @@ def _split_at_teams(name: str) -> list[str]:
     refused the real team. P48 fixed the same construction when an apostrophe separates the
     two, "Vikings' Jeshaun Jones"; the feeds write both forms and only one was handled.
 
-    A team is where one name ends and the next begins, so the nickname closes the run it is
-    in. `[INFERRED]` This is applied only when indexing the sources, never to the summary
-    being checked: a summary writing "New York Giants" must stay whole, because the whole
-    thing is the claim being validated.
+    ~~A team is where one name ends and the next begins.~~ **A position is too, since
+    2026-09-03 (P67).** `[VERIFIED]` Splitting only at the team left the position welded to
+    the player instead: `Broncos WR Mims exits` became the entity `{wr, mims}`, which then
+    disagreed with the real `Marvin Mims Jr.` from the same article's body and refused him as
+    a blend of two people. The football brief lost an attempt to it.
+
+    The position must be written in capitals, and **that half is not protection you can point
+    at a test for.** `[VERIFIED]` 2026-09-03: across every captured title and summary, the
+    number of scanned-name words that match a position once case is ignored is **0**, so
+    removing the check changes nothing and no test can be written that fails without it. It is
+    kept as `[INFERRED]` guarding: headlines write positions in capitals, and a lower-case
+    match would have to come from a name fragment like "De", where a wrong split costs an
+    index key and opens a blind spot rather than showing up as a false accusation. Recorded
+    here rather than left to look like a tested mechanism, which is what TASKS.md P6 was
+    about.
+
+    `[INFERRED]` This is applied only when indexing the sources, never to the summary being
+    checked: a summary writing "New York Giants" must stay whole, because the whole thing is
+    the claim being validated.
+
+    `[VERIFIED]` Measured before shipping across all 49 recorded briefs re-validated against
+    their own batches: **0** verdicts change, and the Mims rejection goes away.
 
     Returns the pieces of two words or more, which is what the index takes anyway.
     """
@@ -855,7 +878,12 @@ def _split_at_teams(name: str) -> list[str]:
     run: list[str] = []
     for word in name.split():
         run.append(word)
-        if normalise_word(word) in _TEAM_NICKNAMES:
+        ends_the_run = (
+            normalise_word(word) in _TEAM_NICKNAMES
+            or word.isupper()
+            and word in POSITION_ABBREVIATIONS
+        )
+        if ends_the_run:
             if len(run) >= 2:
                 pieces.append(" ".join(run))
             run = []
@@ -905,7 +933,7 @@ def _index_source_names(
                 scanned = [
                     piece
                     for name in _PROPER_NAME.findall(sentence)
-                    for piece in _split_at_teams(name)
+                    for piece in _split_at_teams_and_positions(name)
                 ]
                 for name in scanned:
                     # Competition vocabulary is dropped alongside ordinary words, and for
