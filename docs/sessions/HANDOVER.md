@@ -3,7 +3,8 @@
 Written 2026-08-28. Everything below was checked by running a command in this session, not
 recalled. Tags follow `CLAUDE.md` §0.
 
-**Patched 2026-09-03, and only in two places:** open decision 4 and the STASHES section, because
+**Patched 2026-09-03 and 2026-09-04**, in three places: open decisions 1 and 4, and the
+STASHES section, because
 the 95 stashes they describe were dropped that day and a `[VERIFIED]` claim about something that
 no longer exists is the failure this file was written to avoid. Everything else is untouched and
 is a snapshot of 2026-08-28, so STATE and IN PROGRESS are older than the repository.
@@ -126,7 +127,13 @@ keeping from them was copied into `TASKS.md` or a tag message at the time.
 
 ## OPEN DECISIONS
 
-**1. Should the doubted-sentence marker return to the brief?**
+**1. ~~Should the doubted-sentence marker return to the brief?~~ Settled 2026-09-04: no,
+option (a).** The operator chose it on 2026-09-03 and the measurement landed the next day and
+agrees: reading four delivered briefs against their sources, 2 of 9 flags were on entirely
+correct sentences, so a marker would doubt correct reporting about once in four. Recall is
+worse than precision, and three unflagged errors show why. Full reading in `TASKS.md` P5.
+
+The original question, kept for the record:
 `[VERIFIED]` The entity-pair check flagged exactly one sentence in each of two delivered
 briefs, and both were the errors the operator found by reading. The flags go to the log and
 the evidence file only, because the operator asked on 2026-08-26 for the warning to be removed
