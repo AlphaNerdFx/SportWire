@@ -638,6 +638,35 @@ def test_a_ranking_or_a_guess_is_not_news(
 @pytest.mark.parametrize(
     ("title", "league"),
     [
+        ("Ranking every NFL team's WR room: Cowboys and Bengals battle", "NFL"),
+        ("Utah Jazz Top 10 Trade Value Rankings - 2026/27", "NBA"),
+        ("Chicago Bears 53 Man Roster Prediction (Our last one, I promise)", "NFL"),
+        ("One bold prediction for every NFL team in 2026", "NFL"),
+    ],
+)
+def test_the_bare_words_catch_what_the_phrases_missed(
+    make_article: Callable[..., NewsArticle], title: str, league: str, now: datetime
+) -> None:
+    """`[VERIFIED]` 2026-09-03: all four reached the summarizer while the list said
+    `"power rankings"`, `"roster rankings"` and `"predictions"`.
+
+    Those three were written from the wording of the two batches that prompted the rule, so
+    they matched those batches and missed the class. In the six days after they shipped, 14 of
+    266 articles were still rankings or guesses.
+
+    The reason is asserted rather than just the verdict, because two of these are football
+    titles and rule 1d would drop them too if the league were wrong. A test that cannot tell
+    which rule fired is not testing either of them.
+    """
+    reason = rejection_reason(make_article(title, league=league), now)
+
+    assert reason is not None
+    assert "speculation phrase" in reason
+
+
+@pytest.mark.parametrize(
+    ("title", "league"),
+    [
         ("Giants-Chiefs trade grades: Kansas City adds OL depth piece", "NFL"),
         ("Grading NFL offseason trades: Assessing four deals", "NFL"),
         (
