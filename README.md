@@ -10,8 +10,8 @@ basketball articles and 112 football ones, with neither sport appearing in the o
 See [`ADR-015`](docs/decisions/ADR-015-one-brief-per-league.md).
 
 A prior prototype is frozen for reference on the `legacy` branch. It never completed a single
-end-to-end run; `docs/AUDIT.md` records the forensic findings that led to this rebuild, and
-`docs/decisions/ADR-011-slice-1-retrospective.md` records what building the replacement
+end-to-end run; [`docs/history/AUDIT.md`](docs/history/AUDIT.md) records the forensic findings that led to this rebuild, and
+[`ADR-011`](docs/decisions/ADR-011-slice-1-retrospective.md) records what building the replacement
 actually taught.
 
 ## Quick start
@@ -74,14 +74,21 @@ not one you want, run with `--no-summary`.
 
 ## Project documents
 
-- `CLAUDE.md` — operating rules and constraints for this repo (start here)
-- `ROADMAP.md` — what each version number means, and the one milestone in progress
-- `SESSION.md` — current working state, decisions made, open questions
-- `TASKS.md` — the task queue, in priority order, with proof required per completed item
-- `ARCHITECTURE.md` — target system shape
-- `docs/INTERNALS.md` — every non-trivial function and why it is shaped that way
-- `docs/AUDIT.md` — forensic audit of the legacy prototype
-- `docs/decisions/` — architecture decision records (ADRs)
+**[`docs/`](docs/README.md) is the index.** Everything below lives there, sorted by what it
+is. The GitHub wiki was retired into it on 2026-09-03, so documentation now changes in the
+same commit as the code it describes.
+
+- [`CLAUDE.md`](CLAUDE.md) — operating rules and constraints for this repo (start here)
+- [`docs/reference/GETTING_STARTED.md`](docs/reference/GETTING_STARTED.md) — clone to first brief
+- [`docs/reference/WALKTHROUGH.md`](docs/reference/WALKTHROUGH.md) — one story from a feed to a phone
+- [`docs/reference/ARCHITECTURE.md`](docs/reference/ARCHITECTURE.md) — target system shape
+- [`docs/reference/TESTING.md`](docs/reference/TESTING.md) — how this project tests, and why the method matters more than the count
+- [`docs/reference/INTERNALS.md`](docs/reference/INTERNALS.md) — every non-trivial function and why it is shaped that way
+- [`docs/planning/ROADMAP.md`](docs/planning/ROADMAP.md) — what each version number means
+- [`docs/planning/TASKS.md`](docs/planning/TASKS.md) — the task queue, with proof required per completed item
+- [`docs/sessions/SESSION.md`](docs/sessions/SESSION.md) — current working state, decisions made, open questions
+- [`docs/history/AUDIT.md`](docs/history/AUDIT.md) — forensic audit of the legacy prototype
+- [`docs/decisions/`](docs/decisions/README.md) — architecture decision records (ADRs)
 
 ## License
 
