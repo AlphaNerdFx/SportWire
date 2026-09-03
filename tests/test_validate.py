@@ -1622,8 +1622,9 @@ def test_a_wider_vocabulary_sample_stops_a_label_refuting_a_team(
     `articles` alone.
 
     `[VERIFIED]` 2026-08-26 the Raptors half of that run is now fixed twice over, because
-    `_split_at_teams` ends a scanned name at a team nickname and "Raptors Reacts" stops being
-    one name at all. So this uses the *other* rejection from the same run, which no team rule
+    `_split_at_teams_and_positions` ends a scanned name at a team nickname, so "Raptors
+    Reacts" stops being one name at all. This uses the *other* rejection from that run, which
+    no team rule
     can reach: the post "Fire Adam Silver" is indexed as `{adam, fire, silver}` and refutes
     the commissioner. Only the vocabulary sample answers that one.
     """
@@ -1979,6 +1980,57 @@ def test_a_team_before_a_player_does_not_refute_the_team(
     result = validate_summary("The New York Giants lost a receiver.", articles)
 
     assert result.is_safe, f"wrongly flagged: {result.invented_names}"
+
+
+def test_a_position_between_a_team_and_a_player_does_not_refute_the_player(
+    make_article: ArticleFactory,
+) -> None:
+    """`[VERIFIED]` 2026-09-03 (P67): the football brief lost an attempt to this exact article.
+
+    "Broncos WR Mims exits" was indexed as the entity `{wr, mims}` once the team closed its
+    run, and that entity disagreed about everything but the surname with the real "Marvin Mims
+    Jr." written in the same article's body. The refutation check did what P25 asked of it and
+    refused a real man as a blend of two people.
+
+    `[VERIFIED]` 35 of 448 captured titles put a position immediately before a name, so this is
+    the ordinary shape of a football headline rather than a curiosity.
+    """
+    articles = [
+        make_article(
+            "Broncos WR Mims exits, avoids serious foot injury",
+            summary=(
+                "Broncos wide receiver Marvin Mims Jr. left Friday's preseason finale "
+                "because of a right foot injury."
+            ),
+            league="NFL",
+        )
+    ]
+
+    result = validate_summary("Mims Jr.'s injury was reported.", articles)
+
+    assert result.is_safe, f"wrongly flagged: {result.invented_names}"
+
+
+def test_splitting_at_a_position_keeps_the_player_indexed(
+    make_article: ArticleFactory,
+) -> None:
+    """The safety half, the same one the team split needs: the player must survive as a name.
+
+    `[INFERRED]` Otherwise the split trades a false accusation for a blind spot. A previous
+    attempt at this area *dropped* position words when indexing instead of splitting at them,
+    and that measurably weakened blend detection because the junk words were carrying keys.
+    Splitting keeps the player's own piece in the index, which is the whole difference.
+
+    `[VERIFIED]` Measured over 500 blends generated from the captured names: 439 refused with
+    the team split alone, 439 with positions added. No detection lost.
+    """
+    articles = [
+        make_article("Giants WR Calvin Austin III suffers torn ACL", league="NFL")
+    ]
+
+    result = validate_summary("Calvin Smith was hurt.", articles)
+
+    assert not result.is_safe, "a blend on that player should still be refused"
 
 
 def test_splitting_at_a_team_keeps_the_player_indexed(
