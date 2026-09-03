@@ -3659,8 +3659,8 @@ Standing items not otherwise listed above:
   `test_a_suffix_before_a_possessive_does_not_break_grounding`. Restored by copy, not by a
   destructive git verb.
 
-- [ ] **P67. A position abbreviation welds to a player and then refutes them.** Open, found
-  2026-09-03 while fixing P66.
+- [x] **P67. A position abbreviation welds to a player and then refutes them.** Closed
+  2026-09-03, found while fixing P66.
 
   `[VERIFIED]` `Mims Jr.'s` is still refused after P66. The batch carries both
   `Broncos WR Mims exits, avoids serious foot injury` and, in the same article's body,
@@ -3678,5 +3678,40 @@ Standing items not otherwise listed above:
   unambiguous, while `G` is a guard and a grade and `C` is a centre and a letter. Whether the
   table is worth its false matches has not been measured.
 
-  `[UNKNOWN]` How often this costs an attempt. One instance in six days is what the log shows,
-  so it is smaller than P66 was.
+  ~~`[UNKNOWN]` How often this costs an attempt. One instance in six days is what the log
+  shows, so it is smaller than P66 was.~~
+
+  **Closed 2026-09-03, and it is not small.** `[VERIFIED]` 35 of 448 captured titles put a
+  position immediately before a name. One visible rejection in six days, but the shape is the
+  ordinary form of a football headline.
+
+  **Fix:** `_split_at_teams` became `_split_at_teams_and_positions` and ends a run at a
+  position as well as a team, using `POSITION_ABBREVIATIONS` in `processing/names.py`.
+
+  `[VERIFIED]` **`OG` is deliberately absent, and it is why this is a measured list rather than
+  a position chart.** OG is offensive guard and it is also OG Anunoby, who appears twice in the
+  captures and both times as a person. Single letters are out for the same kind of reason, and
+  `MLB` is out because `OTHER_SPORT_WORDS` already claims it for baseball. An assertion at
+  import refuses any position that also names a team or a sport.
+
+  `[VERIFIED]` **This is the same idea an earlier session measured and rejected, done the other
+  way round.** P50 tried *dropping* position words when indexing and it made blend detection
+  worse, 446 of 500 to 442, because the junk words were carrying keys. Splitting keeps the
+  player's own piece in the index instead. Re-measured over 500 blends generated from the
+  captured names: **439 refused before, 439 after. No detection lost.**
+
+  `[VERIFIED]` All 49 recorded briefs re-validated against their own batches: **0** verdicts
+  change.
+
+  `[VERIFIED]` Mutations: the position half of the boundary removed, and `WR` removed from the
+  table. Each kills both position tests.
+
+  `[VERIFIED]` **One mutation survived and is recorded rather than papered over.** Dropping the
+  all-caps requirement changes nothing, because across every captured title and summary the
+  number of scanned-name words matching a position once case is ignored is **0**. No test can
+  fail without it, so it is documented as `[INFERRED]` guarding rather than left looking like a
+  tested mechanism. That is the P6 lesson applied to a live case.
+
+  `[UNKNOWN]` A blend on a name's *middle* word still escapes: with "Giants WR Calvin Austin
+  III" indexed, "Marcus Austin" is not refused, because the piece is keyed on its ends. Checked
+  both ways and it predates this change.
