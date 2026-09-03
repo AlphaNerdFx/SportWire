@@ -17,6 +17,9 @@ tag is cut. See `CLAUDE.md` §9.
 - The basketball brief no longer carries hockey, baseball or college stories, and the football
   brief no longer carries hockey. The feeds are scoped by web address, not by content, so one
   of them had been delivering an NHL contract to a basketball reader (P35).
+- Rankings and predictions are dropped whichever way the headline words them. The old rule
+  matched three exact phrases and missed most of the class, so a fifth of what it was meant to
+  catch was still reaching the summarizer and inviting it to invent (P56).
 
 ## v0.5.12 - 2026-08-28
 
