@@ -399,3 +399,54 @@ OTHER_SPORT_PHRASES: dict[str, tuple[str, ...]] = {
 _shared = TEAM_NICKNAMES & frozenset().union(*OTHER_SPORT_WORDS.values())
 assert not _shared, f"a word cannot name two sports at once: {sorted(_shared)}"
 del _shared
+
+
+# Position abbreviations, which headlines write between a team and a player and which the name
+# scanner otherwise welds to the player. `[VERIFIED]` 2026-09-03 this is the same construction
+# P48 and P52 fixed one word further along: `Broncos WR Mims exits` was indexed as the name
+# `{wr, mims}`, and that entity then disagreed with the real `Marvin Mims Jr.` from the same
+# article's body and refused him as a blend of two people.
+#
+# `[VERIFIED]` Common, not exotic: 35 of 448 captured titles put one of these immediately
+# before a name. QB 9, RB 8, CB 4, OT 4, LB 3, WR 2, DT 2, TE 1, OL 1, DE 1.
+#
+# **`OG` is deliberately absent, and it is the reason this list is not generated from a
+# position chart.** `[VERIFIED]` OG is offensive guard, and it is also OG Anunoby, who appears
+# twice in the captures and both times as a person. Single letters are out for the same kind of
+# reason: `C` is a centre and a letter, `G` is a guard and a grade, `S`, `K`, `P` and `T` are
+# all ordinary. `MLB` is out because it is middle linebacker and Major League Baseball, and
+# `OTHER_SPORT_WORDS` already claims it.
+#
+# `[INFERRED]` The entries never seen in a capture are here because they are the same shape as
+# the ten that were, and none of them is an English word or a plausible name.
+POSITION_ABBREVIATIONS = frozenset(
+    {
+        # Seen in the captures.
+        "QB",
+        "RB",
+        "WR",
+        "TE",
+        "OL",
+        "OT",
+        "DL",
+        "DE",
+        "DT",
+        "CB",
+        "LB",
+        # Not yet seen, same shape.
+        "FB",
+        "NT",
+        "ILB",
+        "OLB",
+        "DB",
+        "FS",
+        "SS",
+        "LS",
+    }
+)
+
+_clash = frozenset(word.lower() for word in POSITION_ABBREVIATIONS) & (
+    TEAM_NICKNAMES | frozenset().union(*OTHER_SPORT_WORDS.values())
+)
+assert not _clash, f"a position cannot also name a team or a sport: {sorted(_clash)}"
+del _clash
