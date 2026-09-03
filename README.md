@@ -29,7 +29,7 @@ python scripts/soak_report.py --audit   # the latest brief beside its sources an
 Requires a free [balldontlie.io](https://www.balldontlie.io/) API key and a Telegram bot
 token from [@BotFather](https://t.me/botfather). See `.env.example`.
 
-To run it unattended every 8 hours, see [`docs/SCHEDULING.md`](docs/SCHEDULING.md) — cron and
+To run it unattended every 8 hours, see [`docs/reference/SCHEDULING.md`](docs/reference/SCHEDULING.md) — cron and
 Windows Task Scheduler are both documented.
 
 ### Local summarisation
