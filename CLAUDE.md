@@ -389,8 +389,13 @@ is not measuring what its name says.
   | `docs/planning/` | `TASKS.md`, `ROADMAP.md`, `PRD.md` |
   | `docs/process/` | `OPERATING_RULES.md`, `SYSTEM_INSTRUCTIONS.md` |
   | `docs/sessions/` | `SESSION.md`, `HANDOVER.md` |
-  | `docs/reference/` | `ARCHITECTURE.md`, `INTERNALS.md`, `SCHEDULING.md` |
+  | `docs/reference/` | `ARCHITECTURE.md`, `WALKTHROUGH.md`, `TESTING.md`, `GETTING_STARTED.md`, `INTERNALS.md`, `SCHEDULING.md` |
   | `docs/history/` | `AUDIT.md` |
+
+  `docs/README.md` is the index, and `docs/decisions/README.md` indexes the ADRs.
+  `[VERIFIED]` The GitHub wiki was retired into `docs/` on 2026-09-03. It cannot live in this
+  repository (GitHub serves the Wiki tab from a separate `<repo>.wiki.git`), so it was moved
+  rather than relocated, and `scripts/check_links.py` lost the half that cloned it.
 
   `SESSION.md` is updated at the end of every working session, `TASKS.md` as tasks complete
   with proof, and `CHANGELOG.md` at every release.
