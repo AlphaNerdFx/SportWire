@@ -364,7 +364,8 @@ def test_the_vocabulary_sample_reaches_the_validator(
     teach the validator that it is an ordinary word, and it can only do so if the sample
     actually arrives. TASKS.md P32.
 
-    `[VERIFIED]` This used the Raptors case until 2026-08-26, when `_split_at_teams` began
+    `[VERIFIED]` This used the Raptors case until 2026-08-26, when `_split_at_teams_and_positions`
+    began
     ending a scanned name at a team nickname, so "Raptors Reacts" stopped being one name and
     the example stopped demonstrating anything. The commissioner is the other rejection from
     the same run and no team rule can reach it.
