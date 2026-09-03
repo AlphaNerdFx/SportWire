@@ -17,6 +17,9 @@ tag is cut. See `CLAUDE.md` §9.
 - The basketball brief no longer carries hockey, baseball or college stories, and the football
   brief no longer carries hockey. The feeds are scoped by web address, not by content, so one
   of them had been delivering an NHL contract to a basketball reader (P35).
+- A player named after his position in a headline, as in "Broncos WR Mims", is no longer
+  mistaken for a different person and refused. Football headlines are written this way
+  constantly (P67).
 - Rankings and predictions are dropped whichever way the headline words them. The old rule
   matched three exact phrases and missed most of the class, so a fifth of what it was meant to
   catch was still reaching the summarizer and inviting it to invent (P56).
