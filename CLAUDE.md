@@ -57,8 +57,8 @@ at a time, after the operator has read them. You may not build on it, run its te
 
 `[VERIFIED]` **No longer empty and no longer a separate directory** — the clean rebuild is
 `main` at the repository root, and `legacy` is a branch holding the 97-file snapshot. It
-runs unattended on cron and delivers to Telegram. See `SESSION.md` for real state, the target
-shape and `TASKS.md` for the order.
+runs unattended on cron and delivers to Telegram. See `docs/sessions/SESSION.md` for real
+state, the target shape and `docs/planning/TASKS.md` for the order.
 
 ---
 
@@ -348,9 +348,11 @@ is not measuring what its name says.
   *why* is non-obvious.
 - **Commits:** `<type>: <imperative summary>`, one of `feat:`, `fix:`, `test:`, `docs:`,
   `refactor:`, `chore:`. Two rules the operator set on 2026-08-17, both hard:
-  - **256 characters maximum for the whole message**, subject and body together. Count it
-    before committing. The long explanations this repo was writing belong in `TASKS.md`, not
-    in git history that nobody reads twice.
+  - **256 characters maximum for the whole message**, subject and body together, **and as far
+    under it as the message allows.** Count it before committing. The limit is a ceiling, not a
+    target: tightened 2026-09-03 at the operator's instruction, because messages were arriving
+    at 200 characters when 90 said the same thing. The long explanations this repo was writing
+    belong in `TASKS.md`, not in git history that nobody reads twice.
   - **One commit per file.** A change touching three files is three commits. Do not bundle a
     code change with its test, or either with its documentation. Where that forces an order,
     commit the code first so the tree stays runnable (§9 branches).
@@ -375,8 +377,23 @@ is not measuring what its name says.
   because *"branching would make sense once we're adding features separately"* and the core
   product is still being built. Commit to `main`, keep it runnable, and see `TASKS.md` L14 for
   the trigger that turns branching and pull-request-only merges on.
-- **Documentation:** ADRs in `docs/decisions/`. `SESSION.md` updated at the end of every
-  working session. `TASKS.md` updated as tasks complete, with proof.
+- **Documentation:** every document except `README.md`, `CLAUDE.md`, `CODE_OF_CONDUCT.md`,
+  `CONTRIBUTING.md`, `SECURITY.md` and `CHANGELOG.md` lives under `docs/`, sorted by what it
+  is. Those six stay at the repository root, where a visitor and GitHub both look for them. Moved there 2026-09-03 at the
+  operator's instruction. Elsewhere in this file and in the source, documents are named without
+  their path; this is the map:
+
+  | Directory | Holds |
+  |---|---|
+  | `docs/decisions/` | ADRs, and the template for a new one |
+  | `docs/planning/` | `TASKS.md`, `ROADMAP.md`, `PRD.md` |
+  | `docs/process/` | `OPERATING_RULES.md`, `SYSTEM_INSTRUCTIONS.md` |
+  | `docs/sessions/` | `SESSION.md`, `HANDOVER.md` |
+  | `docs/reference/` | `ARCHITECTURE.md`, `INTERNALS.md`, `SCHEDULING.md` |
+  | `docs/history/` | `AUDIT.md` |
+
+  `SESSION.md` is updated at the end of every working session, `TASKS.md` as tasks complete
+  with proof, and `CHANGELOG.md` at every release.
 
 ### How to write, everywhere
 
@@ -471,11 +488,13 @@ column worked. Do not repeat this.
 
 ## 12. When You Are Handed This File
 
-0. Read `OPERATING_RULES.md` (agent workflow discipline) and `SYSTEM_INSTRUCTIONS.md`
+0. Read `docs/process/OPERATING_RULES.md` (agent workflow discipline) and
+   `docs/process/SYSTEM_INSTRUCTIONS.md`
    (advisor stance). This file owns project facts; those two own how you work and how you
    speak. Where they conflict with this file, **this file wins** — and say so out loud.
-1. Read `SESSION.md` for current state, then `TASKS.md` for the next action.
-2. Read `ARCHITECTURE.md` only when you need the target shape.
+1. Read `docs/sessions/SESSION.md` for current state, then `docs/planning/TASKS.md` for the
+   next action.
+2. Read `docs/reference/ARCHITECTURE.md` only when you need the target shape.
 3. **Do not read `legacy/HANDOFF.md` as fact.**
 4. Before your first code change, run the forensic commands in §7 against the current repo
    and report what you actually find. State discrepancies against these documents out loud.
