@@ -3237,7 +3237,8 @@ Standing items not otherwise listed above:
   the setting, which here would have been the operator, months later, wondering why long
   briefs end halfway.
 
-- [ ] **P56. Rankings, mock drafts and forecasts invite the model to invent.** Rule shipped
+- [x] **P56. Rankings, mock drafts and forecasts invite the model to invent.** Closed
+  2026-09-03 by widening the phrase list. Rule first shipped
   2026-08-27, effect on the fabrication rate not yet measured.
 
   `[VERIFIED]` The 00:00 cron run delivered **two headline lists**, both leagues, all three
@@ -3304,6 +3305,25 @@ Standing items not otherwise listed above:
   can carry either word.
 
   `[VERIFIED]` The per-league rates this was waiting on are recorded in P54 above.
+
+  **Closed 2026-09-03 by widening the list.** `[VERIFIED]` `"power rankings"`, `"roster
+  rankings"` and `"predictions"` were replaced by the bare `"ranking"` and `"prediction"`,
+  which subsume all three, so nothing that used to be dropped now survives.
+
+  `[VERIFIED]` Measured over 416 captured articles before shipping: 11 more drops, and the
+  rule now catches 17 in total. Ten of the eleven are lists or guesses outright. The eleventh
+  is the boundary case and is recorded rather than glossed: *"NFL trade candidates for cutdown
+  day, plus Pro Bowl gets canceled and ranking every roster 1-32"* mentions a real event, but
+  its whole summary reads *"Here's everything you need to know about the NFL for Aug. 27"*, so
+  it carries no facts and fails the same test as the others.
+
+  `[VERIFIED]` Mutation: the three narrow phrases restored, all four new cases fail, and the
+  older `test_a_ranking_or_a_guess_is_not_news` correctly survives, since the mutation puts
+  back exactly the phrases it was written for.
+
+  `[VERIFIED]` The new test asserts the *reason*, not just the verdict. Two of its four titles
+  are football, and rule 1d would drop them as well if the league were wrong, so a test that
+  only checked the verdict could not say which rule fired.
 
 - [x] **P57. There was no way to count what the briefs actually did.** Closed 2026-08-27.
 
