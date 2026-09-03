@@ -132,12 +132,26 @@ RETROSPECTIVE_PHRASES = (
 # "preview" was left out for the same reason.
 SPECULATIVE_PHRASES = (
     "mock draft",
-    "power rankings",
-    "roster rankings",
+    # ~~`"power rankings"`, `"roster rankings"`, `"predictions"`.~~ **Widened 2026-09-03.**
+    # `[VERIFIED]` The narrow forms matched the wording of the two batches they were written
+    # from and missed the class: 14 of 266 articles in the six days afterwards were still
+    # rankings or guesses, among them "Ranking every NFL team's WR room", "Utah Jazz Top 10
+    # Trade Value Rankings" and "Chicago Bears 53 Man Roster Prediction". The bare words
+    # subsume all three of the phrases they replace, so nothing that used to be dropped now
+    # survives.
+    #
+    # `[VERIFIED]` Measured over 416 captured articles before shipping: `"ranking"` drops 8
+    # more and `"prediction"` 3 more. Ten of the eleven are lists or guesses outright. The
+    # eleventh is worth naming because it is the boundary "grades" and "preview" sit on:
+    # "NFL trade candidates for cutdown day, plus Pro Bowl gets canceled and ranking every
+    # roster 1-32" does mention a real event, but it is a daily roundup whose whole summary
+    # reads "Here's everything you need to know about the NFL for Aug. 27". It carries no
+    # facts, so it fails the same test the others do, for the same reason.
+    "ranking",
+    "prediction",
     "top 100",
     "experts predict",
     "forecast",
-    "predictions",
     # A reader poll, which is the same failure wearing different clothes. `[VERIFIED]`
     # 2026-08-27 the brief said "Warriors fan Brandon Williams and Georges Niang were
     # surveyed about recent signings". Both are players. The source was Yahoo's "Warriors fan
