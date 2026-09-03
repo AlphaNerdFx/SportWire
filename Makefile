@@ -33,7 +33,7 @@ format:  ## Apply formatting and safe lint fixes
 test:  ## Run the test suite (network tests excluded by default)
 	$(PYTHON) -m pytest -v
 
-links:  ## Verify every documentation link resolves (wiki included when cloned)
+links:  ## Verify every documentation link resolves
 	$(PYTHON) scripts/check_links.py
 
 check: lint test links  ## Everything CI runs. Green here means green there.
