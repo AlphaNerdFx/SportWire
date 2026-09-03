@@ -912,6 +912,53 @@ what each turned into, since several changed shape on contact with real data.
   by not hiding a known gap. If the trade is ever revisited, that test is the specification.
   - Proof:
 
+  **2026-09-04: the entity-pair check read against its sources for the first time, and the
+  answer is that it should stay out of the brief.**
+
+  `[VERIFIED]` Four delivered briefs were read sentence by sentence against the articles they
+  were built from: `2026-08-28` NBA, `2026-08-31` NFL, `2026-09-01` NBA and `2026-09-02` NFL.
+  Nine sentences were flagged across them.
+
+  | | |
+  |---|---|
+  | Flags that marked a real error | **6 of 9** |
+  | Flags on sentences that were entirely correct | **2 of 9** |
+  | Marginal, correct halves welded by an artificial "and" | 1 of 9 |
+
+  `[VERIFIED]` The two false positives are the same shape as each other, and it is the shape
+  the audit docstring predicted: *"The Detroit Pistons are in a contract stalemate with Jalen
+  Duren, while the Brooklyn Nets are also facing an extension impasse with Michael Porter Jr."*
+  Both halves are true and each comes from its own article. The check fires because the two
+  pairs never co-occur, which is indistinguishable from a fusion.
+
+  `[INFERRED]` **This decides the open question about showing the flags.** At two in nine, a
+  marker in the brief would doubt a correct sentence about once every four flagged ones, and
+  dropping the sentence would delete correct reporting at the same rate. Leaving the flags in
+  the log and the evidence file is the right call, and it is the one the operator made on
+  2026-09-03 before this measurement existed.
+
+  `[VERIFIED]` **The recall half is worse than the precision half, and it is the more useful
+  finding.** Three errors in those same four briefs were not flagged:
+
+  ```
+  "The team's search for a new big man comes after Cam Whitmore was waived by the
+   Cavaliers."            invented causal link; Houston and Cleveland are unrelated here
+  "Dexter Lawrence is promising a strong preseason performance."
+                          the source says early returns are promising, not that he promised
+  "The NFL's decision to keep four quarterbacks..."
+                          four teams decided this, not the league
+  ```
+
+  `[INFERRED]` All three are structurally invisible to an entity-pair check, and for two
+  different reasons. The first carries its false link in *"The team's"*, a definite
+  description naming no entity, so the only pair in the sentence is Whitmore and the
+  Cavaliers, who do co-occur. The other two are single-entity sense drift, where there is no
+  pair to check at all. **A pair check can only see errors made between two named things**,
+  and a fair share of what the model gets wrong is made inside one clause.
+
+  `[UNKNOWN]` Whether option (d), a second model pass, would catch that class. It is the only
+  listed option that reads meaning rather than structure, and it is still open as P44.
+
 - [x] **P6. `_drop_leading_stopword` no longer affects any verdict.** Found 2026-08-13 while
   writing `tests/test_validate.py`, **by mutation testing rather than by reading code**.
   **Resolved as a decision, box reconciled 2026-08-18:** the mechanism is kept for its
