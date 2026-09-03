@@ -11,6 +11,11 @@ exactly that shape.
 
 Everything here builds throwaway trees under `tmp_path`; nothing reads the real repository, so
 these tests cannot start passing for the wrong reason when the real docs change.
+
+`[VERIFIED]` 2026-09-03 the wiki was retired into `docs/` and the four tests covering
+`check_wiki_links` went with the function they tested. Deleting a test whose subject no
+longer exists is not the same as weakening one, and leaving them would have meant a suite
+asserting behaviour of code that is not there.
 """
 
 from __future__ import annotations
@@ -19,7 +24,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.check_links import check_repo_links, check_wiki_links
+from scripts.check_links import check_repo_links
 
 BLOB = "https://github.com/AlphaNerdFx/SportWire/blob/main"
 
@@ -115,74 +120,25 @@ def test_the_venv_is_not_scanned(tmp_path: Path) -> None:
     assert check_repo_links(tmp_path) == []
 
 
-# --- wiki links ---------------------------------------------------------------------------
-
-
-def test_a_wiki_link_to_a_missing_repo_file_fails(tmp_path: Path) -> None:
-    repo = tmp_path / "repo"
-    wiki = tmp_path / "wiki"
-    repo.mkdir()
-    _write(wiki, "Decisions.md", f"See [ADR]({BLOB}/docs/decisions/ADR-012-gone.md).")
-
-    failures = check_wiki_links(wiki, repo)
-
-    assert len(failures) == 1
-    assert "ADR-012-gone.md" in failures[0]
-
-
-def test_a_wiki_link_to_a_real_repo_file_passes(tmp_path: Path) -> None:
-    repo = tmp_path / "repo"
-    wiki = tmp_path / "wiki"
-    _write(repo, "docs/decisions/ADR-012-summarisation.md", "content")
-    _write(
-        wiki,
-        "Decisions.md",
-        f"See [ADR]({BLOB}/docs/decisions/ADR-012-summarisation.md).",
-    )
-
-    assert check_wiki_links(wiki, repo) == []
-
-
-def test_a_link_to_a_missing_wiki_page_fails(tmp_path: Path) -> None:
-    """Wiki-internal navigation rots too — a renamed page leaves dead sidebar entries."""
-    repo = tmp_path / "repo"
-    wiki = tmp_path / "wiki"
-    repo.mkdir()
-    _write(wiki, "Home.md", "See [Testing](Testing).")
-
-    failures = check_wiki_links(wiki, repo)
-
-    assert len(failures) == 1
-    assert "Testing" in failures[0]
-
-
-def test_a_link_to_an_existing_wiki_page_passes(tmp_path: Path) -> None:
-    repo = tmp_path / "repo"
-    wiki = tmp_path / "wiki"
-    repo.mkdir()
-    _write(wiki, "Testing.md", "content")
-    _write(wiki, "Home.md", "See [Testing](Testing).")
-
-    assert check_wiki_links(wiki, repo) == []
-
-
 def test_catches_the_real_adr_012_regression(tmp_path: Path) -> None:
     """`[VERIFIED]` 2026-08-14, reproducing the incident that prompted this script.
 
     `ADR-012-summarisation-off-by-default.md` was renamed to `ADR-012-summarisation.md` on
     2026-08-10. `README.md`, `SECURITY.md` and the wiki all kept the old link for four days.
-    This asserts all three are caught in one pass.
+
+    `[VERIFIED]` 2026-09-03 the wiki was retired into `docs/`, so its third of this case is now
+    an ordinary repository file and is asserted as one. The incident is unchanged; only where
+    the third document lives has changed.
     """
     repo = tmp_path / "repo"
-    wiki = tmp_path / "wiki"
     old = "docs/decisions/ADR-012-summarisation-off-by-default.md"
 
     _write(repo, "docs/decisions/ADR-012-summarisation.md", "the renamed file")
     _write(repo, "README.md", f"see [ADR-012]({old})")
     _write(repo, "SECURITY.md", f"see [ADR-012]({old})")
-    _write(wiki, "Decisions.md", f"see [012]({BLOB}/{old})")
+    _write(repo, "docs/decisions/README.md", f"see [012]({BLOB}/{old})")
 
-    failures = check_repo_links(repo) + check_wiki_links(wiki, repo)
+    failures = check_repo_links(repo)
 
     assert len(failures) == 3, f"expected all three, got {failures}"
     assert all("ADR-012-summarisation-off-by-default" in f for f in failures)
@@ -191,9 +147,7 @@ def test_catches_the_real_adr_012_regression(tmp_path: Path) -> None:
 def test_a_clean_tree_reports_nothing(tmp_path: Path) -> None:
     """The complement: a check that always fails is as useless as one that never does."""
     repo = tmp_path / "repo"
-    wiki = tmp_path / "wiki"
     _write(repo, "docs/real.md", "content")
-    _write(wiki, "Home.md", f"[doc]({BLOB}/docs/real.md) and [self](Home).")
+    _write(repo, "docs/README.md", f"[doc]({BLOB}/docs/real.md) and [near](real.md).")
 
     assert check_repo_links(repo) == []
-    assert check_wiki_links(wiki, repo) == []
