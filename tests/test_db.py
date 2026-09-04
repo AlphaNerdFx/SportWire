@@ -1334,3 +1334,80 @@ def test_the_purge_keeps_what_the_window_still_covers(
 
     assert store.purge_fetched_before(168) == 0
     assert len(store.fetched_since(hours=1)) == 1
+
+
+# --- the story memory behind P68 ----------------------------------------------------------
+
+
+def test_a_delivered_story_is_remembered_by_its_names(
+    store: SeenStore, make_article: ArticleFactory
+) -> None:
+    """`[VERIFIED]` 2026-09-04 (P68): nothing held a story identity across runs, so the NBA's
+    ruling against the Clippers was delivered in four consecutive briefs.
+
+    Names rather than a hash, because the rule that decides "same story" counts how many names
+    two articles share, and a hash cannot answer that.
+    """
+    article = make_article("Clippers docked five first-round picks over Kawhi Leonard")
+
+    store.record_story_names([article])
+    remembered = store.story_names_since(24)
+
+    assert len(remembered) == 1
+    assert "Clippers" in remembered[0]
+
+
+def test_one_league_cannot_suppress_another(
+    store: SeenStore, make_article: ArticleFactory
+) -> None:
+    """`[INFERRED]` The briefs are split by league (ADR-015) and the story memory has to be
+    too, or a basketball story silences a football one that happens to share a city name."""
+    store.record_story_names(
+        [make_article("Clippers docked five picks over Kawhi Leonard", league="NBA")]
+    )
+
+    assert store.story_names_since(24, league="NBA") != []
+    assert store.story_names_since(24, league="NFL") == []
+
+
+def test_a_story_outside_the_window_is_not_returned(
+    store: SeenStore, make_article: ArticleFactory
+) -> None:
+    """The window is the whole trade-off: too long and a story that genuinely returns with
+    news is silenced. Asked for zero hours, nothing delivered a moment ago can qualify."""
+    store.record_story_names([make_article("Clippers docked five first-round picks")])
+
+    assert store.story_names_since(0) == []
+
+
+def test_names_are_grouped_per_story_not_pooled(
+    store: SeenStore, make_article: ArticleFactory
+) -> None:
+    """Two stories must come back as two sets.
+
+    `[INFERRED]` Pooled into one, any article sharing one name with each of two unrelated
+    stories would look like a retelling of a story nobody ever published.
+    """
+    store.record_story_names(
+        [
+            make_article("Clippers docked five picks over Kawhi Leonard"),
+            make_article("Rockets extend Amen Thompson through 2032"),
+        ]
+    )
+
+    remembered = store.story_names_since(24)
+
+    assert len(remembered) == 2, remembered
+
+
+def test_the_story_memory_is_purged(
+    store: SeenStore, make_article: ArticleFactory
+) -> None:
+    """Same reason as P65: nothing reads a row past the window, and a table that only grows
+    is awkward once someone has a real database."""
+    store.record_story_names([make_article("Clippers docked five first-round picks")])
+
+    removed = store.purge_story_names_before(0)
+
+    assert removed > 0
+    assert store.story_names_since(24) == []
