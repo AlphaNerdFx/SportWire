@@ -107,11 +107,16 @@ def report(batches: list[dict[str, object]], unreadable: int) -> str:
         total = counts[True] + counts[False]
         lines.append(f"  {day}   prose {counts[True]:>2} of {total:<2}")
 
-    # The v1.0.0 gate counts runs, and a run writes one batch per league.
+    # The v1.0.0 gate counts days on which a brief was delivered, and a run writes one batch
+    # per league. `[VERIFIED]` 2026-09-04 the gate changed from 14 *consecutive* days to 14
+    # accumulated ones, because a shut-down PC reset the count and the PC being off says
+    # nothing about whether the software runs unattended. That makes this line a straight
+    # count rather than a longest-run calculation, which is why there is no streak here.
     days_seen = len(by_day)
     lines.append("")
     lines.append(
-        f"Days with a recorded brief: {days_seen}. GitHub issue #1 asks for 14 runs."
+        f"Days with a delivered brief: {days_seen} of the 14 the v1.0.0 gate asks for "
+        f"(issue #1). They accumulate and need not be consecutive."
     )
     return "\n".join(lines)
 
