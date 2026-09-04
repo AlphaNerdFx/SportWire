@@ -82,6 +82,63 @@ def test_invented_name_is_caught(
     assert expected in result.invented_names
 
 
+def test_a_figure_is_compared_as_a_number_not_as_digits(
+    make_article: ArticleFactory,
+) -> None:
+    """`[VERIFIED]` 2026-09-04 (P31): `$50` used to ground against a source writing `$500m+`.
+
+    The old rule stripped every non-digit from the whole batch and asked whether the figure's
+    digits appeared anywhere in that stream. Measured over 2,678 invented figures against the
+    real batches, 22.8% grounded by accident, and 81% of one-digit figures did.
+    """
+    articles = [
+        make_article(
+            "Kawhi received the max he was looking for, still $500m+ in career earnings"
+        )
+    ]
+
+    result = validate_summary("The deal was worth $50.", articles)
+
+    assert not result.is_safe, (
+        "a figure found only inside a longer number is not grounded"
+    )
+    assert "$50" in " ".join(result.invented_figures)
+
+
+def test_the_same_number_written_two_ways_still_grounds(
+    make_article: ArticleFactory,
+) -> None:
+    """The half that keeps the rule usable, and it is the reason units are expanded.
+
+    `[VERIFIED]` A real pair: the source wrote `$700,000` in restitution and the brief wrote
+    `$700k`. Comparing the figures as written would have refused a correct brief, which is the
+    expensive direction for this module.
+    """
+    articles = [make_article("Kawhi Leonard will have to pay $700,000 in restitution")]
+
+    result = validate_summary("Leonard must pay $700k in restitution.", articles)
+
+    assert result.is_safe, f"wrongly flagged: {result.invented_figures}"
+
+
+def test_a_bare_suffixed_figure_in_the_sources_still_grounds(
+    make_article: ArticleFactory,
+) -> None:
+    """`[VERIFIED]` A source wrote "though 700k is a large amount", with no currency symbol.
+
+    Without the bare-suffix half of `_FIGURE` the sources' own figure is never extracted, so
+    the brief's correct `$700k` is called invented. Found by measuring the change against the
+    delivered briefs before shipping it, not afterwards.
+    """
+    articles = [
+        make_article("They settled with Leonard, though 700k is a large amount")
+    ]
+
+    result = validate_summary("Leonard was paid $700k.", articles)
+
+    assert result.is_safe, f"wrongly flagged: {result.invented_figures}"
+
+
 def test_invented_figure_is_caught(make_article: ArticleFactory) -> None:
     """`[VERIFIED]` mistral:7b invented "$3.3M" for a contract whose value no source stated."""
     articles = [
