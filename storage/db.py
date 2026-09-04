@@ -35,12 +35,35 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from models.schemas import GameData, NewsArticle
+from processing.cluster import story_names
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS seen_articles (
     article_id TEXT PRIMARY KEY,
     seen_at    TEXT NOT NULL
 );
+
+-- The names a delivered story was about, one row per name, so a later article retelling it
+-- can be recognised (P68). `[VERIFIED]` 2026-09-04: dedup matched an article id and nothing
+-- held a story identity across runs, so the NBA's ruling against the Clippers arrived in four
+-- consecutive briefs.
+--
+-- Names rather than a hashed key, because the rule that decides "same story" is a *shared
+-- name count* (`processing/cluster.py`), and a hash cannot answer "how many do these share".
+-- The same shape also answers the question the operator's exception needs: whether the new
+-- article names anyone who was not delivered with the story before.
+--
+-- `league` is stored so one sport's stories can never suppress another's.
+CREATE TABLE IF NOT EXISTS delivered_story_names (
+    article_id   TEXT NOT NULL,
+    name         TEXT NOT NULL,
+    league       TEXT NOT NULL,
+    delivered_at TEXT NOT NULL,
+    PRIMARY KEY (article_id, name)
+);
+
+CREATE INDEX IF NOT EXISTS delivered_story_names_at
+    ON delivered_story_names (delivered_at);
 
 CREATE TABLE IF NOT EXISTS seen_games (
     state_hash TEXT PRIMARY KEY,
@@ -142,6 +165,64 @@ class SeenStore:
         cursor = self._connection.executemany(
             "INSERT OR IGNORE INTO seen_articles (article_id, seen_at) VALUES (?, ?)",
             [(article.article_id, now) for article in articles],
+        )
+        self._connection.commit()
+        return cursor.rowcount
+
+    def record_story_names(self, articles: Iterable[NewsArticle]) -> int:
+        """Remember what each delivered story was about. Returns rows newly written.
+
+        Called beside `record_articles` and for the same reason: only after a send succeeds,
+        so a failed delivery cannot make tomorrow's brief think the story was already told.
+
+        `INSERT OR IGNORE` on the same key pair, so re-running after a partial failure is safe.
+        """
+        now = _utc_now()
+        rows = [
+            (article.article_id, name, article.league, now)
+            for article in articles
+            for name in story_names(article)
+        ]
+        cursor = self._connection.executemany(
+            "INSERT OR IGNORE INTO delivered_story_names"
+            " (article_id, name, league, delivered_at) VALUES (?, ?, ?, ?)",
+            rows,
+        )
+        self._connection.commit()
+        return cursor.rowcount
+
+    def story_names_since(
+        self, hours: float, league: str | None = None
+    ) -> list[frozenset[str]]:
+        """One set of names per story delivered in the last `hours`, newest first.
+
+        Grouped by `article_id`, because the caller compares *sets*: a story is being retold
+        when the new article shares enough names with one delivered story, not when it shares
+        one name each with several.
+        """
+        since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+        clause = "" if league is None else " AND league = ?"
+        parameters: tuple[str, ...] = (since,) if league is None else (since, league)
+        rows = self._connection.execute(
+            "SELECT article_id, name FROM delivered_story_names"
+            f" WHERE delivered_at >= ?{clause}"
+            " ORDER BY delivered_at DESC",
+            parameters,
+        )
+        by_article: dict[str, set[str]] = {}
+        for article_id, name in rows:
+            by_article.setdefault(article_id, set()).add(name)
+        return [frozenset(names) for names in by_article.values()]
+
+    def purge_story_names_before(self, hours: float) -> int:
+        """Forget stories older than the window. Returns rows removed.
+
+        Same reason as the other purges (P65): nothing reads a row past the window, and a
+        table that only grows is awkward once someone has a real database.
+        """
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+        cursor = self._connection.execute(
+            "DELETE FROM delivered_story_names WHERE delivered_at < ?", (cutoff,)
         )
         self._connection.commit()
         return cursor.rowcount
