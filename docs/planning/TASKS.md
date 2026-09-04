@@ -490,7 +490,9 @@ what each turned into, since several changed shape on contact with real data.
     chunks under the new prompt.** The next 12-story run is the real test; if grouping breaks
     there, order notes by subject before the reduce step.
 
-- [ ] **P3. Decide what to do about `newsworthy.py` Rule 2 (past-year outside quotes).** (#16)
+- [x] **P3. Decide what to do about `newsworthy.py` Rule 2 (past-year outside quotes).** (#16)
+  Closed 2026-09-04. The decision was taken and shipped on 2026-08-13 in `06110ab`, with the
+  proof table below; only the box was left open.
   `[VERIFIED]` 2026-08-13 it dropped r/nba's `[Charania] After 18 NBA seasons, Russell
   Westbrook has retired…` because the title cited his 2008 debut. **Second false positive
   from this rule**; the first was a current Ballmer story citing 2015, after which the rule
@@ -992,7 +994,7 @@ what each turned into, since several changed shape on contact with real data.
   individually. Reading the code did not reveal it; reading the code is what wrote it.
   - Proof:
 
-- [ ] **P7. `priority.py`'s word-boundary comment claims a benefit it does not deliver.**
+- [x] **P7. `priority.py`'s word-boundary comment claims a benefit it does not deliver.**
   Found 2026-08-13 while writing `tests/test_priority.py`.
   `[VERIFIED]` The comment at `processing/priority.py:100` reads: *"Substring matching would
   classify 'signs of improvement' as a signing and 'designated' as containing 'sign'."* Only
@@ -1017,7 +1019,19 @@ what each turned into, since several changed shape on contact with real data.
   `[INFERRED]` (a). The comment is wrong and should be corrected regardless; the ranking cost
   is one story ordered too high in a list nothing is dropped from, which is the cheapest
   possible error here.
-  - Proof:
+
+  **Closed 2026-09-04 on option (a), which had already shipped.** The comment at
+  `processing/priority.py:117` carries the correction and states the decision to leave the
+  rule alone; only this box was left open.
+
+  `[VERIFIED]` Re-measured today rather than trusting the 2026-08-13 table, since the whole
+  point of the item is a comment that described behaviour it did not have:
+
+  | Title | Tier |
+  |---|---|
+  | `Curry shows signs of improvement in return` | **high**, still the known cost |
+  | `Coach praises the designated starter` | medium |
+  | `Jokic signs a max extension` | high |
 
 - [ ] **P8. ADR-005's headline measurement cannot be reproduced from this repository.**
   Found 2026-08-13 while writing `tests/test_dedup.py`. **The decision is not in doubt; the
@@ -2080,7 +2094,7 @@ what each turned into, since several changed shape on contact with real data.
   chunking fixes it without disturbing priority. Resolve by replaying a captured batch with
   the two orderings and comparing, not by reasoning.
 
-- [ ] **P31. `_figure_grounded` compares digits against the whole batch.** Open, found
+- [x] **P31. `_figure_grounded` compares digits against the whole batch.** Closed 2026-09-04, found
   2026-08-18 while checking whether `$300M` was invented.
   `[VERIFIED]` It strips every non-digit from the entire source text and asks whether the
   figure's digits appear as a substring of that stream. On the 42-article reconstruction the
@@ -2088,9 +2102,37 @@ what each turned into, since several changed shape on contact with real data.
   do not. `[INFERRED]` The looseness scales with batch size: a longer digit stream makes any
   short number likelier to appear by coincidence, and a two-digit figure like `$10B` is
   already near-certain to match something.
-  `[UNKNOWN]` Whether it has ever produced a false acquittal. It did **not** cause the Jokic
-  case, which is why this is recorded rather than fixed: that figure was genuinely in a source.
-  Resolve by measuring how many invented figures a real batch would ground before changing it.
+  ~~`[UNKNOWN]` Whether it has ever produced a false acquittal.~~ **Measured 2026-09-04, and
+  yes, constantly.** 2,678 invented figures tested against the 67 real batches:
+
+  ```
+  wrongly grounded overall   610 of 2,678   22.8%
+  by length   1 digit  81%   2 digits  31%   3 digits  5%   4 digits  0%
+  ```
+
+  `[VERIFIED]` The cause is exactly the shape recorded above. The digit stream has a median
+  length of 34 across the captured batches, so a one or two digit figure lands in it by
+  accident more often than not.
+
+  **Fixed by comparing values instead of digit runs.** A figure is grounded when the sources
+  write a figure of the same *number*, with `k`, `M`, `B`, "million" and "billion" expanded
+  first so `$700k` and `$700,000` are one thing.
+
+  `[VERIFIED]` 22.8% to **0.2%**, and it costs nothing. Across the 51 delivered briefs exactly
+  three verdicts change and all three are corrections: `$5 million` appears nowhere in its
+  batch, and `$50` and `$150` were grounded by the digits inside `$500m+`.
+
+  `[VERIFIED]` `_FIGURE` gained a bare-suffix alternative in the same change, found by
+  measuring rather than afterwards: a source wrote *"though 700k is a large amount"* with no
+  currency symbol, and without it a correct `$700k` in the brief became invented.
+
+  `[VERIFIED]` Three mutations, each killing the test that names it: back to digit-stream
+  containment, the unit multiplier ignored, and the bare-suffix alternative removed.
+
+  `[VERIFIED]` **The second of those three survived on the first attempt, for a reason worth
+  writing down.** It was run with `pytest -k "figure"`, and the test covering the multiplier is
+  named `test_the_same_number_written_two_ways_still_grounds`, which does not contain the word.
+  A mutation run against a filtered subset proves nothing about the tests the filter excluded.
 
 ---
 
@@ -2377,6 +2419,20 @@ what each turned into, since several changed shape on contact with real data.
   a test should stop anyway. The other two were ordinary decisions sitting inline, exactly
   P36's pattern, and both got a test rather than a refactor: deleting the ladder branch or the
   pair-check call left all 533 tests green beforehand.
+
+  **2026-09-04: a fourth instance, and the working answer held.** `[VERIFIED]` The repeat
+  suppression for P68 was wired into `assemble_brief`, then deleted as a mutation, and **all
+  565 tests stayed green**. Same shape as the first three: an ordinary decision sitting inline
+  where no test reaches it.
+
+  `[VERIFIED]` Cured the same way, with a test rather than a refactor.
+  `tests/test_main_repeat_wiring.py` calls `assemble_brief` against a real `SeenStore` on a
+  temporary database, and dies both when the call is deleted and when its window is zeroed.
+
+  `[UNKNOWN]` Whether the 82.1% reach has moved. Not re-measured today: `coverage` is not
+  installed, the stdlib `trace` run returned 0 of 312 because `main` is imported during
+  collection before tracing starts, and adding a dependency needs the operator's approval
+  (`CLAUDE.md` §11). The count above is from 2026-08-27 and should be read as that.
 
   **So the pattern is real and the proposed cure is not.** `[INFERRED]` The working answer is
   the measurement itself: re-run the trace after adding a step to `main`, and if the new lines
