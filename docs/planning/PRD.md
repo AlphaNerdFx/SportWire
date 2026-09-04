@@ -82,8 +82,13 @@ phone via Telegram.
 
 `[INFERRED]` — proposed, not yet agreed:
 
-1. Runs unattended on a schedule for **14 consecutive days** without manual intervention.
-2. Zero duplicate stories delivered across those 14 days.
+1. Runs unattended on a schedule for **14 accumulated days** without manual intervention.
+   ~~consecutive~~ **Changed 2026-09-04 at the operator's instruction.** A shut-down PC reset
+   the count, and the PC being off says nothing about whether the software runs unattended.
+   Days on which the machine never ran do not count for the gate and do not count against it;
+   a run that executed and failed does.
+2. Zero duplicate stories delivered across those 14 days. `[VERIFIED]` **Currently unmet:**
+   the same story is redelivered as new articles about it arrive (`TASKS.md` P68).
 3. No run crashes; source failures degrade visibly in the log instead.
 4. The operator reads the brief instead of opening a sports app. **This is the real test** —
    an unread brief is a failed product regardless of uptime.
