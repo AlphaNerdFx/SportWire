@@ -27,10 +27,12 @@ from difflib import SequenceMatcher
 import pytest
 
 from models.schemas import GameData, NewsArticle
+from processing.cluster import story_names
 from processing.dedup import (
     DEFAULT_TITLE_SIMILARITY,
     deduplicate_articles,
     deduplicate_games,
+    drop_repeated_stories,
     normalise_title,
 )
 
@@ -159,6 +161,104 @@ def test_real_cross_source_pairs_do_not_collapse(
         f"highest real cross-source similarity is {highest:.3f}; ADR-005 records that nothing "
         "reaches 0.50 and that unrelated stories begin merging below it"
     )
+
+
+# --- pass 3: the same story, told again ---------------------------------------------------
+
+
+def test_a_retold_story_naming_nobody_new_is_dropped(
+    make_article: ArticleFactory,
+) -> None:
+    """`[VERIFIED]` 2026-09-04, the operator reading real briefs: the NBA's ruling against the
+    Clippers arrived in four consecutive briefs.
+
+    Both titles are real and both were delivered. The second says the same thing about the
+    same people, and passes 1 and 2 both miss it: its id is new, and the first article is in
+    yesterday's batch rather than this one.
+    """
+    delivered = [
+        story_names(
+            make_article(
+                "Steve Ballmer suspended one year, Clippers to lose 5 first-round "
+                "picks over Kawhi Leonard deal",
+                league="NBA",
+            )
+        )
+    ]
+    again = [
+        make_article(
+            "NBA fines Clippers $30M, penalizes Kawhi Leonard after investigation",
+            league="NBA",
+        )
+    ]
+
+    assert drop_repeated_stories(again, delivered) == []
+
+
+def test_a_retold_story_naming_someone_new_is_kept(
+    make_article: ArticleFactory,
+) -> None:
+    """The exception, and the operator drew it himself: *"I'm not talking about Gillian Zucker
+    that part is new"*.
+
+    `[VERIFIED]` This is the article that survived in the live replay. It is the same story by
+    the shared-name rule, and it carries a name the story had not been delivered with, so it is
+    the next chapter rather than a repeat. A rule without this half would have deleted it.
+    """
+    delivered = [
+        story_names(
+            make_article(
+                "Steve Ballmer suspended one year, Clippers to lose 5 first-round "
+                "picks over Kawhi Leonard deal",
+                league="NBA",
+            )
+        )
+    ]
+    development = [
+        make_article(
+            "Digging into the Wachtell report: Gillian Zucker and the Clippers payments "
+            "to Kawhi Leonard",
+            league="NBA",
+        )
+    ]
+
+    assert drop_repeated_stories(development, delivered) == development
+
+
+def test_one_shared_name_with_each_of_two_stories_is_not_a_retelling(
+    make_article: ArticleFactory,
+) -> None:
+    """`MIN_SHARED_NAMES` doing its job, and the case that proves it is doing it.
+
+    An article about two teams that have each been in the news separately is a *new* story, not
+    a retelling of either. It names nobody new, so the exception cannot save it; only the
+    threshold can, by refusing to call one shared name a shared subject.
+
+    `[VERIFIED]` Written this way on 2026-09-04 after the first version of this test survived
+    the threshold being lowered to one. It survived because its article introduced a new name,
+    so the exception kept it either way and the threshold was never consulted. `CLAUDE.md` §8:
+    a test that passes through more than one mechanism is not measuring the one it names.
+    """
+    delivered = [
+        story_names(
+            make_article("Clippers docked five picks over Kawhi Leonard", league="NBA")
+        ),
+        story_names(
+            make_article("Rockets extend Amen Thompson through 2032", league="NBA")
+        ),
+    ]
+    new_story = [make_article("Clippers and Rockets discuss a deal", league="NBA")]
+
+    assert drop_repeated_stories(new_story, delivered) == new_story
+
+
+def test_nothing_delivered_yet_drops_nothing(make_article: ArticleFactory) -> None:
+    """The first run of a fresh install must not be silently empty."""
+    articles = [
+        make_article("NBA fines Clippers $30M after investigation", league="NBA")
+    ]
+
+    assert drop_repeated_stories(articles, []) == articles
 
 
 # --- games: state, not identity ---------------------------------------------------------
