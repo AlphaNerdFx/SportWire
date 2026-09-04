@@ -17,6 +17,9 @@ tag is cut. See `CLAUDE.md` §9.
 - The basketball brief no longer carries hockey, baseball or college stories, and the football
   brief no longer carries hockey. The feeds are scoped by web address, not by content, so one
   of them had been delivering an NHL contract to a basketball reader (P35).
+- A money figure in the brief is now checked as a number rather than as a run of digits.
+  Nearly a quarter of invented figures used to pass because their digits happened to appear
+  somewhere in the batch, and one-digit figures passed four times in five (P31).
 - The same story is no longer delivered again on the next run. A story that develops still
   gets through: the test is whether the new article names anyone the story was not delivered
   with before (P68).
