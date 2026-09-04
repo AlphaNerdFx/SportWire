@@ -2775,8 +2775,8 @@ what each turned into, since several changed shape on contact with real data.
   Apply with `gh api -X PUT repos/AlphaNerdFx/SportWire/branches/main/protection`, remove
   with the same path and `-X DELETE`.
 
-- [ ] **P68. The same story is delivered again the next run, as new articles about it arrive.**
-  Open, reported by the operator on 2026-09-04 from reading real briefs: *"clippers news keep
+- [x] **P68. The same story is delivered again the next run, as new articles about it arrive.**
+  Closed 2026-09-04 by option (b). Reported by the operator on 2026-09-04 from reading real briefs: *"clippers news keep
   getting repeated (I'm not talking about Gillian Zucker that part is new)"*.
 
   `[VERIFIED]` Four consecutive basketball briefs carried the same NBA ruling:
@@ -2816,6 +2816,48 @@ what each turned into, since several changed shape on contact with real data.
     what changed. Reads meaning, costs tokens, and this project has measured repeatedly that a
     small model does not reliably follow an instruction of that shape.
   - d. Accept it, and close issue #1's duplicate clause as unmet.
+
+  **Chosen: (b).** `drop_repeated_stories` in `processing/dedup.py`, a third pass beside the two
+  that missed this, with the story memory in `delivered_story_names`.
+
+  `[VERIFIED]` **Sameness is `cluster.story_names` and `MIN_SHARED_NAMES`, reused rather than
+  reinvented.** `_names` became public for it, the way `canonical_team` did when clustering and
+  the validator disagreed about the Wolves. A second idea of "the same story" in a second module
+  is how two modules come to disagree about one thing.
+
+  `[VERIFIED]` **The window was chosen from numbers, not taste.** Replayed over the 371 articles
+  delivered since 08-28:
+
+  ```
+  8h    3 drops (0.8%)      12h   11 (3.0%)      24h   13 (3.5%)
+  48h  19 drops (5.1%)     168h   31 (8.4%)
+  ```
+
+  24 hours is where the reported complaint lives: the ruling arrived in four briefs the same
+  day, and a week-long window starts silencing stories that genuinely return with news.
+
+  `[VERIFIED]` At 24h it drops the repeated Clippers fine, the Tacko Fall signing arriving
+  twice, and the Duren standoff restated as "still" — **and keeps the Zucker article.**
+
+  `[UNKNOWN]` **Three or four of the 13 are wrong, and this is recorded rather than hidden.** A
+  genuine next step naming nobody new reads as a repeat: *"Joey Porter Jr may request trade from
+  Steelers"*, *"Cowboys to re-sign QB Joe Milton"*. Telling "the same event twice" from "the next
+  event" needs meaning, not names. **Every drop is logged** for exactly that reason, since this
+  module's failures are otherwise invisible.
+
+  `[VERIFIED]` Seven mutations, each killing the test that names it: the new-name exception
+  removed, nothing ever dropped, the shared-name threshold lowered to one, the league filter
+  dropped, names pooled instead of grouped per story, the purge deleting nothing, and the call
+  deleted from `main.py`.
+
+  `[VERIFIED]` **One test was rewritten rather than supplemented.** The first version of the
+  threshold test survived the threshold being lowered to one, because its article introduced a
+  new name and the exception kept it either way. It now uses an article sharing one name with
+  each of two delivered stories, where only the threshold can decide.
+
+  `[VERIFIED]` **A fourth pipeline-wiring mutant survived and is now covered.** Deleting the call
+  from `main.py` left all 565 tests green. `tests/test_main_repeat_wiring.py` reaches it with a
+  real `SeenStore` on a temporary database. P36 records the first three.
 
 ---
 
