@@ -1,8 +1,13 @@
 # SESSION.md — Current Working State
 
-**Last updated:** 2026-08-26
+**Last updated:** 2026-09-04
 **Repository:** https://github.com/AlphaNerdFx/SportWire (public)
 **Next session should begin with:** §10.
+
+> **Where the documents live changed on 2026-09-03.** Everything except `README.md`,
+> `CLAUDE.md`, `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`, `SECURITY.md` and `CHANGELOG.md` now
+> sits under `docs/`, and the GitHub wiki was retired into it. `docs/README.md` is the index
+> and `CLAUDE.md` §9 has the map. This file is `docs/sessions/SESSION.md`.
 
 > **Evidence tags:** `[VERIFIED]` = a command was run and its output seen. `[INFERRED]` =
 > reasoned from stated evidence. `[UNKNOWN]` = not known; do not guess. `CLAUDE.md` §0.
@@ -39,15 +44,16 @@
 | `config/settings.py` | The only place `.env` is read. Paths anchored to `PROJECT_ROOT`, not the cwd. |
 | `models/schemas.py` | `GameData`, `NewsArticle`, `GameHighlight`, `SeriesContext`. All frozen. |
 | `ingestion/base.py` | Two source ABCs. `fetch()` owns the try/except so adapters cannot skip it. |
-| `ingestion/rss_news.py` | One adapter, four feeds. Reads **both** RSS 2.0 and Atom. |
+| `ingestion/rss_news.py` | One adapter, **seven feeds across two leagues**. Reads **both** RSS 2.0 and Atom. |
 | `ingestion/nba_games.py` | balldontlie games, per-period scores, team ids as a side channel. |
-| `processing/newsworthy.py` | **The only module that removes articles.** Age, content tags, retrospective phrases. |
-| `processing/dedup.py` | Pass 1 exact id across runs; pass 2 near-identical titles within a run. |
+| `processing/newsworthy.py` | **The only module that removes articles.** Age, content tags, retrospective phrases, rankings and guesses, and since 2026-09-03 a story about another sport (P35). |
+| `processing/dedup.py` | Pass 1 exact id across runs; pass 2 near-identical titles within a run. **Neither holds a story identity across runs, which is P68.** |
 | `processing/priority.py` | Sorts high/medium/low, with tonight's teams as a within-tier tiebreaker. |
 | `processing/cluster.py` | Groups articles covering one story; caps stories per source. |
 | `processing/highlights.py` | Comeback, overtime, closest finish, wire-to-wire, biggest quarter, second-half takeover. |
 | `processing/summarize.py` | `Summarizer` ABC + Ollama, map-reduce chunking, validated retry. |
-| `processing/validate.py` | Checks every name and figure against sources. **Fails closed.** |
+| `processing/validate.py` | Checks every name and figure against sources. **Fails closed.** Ends a scanned source name at a team or a position (P67). |
+| `processing/names.py` | The shared name vocabulary: the scanner, team nicknames by league, positions, and the sports this project does not cover. |
 | `processing/openrouter.py` | Hosted summarizer, dormant until a key exists. |
 | `storage/db.py` | Seen-ids, game results, local head-to-head. |
 | `delivery/` | `DeliveryChannel` ABC, Telegram, stdout, three-message formatting. |
@@ -253,6 +259,8 @@ flips to XPASS when fixed.
 | L-3 | `[UNKNOWN]` Live and scheduled game payload shapes. Every game ever captured reads `Final` — it has been the offseason throughout. **Resolve after 2026-09-30.** |
 | L-4 | Head-to-head only knows games this instance has delivered. Empty early in a season. |
 | L-5 | Reddit contributes chatter that title-pattern filtering provably cannot separate from news. Capped at 3 stories rather than classified. |
+| L-6 | **The same story is redelivered as new articles about it arrive** (P68). Dedup matches an article id, never a story, so four consecutive briefs carried the NBA's Clippers ruling. Reported by the operator on 2026-09-04 by reading briefs. **This is what blocks issue #1**, whose gate requires zero duplicate stories as well as the days. |
+| L-7 | The entity-pair check flags a sentence whose names never co-occur. Read against sources on 2026-09-04: 6 of 9 flags were real errors, 2 were on entirely correct sentences, and three real errors went unflagged. It stays in the log and the evidence file, never in the brief (P5). |
 
 ---
 
@@ -358,7 +366,8 @@ classes of bug. Neither replaces the other.
 
 1. ~~Dedup window~~ **168h** (PRD D2). Must exceed the feed's reach, not the poll interval.
 2. ~~Cadence~~ **8h**; the run defines the summary window (PRD D1).
-3. ~~NBA scope~~ **NBA only for v1.0.0**; other US leagues after (PRD D3).
+3. ~~NBA scope~~ ~~**NBA only for v1.0.0**~~ **Overtaken by events:** football shipped
+   2026-08-26 (ADR-015) and gets its own brief.
 4. ~~Local vs hosted LLM~~ **Local first**; hosted built and dormant.
 5. ~~Legacy git history~~ Resolved — no secrets, published.
 6. ~~Scraping legality~~ Resolved — ESPN publishes RSS (ADR-009).
@@ -368,6 +377,14 @@ classes of bug. Neither replaces the other.
 10. **Non-technical setup** — deferred, issue #11.
 11. **`[UNKNOWN]` Is the brief actually read?** The PRD's real success criterion, and still
     untested. The operator has called it *"better on the eyes, unsure if more useful."*
+12. **How should a developing story be reported the second time?** Open, and it is P68's real
+    question rather than a technical one. The operator drew the line himself on 2026-09-04:
+    the Clippers punishment repeating across four briefs is wrong, the Gillian Zucker
+    revelation inside that story is right. So the rule wanted is *report developments, not
+    the same facts again*, which is harder than suppressing a repeat.
+13. ~~Does the 14-day gate need consecutive days?~~ **No, changed 2026-09-04.** They
+    accumulate. A shut-down PC used to reset the count, and the PC being off says nothing
+    about whether the software runs unattended. Issue #1 and the PRD both say so now.
 
 ---
 
@@ -376,7 +393,9 @@ classes of bug. Neither replaces the other.
 Paste verbatim:
 
 ```
-Read CLAUDE.md, OPERATING_RULES.md, SESSION.md and TASKS.md before doing anything.
+Read CLAUDE.md, then docs/process/OPERATING_RULES.md, docs/sessions/SESSION.md and
+docs/planning/TASKS.md before doing anything. The documents moved into docs/ on
+2026-09-03 and docs/README.md is the index.
 
 Note especially:
 - OPERATING_RULES.md §0: you write the code, tests and documentation. Never set me
@@ -384,50 +403,48 @@ Note especially:
 - OPERATING_RULES.md §2: [VERIFIED] tags from previous sessions are [Likely], not
   [Certain]. Re-test any external service before building on it.
 - CLAUDE.md §0: tag every factual claim. [UNKNOWN] is an acceptable answer.
+- CLAUDE.md §9: 256 characters maximum per commit message and as far under it as the
+  message allows, one commit per file, and CHANGELOG.md gets an entry per release.
 
 First, tell me the current state without changing anything:
 
-  tail -60 logs/sportwire.log
-  make check                        # expect 466 passed, 1 xfailed
+  make check                        # expect 556 passed, 1 xfailed
+  python scripts/soak_report.py     # per-league prose rate, and the gate count
   git log --oneline -12
+  tail -40 logs/sportwire.log
 
-Two leagues have been live since 2026-08-26, so the log now has two briefs per
-run. Three things to look for:
+Then read the last delivered brief of each league against its own sources:
 
-1. How often each league keeps its prose, counted separately. Football is the
-   new one and the one to watch: its first brief lost all three attempts to
-   false accusations, which P47 and P48 fixed. Basketball is the control. If
-   football falls back much more often than basketball, the cause is a writing
-   style the validator has not met, not the model.
-2. Whether any run took long enough to matter. Two leagues means two rounds of
-   summarising. One measured run took 23 minutes, and 10 of those were a single
-   Ollama read timeout. At 8 hours that is nothing. At the 2-hour interval P42
-   is heading for, it is not.
-3. Whether "Carolina Panthers" still appears in a rejection. That is P49 and it
-   is open, so seeing it is expected rather than a surprise.
+  python scripts/soak_report.py --audit
 
-Ask me for the latest delivered brief. The log records that a summary passed,
-never its shape.
+That last step is not optional and it is where this project's bugs actually come
+from. Eleven were found by reading output and none by a test. Two more were found
+that way this week: the basketball brief was delivering hockey, and the same story
+was being redelivered on every run.
 
 Where the work is, in order:
 
-- v0.5.0 is nearly closed. What is left is a per-league schedule, which is
-  coupled to the interval choice in P42, and a football community feed, which
-  is blocked by P46: only one Reddit feed can be fetched per run.
-- P49 is open and needs a decision before code. Do not pick it silently.
+- P68 is open, it is the biggest one, and it needs a decision before code. The same
+  story is delivered again as new articles about it arrive: four consecutive briefs
+  carried the Clippers ruling. It blocks issue #1, whose gate wants zero duplicate
+  stories as well as 14 accumulated days. The hard part is that a genuine follow-up
+  must still get through, and I said so myself about the Gillian Zucker revelation.
+  Options are written out in TASKS.md P68. Do not pick one silently.
+- P54 is open and waiting on nothing but time: the soak needs to reach 14 days.
+- P44 is the only untried answer to P5's recall problem, which was measured on
+  2026-09-04 and is worse than its precision problem.
 
 Two things this project keeps relearning, so do them by default:
 
-**Mutation-test everything you write.** Put the bug back and confirm the suite
-notices, and assert the mutation actually applied. On 2026-08-26 a mutation
-silently failed to apply and reported green, which looks exactly like the suite
-surviving it. Commit before mutating, and never restore with a destructive git
-verb.
+**Mutation-test everything you write.** Put the bug back, assert the mutation
+actually applied, and confirm the suite notices. Write the test after the change is
+checked, never beside it. If a test survives its own mechanism being switched off,
+rewrite it rather than adding a second one next to it.
 
-**Measure a validator change before shipping it.** Both fixes that day were
-measured over the live feeds first: P47 changed 0 of 399 source-written names,
-P48 changed 0 of 398 and moved football teams from 16/18 accepted to 17/18. A
-validator change without a number beside it is a guess.
+**Measure a validator or filter change before shipping it.** Every one this week
+carried a number: the other-sport rule drops 13 of 397 captured articles, the
+position split changes 0 of 49 recorded verdicts and loses 0 of 500 blends, the
+suffix fix changes 0 of 44. A change without a number beside it is a guess.
 
 Do not add features unless I ask.
 ```
