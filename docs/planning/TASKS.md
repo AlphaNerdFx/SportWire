@@ -2775,6 +2775,48 @@ what each turned into, since several changed shape on contact with real data.
   Apply with `gh api -X PUT repos/AlphaNerdFx/SportWire/branches/main/protection`, remove
   with the same path and `-X DELETE`.
 
+- [ ] **P68. The same story is delivered again the next run, as new articles about it arrive.**
+  Open, reported by the operator on 2026-09-04 from reading real briefs: *"clippers news keep
+  getting repeated (I'm not talking about Gillian Zucker that part is new)"*.
+
+  `[VERIFIED]` Four consecutive basketball briefs carried the same NBA ruling:
+
+  ```
+  09-03 03:00  Clippers punished, $30m fine, 5 first-round picks, Ballmer suspended
+  09-03 11:01  "Clippers owner Steve Ballmer has been fined $30M and suspended for a year"
+  09-03 19:02  the Gillian Zucker payments  <- genuinely new, and the operator said so
+  09-04 03:01  "The Los Angeles Clippers have been punished ... for salary cap circumvention"
+  ```
+
+  `[VERIFIED]` **Not only the Clippers.** Across the 32 briefs since 08-28, **13 consecutive
+  same-league pairs share three or more names**, which is 41%. Aaron Donald and the Rams
+  repeat, so do Kuminga, and Joe Milton.
+
+  **Cause, read in the code rather than guessed.** `deduplicate_articles` has two passes and a
+  story that is still developing defeats both. Pass 1 drops an article whose `article_id` was
+  delivered before, and every new report has a new id. Pass 2 collapses near-identical titles
+  **within one batch**, and yesterday's article is not in today's batch. Nothing anywhere holds
+  a story identity across runs; `group_related` builds one, uses it for a single brief, and
+  throws it away.
+
+  `[VERIFIED]` **This blocks the v1.0.0 gate**, which is not only about uptime: GitHub issue #1
+  requires "zero duplicate stories delivered across that period" alongside the 14 consecutive
+  days.
+
+  `[UNKNOWN]` Which fix. The hard part is stated by the operator's own exception: the Zucker
+  revelation was a real development and should have been delivered. A rule that suppresses
+  repeats must not suppress the next chapter, so "drop anything about a story already sent" is
+  wrong. **Do not pick silently.** Options, none chosen:
+  - a. Remember a story fingerprint per delivered brief, and drop an article whose fingerprint
+    matches inside a window. Cheapest. Suppresses genuine follow-ups too.
+  - b. Same, but keep the article when it brings a named entity that was never delivered with
+    that story. `[INFERRED]` This is the one that matches the operator's exception: Zucker is a
+    new name, "Clippers fined $30M" for the fourth time is not.
+  - c. Show the summarizer what was already said about the story and instruct it to report only
+    what changed. Reads meaning, costs tokens, and this project has measured repeatedly that a
+    small model does not reliably follow an instruction of that shape.
+  - d. Accept it, and close issue #1's duplicate clause as unmet.
+
 ---
 
 ## Where tasks live now
