@@ -17,6 +17,9 @@ tag is cut. See `CLAUDE.md` §9.
 - The basketball brief no longer carries hockey, baseball or college stories, and the football
   brief no longer carries hockey. The feeds are scoped by web address, not by content, so one
   of them had been delivering an NHL contract to a basketball reader (P35).
+- The same story is no longer delivered again on the next run. A story that develops still
+  gets through: the test is whether the new article names anyone the story was not delivered
+  with before (P68).
 - A player named after his position in a headline, as in "Broncos WR Mims", is no longer
   mistaken for a different person and refused. Football headlines are written this way
   constantly (P67).
