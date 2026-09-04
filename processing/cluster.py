@@ -118,8 +118,14 @@ _NOT_NAMES = frozenset(
 )
 
 
-def _names(article: NewsArticle) -> set[str]:
-    """Distinctive-looking proper nouns in a title.
+def story_names(article: NewsArticle) -> set[str]:
+    """Distinctive-looking proper nouns in a title: what identifies the story it tells.
+
+    **Public since 2026-09-04, and imported by `processing/dedup.py`** to decide whether an
+    article retells a story already delivered (P68). `[INFERRED]` The alternative was a second
+    idea of "the same story" living in the dedup module, which is exactly how two modules come
+    to disagree about one thing; `canonical_team` was made public and moved for the same reason
+    after clustering and the validator disagreed about the Wolves.
 
     Only the title. `[INFERRED]` Descriptions name far more entities in passing — a match on
     something mentioned once mid-paragraph is usually coincidence, not a shared subject.
@@ -266,7 +272,7 @@ def group_related(
     if len(articles) < 2:
         return [[article] for article in articles]
 
-    names_by_index = [_names(article) for article in articles]
+    names_by_index = [story_names(article) for article in articles]
 
     # How many articles each name appears in — the document frequency.
     frequency: Counter[str] = Counter()
@@ -391,6 +397,6 @@ def _relatedness_key(group: list[NewsArticle]) -> frozenset[str]:
     """
     words: set[str] = set()
     for article in group:
-        for name in _names(article):
+        for name in story_names(article):
             words.update(comparable(name).lower().split())
     return frozenset(words)
