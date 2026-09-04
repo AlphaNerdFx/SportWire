@@ -38,7 +38,12 @@ from ingestion.nba_games import BallDontLieGamesAdapter
 from ingestion.rss_news import DEFAULT_LEAGUE, FEED_LEAGUES, FEEDS, RssNewsAdapter
 from models.schemas import GameData, NewsArticle, SeriesContext
 from processing.cluster import group_related, limit_per_source, order_by_relatedness
-from processing.dedup import deduplicate_articles, deduplicate_games
+from processing.dedup import (
+    REPEAT_WINDOW_HOURS,
+    deduplicate_articles,
+    deduplicate_games,
+    drop_repeated_stories,
+)
 from processing.highlights import find_notable_games
 from processing.newsworthy import MAX_ARTICLE_AGE_HOURS, drop_non_news
 from processing.openrouter import OpenRouterSummarizer
@@ -195,6 +200,24 @@ def assemble_brief(
         vocabulary = articles
     fresh_games = deduplicate_games(games, store.seen_game_hashes())
     fresh_articles = deduplicate_articles(articles, store.seen_article_ids())
+
+    # P68. Dedup above matches an article *id*, so a fresh report of yesterday's news passes
+    # it every time. `[VERIFIED]` 2026-09-04 that put the NBA's ruling against the Clippers
+    # into four consecutive briefs. The league is passed so one sport cannot suppress the
+    # other, and an article naming someone new survives, which is what keeps a real
+    # development like the Gillian Zucker revelation in the brief.
+    before_repeats = len(fresh_articles)
+    fresh_articles = drop_repeated_stories(
+        fresh_articles,
+        store.story_names_since(REPEAT_WINDOW_HOURS, league=league),
+    )
+    if before_repeats != len(fresh_articles):
+        logger.info(
+            "dropped %d article(s) retelling a story delivered in the last %dh",
+            before_repeats - len(fresh_articles),
+            REPEAT_WINDOW_HOURS,
+        )
+
     logger.info(
         "after dedup: %d games, %d articles (%d and %d already sent)",
         len(fresh_games),
@@ -504,6 +527,14 @@ def main(argv: list[str] | None = None) -> int:
                 logger.info(
                     "dropped %d polled articles older than %dh", dropped, forget_after
                 )
+            # And the story memory, which only ever needs `REPEAT_WINDOW_HOURS`.
+            forgotten = store.purge_story_names_before(forget_after)
+            if forgotten:
+                logger.info(
+                    "forgot the names of %d stories older than %dh",
+                    forgotten,
+                    forget_after,
+                )
 
         # ADR-014, the seam between polling and delivering.
         #
@@ -619,6 +650,7 @@ def main(argv: list[str] | None = None) -> int:
         # them already delivered.
         store.record_games(fresh_games)
         store.record_articles(fresh_articles)
+        store.record_story_names(fresh_articles)
         logger.info("delivered %d/%d messages", delivered, len(messages))
 
     return 0
