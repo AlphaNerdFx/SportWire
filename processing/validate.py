@@ -422,10 +422,41 @@ _SENTENCE_BREAK = re.compile(r"(?<=[.!?])[\"'”’»）)\]]*\s+")
 
 # Money and counts. `[VERIFIED]` mistral:7b invented "$3.3M" for a contract whose value the
 # source never stated.
+# `[VERIFIED]` 2026-09-04 (P31): the bare-suffix alternative was added because a source wrote
+# "though 700k is a large amount" with no dollar sign, and without it the summary's correct
+# "$700k" could not be grounded once figures were compared as values instead of digit runs.
 _FIGURE = re.compile(
-    r"\$\s?[\d,.]+\s?(?:million|billion|[MBK])?|\b\d[\d,.]*\s?(?:million|billion)\b",
+    r"\$\s?[\d,.]+\s?(?:million|billion|[MBK])?"
+    r"|\b\d[\d,.]*\s?(?:million|billion|[MBK])\b",
     re.IGNORECASE,
 )
+
+# What a suffix multiplies by, so "$700k" and "$700,000" are one number.
+_FIGURE_UNITS = {
+    "k": 1_000,
+    "m": 1_000_000,
+    "b": 1_000_000_000,
+    "million": 1_000_000,
+    "billion": 1_000_000_000,
+}
+
+
+def _figure_value(figure: str) -> float | None:
+    """A figure as the number it means, or None when it cannot be read as one."""
+    match = re.match(
+        r"\$?\s?([\d,.]+)\s?(million|billion|[mbk])?", figure.strip(), re.IGNORECASE
+    )
+    if not match:
+        return None
+    digits = match.group(1).replace(",", "").rstrip(".")
+    if not digits or digits.count(".") > 1:
+        return None
+    try:
+        number = float(digits)
+    except ValueError:
+        return None
+    return number * _FIGURE_UNITS.get((match.group(2) or "").lower(), 1)
+
 
 # Openers a model produces despite being told not to. Not grounds for rejection — the summary
 # is still true — but worth counting so a persistently ignored instruction is visible.
@@ -1201,13 +1232,32 @@ def _depossess_text(text: str) -> str:
 
 
 def _figure_grounded(figure: str, source_lower: str) -> bool:
-    """Whether a monetary or numeric claim appears in the sources.
+    """Whether a monetary claim appears in the sources, compared as a number.
 
-    Compared on digits alone, so "$52.2 million" is grounded by a source writing "$52.2M".
-    Formatting differs constantly between outlets; the number is what must be true.
+    Formatting differs constantly between outlets, so "$52.2 million" must be grounded by a
+    source writing "$52.2M". The number is what has to be true, not the spelling.
+
+    ~~Compared on digits alone: every non-digit stripped from the whole batch, then ask whether
+    the figure's digits appear anywhere in that stream.~~ **Replaced 2026-09-04 (TASKS.md
+    P31).** `[VERIFIED]` That stream is short — median 34 digits across the 67 captured batches
+    — and a short number lands in it by accident constantly. Measured against 2,678 invented
+    figures over the real batches, **22.8% were wrongly grounded**, and the rate is entirely a
+    function of length: 81% of one-digit figures, 31% of two, 5% of three.
+
+    `[VERIFIED]` Comparing *values* against the figures the sources actually write drops that to
+    **0.2%**, and it costs nothing: across 51 delivered briefs exactly three verdicts change,
+    and all three are figures the sources never contained. `$5 million` appears nowhere in its
+    batch; `$50` and `$150` were grounded by the digits inside "$500m+".
+
+    `[INFERRED]` The looseness was never a deliberate generosity, it was a substring test
+    standing in for a numeric one.
     """
-    digits = re.sub(r"[^\d]", "", figure)
-    if not digits:
+    want = _figure_value(figure)
+    if want is None:
         return True
 
-    return digits in re.sub(r"[^\d]", "", source_lower)
+    return want in {
+        value
+        for found in _FIGURE.findall(source_lower)
+        if (value := _figure_value(found)) is not None
+    }
