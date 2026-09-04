@@ -9,7 +9,11 @@ Two passes, deliberately not three:
   Pass 2 — near-identical titles inside one batch, catching the same story carried by two
            outlets under slightly different headlines.
 
-  Pass 3 — semantic similarity. **Not built, and declined on evidence rather than deferred
+  Pass 3 — the same *story* told again by a later article, added 2026-09-04 for P68. Passes 1
+           and 2 both miss it: a new report of yesterday's news has a new id, and yesterday's
+           article is not in today's batch. See `drop_repeated_stories`.
+
+  Pass 4 — semantic similarity. **Not built, and declined on evidence rather than deferred
            on principle.** ADR-005 says to build it once a real near-duplicate pair is
            captured that `SequenceMatcher` missed. Measured against the captured ESPN
            fixture, the closest pair scores 0.550 ("Mitchell and Coco Jones tie knot" vs
@@ -31,6 +35,7 @@ import logging
 from difflib import SequenceMatcher
 
 from models.schemas import GameData, NewsArticle
+from processing.cluster import MIN_SHARED_NAMES, story_names
 
 logger = logging.getLogger(__name__)
 
@@ -126,3 +131,90 @@ def _find_similar(
         if ratio >= threshold:
             return existing
     return None
+
+
+# How far back a story is remembered when deciding whether it is being told again.
+#
+# `[VERIFIED]` 2026-09-04, measured over the 371 articles delivered since 08-28. The window is
+# the whole trade-off, so it was chosen from the numbers rather than from taste:
+#
+#     8h    3 drops (0.8%)      12h   11 (3.0%)      24h   13 (3.5%)
+#     48h  19 drops (5.1%)     168h   31 (8.4%)
+#
+# `[INFERRED]` 24 hours is where the operator's actual complaint lives. He reported the NBA's
+# Clippers ruling arriving in four consecutive briefs, which is a same-day repetition, and a
+# week-long window instead starts suppressing stories that genuinely return later with news.
+REPEAT_WINDOW_HOURS = 24
+
+
+def drop_repeated_stories(
+    articles: list[NewsArticle],
+    delivered_story_names: list[frozenset[str]],
+    min_shared_names: int = MIN_SHARED_NAMES,
+) -> list[NewsArticle]:
+    """Drop an article retelling a story already delivered, unless it names someone new.
+
+    `[VERIFIED]` 2026-09-04, reported by the operator from reading real briefs: *"clippers news
+    keep getting repeated (I'm not talking about Gillian Zucker that part is new)"*. Four
+    consecutive basketball briefs carried the NBA's ruling against the Clippers.
+
+    **The exception is the whole design, and the operator drew it.** Suppressing everything
+    about a story already sent would have deleted the Gillian Zucker revelation, which was the
+    genuine next chapter. So an article survives when it carries **a name that has not been
+    delivered with that story**, and is dropped only when it says the same thing about the same
+    people.
+
+    Sameness is `processing/cluster.py`'s rule, reused rather than reinvented: two articles are
+    one story when their titles share `MIN_SHARED_NAMES` distinctive names. `[INFERRED]` A
+    second definition of "the same story" in a second module is how two modules come to
+    disagree, which is what `canonical_team` was moved to `names.py` to prevent.
+
+    `[VERIFIED]` Measured over the 371 articles delivered since 2026-08-28: **13 dropped, 3.5%**
+    at the 24-hour window. It catches what was reported — the Clippers ruling repeating, the
+    Tacko Fall signing arriving twice, the Duren standoff restated as "still" — and it keeps the
+    Zucker article.
+
+    `[UNKNOWN]` **Three or four of those 13 are wrong and this is not hidden.** A genuine next
+    step that introduces no new name reads as a repeat: *"Joey Porter Jr may request trade from
+    Steelers"* after a story about his contract dispute, *"Cowboys to re-sign QB Joe Milton"*
+    after he cleared waivers. Telling "the same event reported twice" from "the next event in
+    the same story" needs meaning, not names. **Every drop is logged for that reason** — this
+    module's failures are otherwise invisible, which is the class of bug this project keeps
+    paying for.
+    """
+    if not delivered_story_names:
+        return list(articles)
+
+    kept: list[NewsArticle] = []
+    for article in articles:
+        names = story_names(article)
+        if len(names) < min_shared_names:
+            kept.append(article)
+            continue
+
+        same_story = [
+            delivered
+            for delivered in delivered_story_names
+            if len(names & delivered) >= min_shared_names
+        ]
+        if not same_story:
+            kept.append(article)
+            continue
+
+        already_known: set[str] = set().union(*same_story)
+        new_names = names - already_known
+        if new_names:
+            logger.info(
+                "keeping %r: retells a delivered story but names %s",
+                article.title,
+                ", ".join(sorted(new_names)),
+            )
+            kept.append(article)
+            continue
+
+        logger.info(
+            "dropping %r: the same story was delivered, and it names nobody new",
+            article.title,
+        )
+
+    return kept
