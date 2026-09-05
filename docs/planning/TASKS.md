@@ -2965,7 +2965,8 @@ what each turned into, since several changed shape on contact with real data.
   from `main.py` left all 565 tests green. `tests/test_main_repeat_wiring.py` reaches it with a
   real `SeenStore` on a temporary database. P36 records the first three.
 
-- [ ] **P69. The news filter misses eight classes it nearly has rules for.** Open, found
+- [x] **P69. The news filter misses eight classes it nearly has rules for.** Closed
+  2026-09-05 on the six that measured clean. Found
   2026-09-05 by the first hand audit of delivered headlines (`docs/reference/METRICS.md`).
 
   `[VERIFIED]` 15 delivered articles read at random: **7 are news, 8 are not.** 47% against the
@@ -2995,10 +2996,44 @@ what each turned into, since several changed shape on contact with real data.
   real transaction can carry either word. Each addition needs the same treatment the last batch
   got: count what it drops across the captured articles, and read every one it removes.
 
-  `[UNKNOWN]` Whether stemming is the answer rather than more words. `rank`/`ranking`/`rankings`
-  and `predict`/`prediction`/`predicting` are one stem each, and a stem list would be shorter
-  than the phrase list is becoming. It would also match `ranked` inside a real transaction
-  headline, which is exactly the class the current rules avoid. Measure both before choosing.
+  ~~`[UNKNOWN]` Whether stemming is the answer rather than more words.~~ **Measured
+  2026-09-05: for `predict` yes, for `rank` no**, and that asymmetry is the whole result.
+
+  **Shipped, after reading every headline each candidate removes.** 18 of the 494 surviving
+  titles (3.6%), and not one is a real story:
+
+  | Added | Drops | What they are |
+  |---|---|---|
+  | `predict` (replacing `prediction` and `experts predict`) | 3 | forecasts written as participles |
+  | `best bets`, `win total`, `odds board`, `trends, odds` | 11 | betting cards |
+  | `what if` | 2 | counterfactuals |
+  | `career timeline` | 1 | a retrospective under a different word |
+  | `highlights from` (new `CLIP_PHRASES`, rule 1e) | 1 | an untagged clip post |
+
+  `[VERIFIED]` `predict` is safe as a stem: 10 occurrences across the 542 captured titles, all
+  forecasts, and **`unpredictable` occurs 0 times**, which is the collision it would invite.
+
+  **Two candidates were measured and rejected, and the tests assert the boundary so a future
+  widening breaks something visible first.**
+
+  | Rejected | Would also have taken |
+  |---|---|
+  | the `rank` stem | *"How Ravens' Derrick Henry is driven to rank among NFL's best backs"*, a player feature |
+  | bare `odds` | *"Kawhi Leonard Next Team Odds: Trade Hit Another Snag"* and *"NFL betting expected to slow at U.S. sportsbooks"*, both carrying real news |
+  | bare `remember` | one junk title in 542, against a word a real story can carry |
+  | bare `highlights` | same, so the phrase `highlights from` is used instead |
+
+  `[VERIFIED]` Five mutations, each killing exactly the case that names it: the stem reverted to
+  the noun, the betting phrases removed, the counterfactual removed, the clip rule unwired, and
+  `career timeline` removed.
+
+  `[INFERRED]` **This is the mitigation the operator predicted for P16.** Holding on the
+  meta-post rule was decided partly because every mechanism for it removed real news; most of
+  what that rule would have swept up is junk these rules now take on their own terms, without
+  touching a single genuine story.
+
+  `[UNKNOWN]` Whether the audit share moves. Re-run `--sample` on a new seed after the next
+  fortnight and compare against the 7-of-15 in `docs/reference/METRICS.md`.
 
 ---
 
