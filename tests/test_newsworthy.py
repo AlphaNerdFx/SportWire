@@ -636,6 +636,93 @@ def test_a_ranking_or_a_guess_is_not_news(
 
 
 @pytest.mark.parametrize(
+    ("title", "league", "expected"),
+    [
+        # Forecast written as a participle, which the noun-only list missed.
+        (
+            "Predicting last-place finisher for each NFL division in 2026",
+            "NFL",
+            "speculation phrase",
+        ),
+        # A betting card.
+        ("Best bets to make or miss the NFL playoffs", "NFL", "speculation phrase"),
+        (
+            "Betting the Colts in 2026: See how Indianapolis' win total is trending",
+            "NFL",
+            "speculation phrase",
+        ),
+        # A counterfactual.
+        (
+            "Knicks Domino Effects: What if Jalen Brunson stayed in Dallas?",
+            "NBA",
+            "speculation phrase",
+        ),
+        # A retrospective wearing a different word.
+        (
+            "What happened to Ben Simmons? Complete career timeline",
+            "NBA",
+            "retrospective phrase",
+        ),
+        # A clip post with no tag on it.
+        ("Wemby highlights from today's game", "NBA", "content-type phrase"),
+    ],
+)
+def test_the_classes_the_first_hand_audit_found(
+    make_article: Callable[..., NewsArticle],
+    title: str,
+    league: str,
+    expected: str,
+    now: datetime,
+) -> None:
+    """`[VERIFIED]` All six reached a delivered brief and were found by reading, not by a test.
+
+    2026-09-05, the first hand audit of delivered headlines (`docs/reference/METRICS.md`): 15
+    drawn at random, 8 were not news, and every one named a class the filter already had a rule
+    for and a word the rule did not list. `ranking` had been added two days earlier from
+    headlines that said "Ranking"; the feeds then said "rank" and "Predicting".
+
+    The reason is asserted, not just the verdict, so a title cannot pass this by being dropped
+    for some other reason.
+    """
+    reason = rejection_reason(make_article(title, league=league), now)
+
+    assert reason is not None, f"still reaching the brief: {title}"
+    assert expected in reason, reason
+
+
+@pytest.mark.parametrize(
+    ("title", "league"),
+    [
+        # `[VERIFIED]` Measured and deliberately kept. The bare `rank` stem would take this,
+        # and it is a player feature rather than a list.
+        (
+            (
+                "'A striving factor:' How Ravens' Derrick Henry is driven to rank "
+                "among NFL's best backs"
+            ),
+            "NFL",
+        ),
+        # Bare `odds` would take both of these, and both carry real news.
+        (
+            "Kawhi Leonard Next Team Odds: Trade Hit Another Snag When Second Sponsor Pulled",
+            "NBA",
+        ),
+        ("NFL betting expected to slow at U.S. sportsbooks", "NFL"),
+    ],
+)
+def test_the_wider_rules_that_were_measured_and_rejected(
+    make_article: Callable[..., NewsArticle], title: str, league: str, now: datetime
+) -> None:
+    """The boundary, asserted so a future widening has to break something visible first.
+
+    `[VERIFIED]` 2026-09-05 each of these was dropped by a candidate rule that was measured and
+    then left out: the `rank` stem, and bare `odds`. Each candidate caught one more piece of
+    junk and one real story, which is the trade this project has twice refused (`TASKS.md` P3).
+    """
+    assert is_newsworthy(make_article(title, league=league), now)
+
+
+@pytest.mark.parametrize(
     ("title", "league"),
     [
         ("Ranking every NFL team's WR room: Cowboys and Bengals battle", "NFL"),
