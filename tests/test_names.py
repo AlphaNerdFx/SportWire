@@ -16,7 +16,7 @@ from __future__ import annotations
 import pytest
 
 from processing.names import CLUSTERING, GROUNDING, NameScanner, is_name_word
-from processing.validate import _PROPER_NAME
+from processing.validate import _ProperNames
 
 # --- the scanner asks Python what a capital is ------------------------------------------
 #
@@ -177,9 +177,14 @@ def test_a_scanner_is_configured_not_hardcoded() -> None:
 def test_grounding_preset_matches_the_shipped_extractor_exactly(
     article_texts: list[str],
 ) -> None:
-    """`GROUNDING` and `validate._PROPER_NAME` must agree on every text the repo has.
+    """`GROUNDING` and the hand-written `_ProperNames` must agree on every text the repo has.
 
-    **This is what makes adopting the scanner in `validate.py` a no-op.** `[VERIFIED]` 0
+    **This is what licensed adopting the scanner in `validate.py`, and it compares against the
+    class rather than the name it was bound to.** `[VERIFIED]` 2026-09-05: when `_PROPER_NAME`
+    became `GROUNDING`, comparing against `_PROPER_NAME` would have compared the scanner with
+    itself and asserted nothing, while still passing. The old extractor is kept alive for
+    exactly this reason — it is the independent second opinion, and a test with no second
+    opinion is the shape `CLAUDE.md` §8 exists to catch. `[VERIFIED]` 0
     differences across every title and summary in all three committed fixtures plus the edge
     cases below. If this test ever fails, the scanner has changed a validation verdict, and
     P12/P13 are the record of how expensive an unnoticed verdict change is here.
@@ -201,7 +206,7 @@ def test_grounding_preset_matches_the_shipped_extractor_exactly(
     ]
 
     for text in article_texts + edge_cases:
-        assert GROUNDING.findall(text) == _PROPER_NAME.findall(text), (
+        assert GROUNDING.findall(text) == _ProperNames().findall(text), (
             f"scanner and shipped extractor disagree on {text!r}"
         )
 
