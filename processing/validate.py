@@ -25,6 +25,7 @@ from difflib import SequenceMatcher
 
 from models.schemas import NewsArticle
 from processing.names import (
+    GROUNDING,
     POSITION_ABBREVIATIONS,
     TEAM_ALIASES,
     TEAM_NICKNAMES,
@@ -332,7 +333,12 @@ def _is_name_word(word: str) -> bool:
     required `[A-Z]` to start a word. `[INFERRED]` Every enumerated range fails on the next
     name from the next alphabet; the NBA acquires those faster than this file is edited.
 
-    Digits keep "76ers" and "2026-27" out, since neither starts with an uppercase letter.
+    `[VERIFIED]` "76ers" and "2026-27" are excluded by the **all-letters** test, not by the
+    capital. A leading digit does fail `isupper()` first, so the sentence this replaces was not
+    false, but it named the wrong guard: allowing a digit to start a word changes no output,
+    because the digit then fails `isalpha()` a character later. TASKS.md P17 recorded the old
+    wording as a false claim; it was imprecise rather than false, and `names.py` has carried
+    the exact version since 2026-08-15.
     """
     return (
         bool(word)
@@ -398,7 +404,17 @@ class _ProperNames:
         return names
 
 
-_PROPER_NAME = _ProperNames()
+# ~~`_PROPER_NAME = _ProperNames()`~~ **Adopted `names.GROUNDING` 2026-09-05 (TASKS.md P17).**
+#
+# `[VERIFIED]` A no-op, and asserted as one: `test_grounding_preset_matches_the_shipped_
+# extractor_exactly` compares the two across every title and summary in all three committed
+# fixtures plus P13's edge cases, and they agree on all of them. The class above stays because
+# `_ProperNames` is what that test compares against; when it is deleted the test loses its
+# subject, and P17 is explicit that an unnoticed verdict change here is the expensive kind.
+#
+# `[INFERRED]` This is the half of P17 that was safe. The other half, converging clustering on
+# the same scanner, measured as a net loss every way it was tried.
+_PROPER_NAME = GROUNDING
 
 # Names are matched per sentence, never across one. `[VERIFIED]` 2026-08-08: matching over
 # the whole summary treated "...with the Mavericks. LeBron James chose Philadelphia" as a
