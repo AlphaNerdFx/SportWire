@@ -21,6 +21,7 @@ behind it.
 | Know why something was built that way | [Decisions](decisions/README.md) |
 | Run it unattended | [`SCHEDULING.md`](reference/SCHEDULING.md) |
 | See how it is tested | [Testing](reference/TESTING.md) |
+| Know how accurate it is | [Metrics](reference/METRICS.md) |
 | Read the current state | [`SESSION.md`](sessions/SESSION.md) |
 | Find the next task | [`TASKS.md`](planning/TASKS.md) |
 | Contribute | [`CONTRIBUTING.md`](../CONTRIBUTING.md) |
@@ -75,7 +76,7 @@ Real, documented, and deliberately not hidden:
 | [`planning/`](planning/TASKS.md) | `TASKS.md`, `ROADMAP.md`, `PRD.md` |
 | [`process/`](process/OPERATING_RULES.md) | `OPERATING_RULES.md`, `SYSTEM_INSTRUCTIONS.md` |
 | [`sessions/`](sessions/SESSION.md) | `SESSION.md`, `HANDOVER.md` |
-| [`reference/`](reference/ARCHITECTURE.md) | `ARCHITECTURE.md`, `WALKTHROUGH.md`, `TESTING.md`, `GETTING_STARTED.md`, `INTERNALS.md`, `SCHEDULING.md` |
+| [`reference/`](reference/ARCHITECTURE.md) | `ARCHITECTURE.md`, `WALKTHROUGH.md`, `TESTING.md`, `GETTING_STARTED.md`, `INTERNALS.md`, `SCHEDULING.md`, `METRICS.md` |
 | [`history/`](history/AUDIT.md) | `AUDIT.md` |
 
 `README.md`, `CLAUDE.md`, `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`, `SECURITY.md` and
