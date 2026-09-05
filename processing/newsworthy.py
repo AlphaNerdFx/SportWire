@@ -108,7 +108,20 @@ RETROSPECTIVE_PHRASES = (
     "during his nba career",
     "in his career",
     "career retrospective",
+    # `[VERIFIED]` 2026-09-05 (P69): "What happened to Ben Simmons? Complete career timeline"
+    # reached a brief. Narrow on purpose, the way the phrases above it are.
+    "career timeline",
 )
+
+
+# An untagged clip post. `[VERIFIED]` 2026-09-05 (P69): "Wemby highlights from today's game"
+# reached a brief, because rule 1 matches a leading `[Highlight]` tag and this post carries
+# none. r/nba titles are user-typed, so the tag is a convention rather than a guarantee.
+#
+# `[INFERRED]` The phrase rather than the bare word, and the reason is the one that keeps
+# `"grades"` out of the speculation list: "highlights" is ordinary English and a real story can
+# say a trade highlights a weakness. "highlights from" is a clip announcing itself.
+CLIP_PHRASES = ("highlights from",)
 
 
 # Phrases that mark a piece as a list, a ranking or a guess rather than something that
@@ -148,10 +161,28 @@ SPECULATIVE_PHRASES = (
     # reads "Here's everything you need to know about the NFL for Aug. 27". It carries no
     # facts, so it fails the same test the others do, for the same reason.
     "ranking",
-    "prediction",
+    # ~~`"prediction"`, `"experts predict"`.~~ **Both replaced by the stem 2026-09-05 (P69).**
+    # `[VERIFIED]` The first hand audit of delivered headlines found "Predicting last-place
+    # finisher for each NFL division" reaching a brief, because the list held the noun and the
+    # feed wrote the participle. `"predict"` subsumes both phrases it replaces and matches all
+    # 10 occurrences across the 542 captured titles, every one of them a forecast. `[VERIFIED]`
+    # `unpredictable` occurs 0 times, which is the collision this stem would otherwise invite.
+    "predict",
     "top 100",
-    "experts predict",
     "forecast",
+    # Betting cards. `[VERIFIED]` 2026-09-05: these four drop 11 of the 14 betting items among
+    # the surviving headlines and not one real story. The obvious wider rule, bare `"odds"`,
+    # was measured and **rejected**: it also takes "Kawhi Leonard Next Team Odds: Trade Hit
+    # Another Snag", which carries the trade news, and "NFL betting expected to slow at U.S.
+    # sportsbooks", which is reporting about the betting industry rather than a tip sheet.
+    "best bets",
+    "win total",
+    "odds board",
+    "trends, odds",
+    # A counterfactual. `[VERIFIED]` Both occurrences in the captures are "What if Jalen
+    # Brunson stayed in Dallas?" and "What if we traced an unofficial champion..."; neither
+    # reports anything that happened.
+    "what if",
     # A reader poll, which is the same failure wearing different clothes. `[VERIFIED]`
     # 2026-08-27 the brief said "Warriors fan Brandon Williams and Georges Niang were
     # surveyed about recent signings". Both are players. The source was Yahoo's "Warriors fan
@@ -225,6 +256,11 @@ def rejection_reason(article: NewsArticle, now: datetime | None = None) -> str |
     for phrase in SPECULATIVE_PHRASES:
         if phrase in lowered:
             return f"speculation phrase {phrase!r}"
+
+    # Rule 1e — an untagged clip. Same class as rule 1's tag, without the tag.
+    for phrase in CLIP_PHRASES:
+        if phrase in lowered:
+            return f"content-type phrase {phrase!r}"
 
     # Rule 1d — about a different sport entirely. The feeds are league-scoped by URL and not
     # by content, so this is the last thing standing between a hockey contract and the
