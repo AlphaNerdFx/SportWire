@@ -128,7 +128,26 @@ Run the audit when a filter or validator rule changes, and at least every 14 day
 
 | Date | Sample | Seed | News | Automatic figure |
 |---|---|---|---|---|
-| 2026-09-05 | 15 | 5 | **7 (47%)** | 73.3% |
+| 2026-09-05 | 15 | 5 | **7 of 15 (47%)** | 73.3% |
+| 2026-09-05, same sample replayed after P69 | 15 | 5 | **7 of 10 (70%)** | not recomputed |
+
+**The second row is not a second measurement, and must not be read as one.** `[VERIFIED]` It is
+the same fifteen headlines replayed through the rules that were written *from* them: five of the
+eight non-news items are now dropped, so ten reach a brief and seven of those are news. That is
+the training set grading itself, which is the strongest version of the bias this whole document
+warns about.
+
+`[VERIFIED]` The three junk items that still get through were each left deliberately, because
+the rule that would catch them also takes real reporting:
+
+```
+"NFL waiver wire order ... Where all 32 teams rank"   the `rank` stem also takes a player feature
+"Hey, remember Joe Smith? The Clippers certainly do"  `remember` is a word a real story carries
+"As a lawyer, I just want to tip my hat to the league" reader opinion that opens with a name
+```
+
+`[UNKNOWN]` What an honest reading says. **Draw a fresh sample on a new seed after the next
+fortnight of runs** and put it in the table. Only that row can say whether 47% actually moved.
 
 `[UNKNOWN]` Whether 15 is a large enough sample. It is what one sitting of careful reading
 costs, and two readings a fortnight apart will say more than one larger one.
