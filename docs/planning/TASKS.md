@@ -1345,9 +1345,9 @@ what each turned into, since several changed shape on contact with real data.
     second time** — code implying a protection it does not provide — and mutation caught it
     again where review did not.
 
-- [ ] **P16. A subreddit-meta post from an ordinary account is not caught, and every
-  mechanism measured costs more than it saves.** Opened 2026-08-15 as option (c) of P15.
-  **Measured; recommendation is to hold. Needs a decision.**
+- [x] **P16. A subreddit-meta post from an ordinary account is not caught, and every
+  mechanism measured costs more than it saves.** Closed 2026-09-05 on (d), hold. Opened
+  2026-08-15 as option (c) of P15.
   `[VERIFIED]` The live case: `/u/twistedlogicx`, *"Looking for old.reddit users interested
   in giving feedback and beta testing a redesign of the old subreddit theme"*, stickied and
   currently passing all four rules.
@@ -1383,9 +1383,22 @@ what each turned into, since several changed shape on contact with real data.
   time. Revisit (c) first, and the decision it needs is whether reddit OAuth credentials are
   acceptable — not which pattern to match.
 
-- [ ] **P17. `cluster.py` is blind to the same camelCase names P13 fixed in `validate.py`,
-  and the obvious fix is wrong.** Found 2026-08-15 while costing the cross-run dedup work.
-  **Measured — needs a decision, and it blocks the Beal fix.**
+  **Closed 2026-09-05 on (d), hold.** The operator decided it, and gave the tie-breaker that
+  the measurements alone could not: *"go with what was proven best that maximizes LLM output
+  and not just headlines. I'll take the hallucination at this point."*
+
+  `[INFERRED]` Holding is the option that instruction picks. Every mechanism above removes
+  articles to catch one meta post — (b) alone drops 5 of 25 live items including a Jaylen Brown
+  quote and a Pablo Torre scoop — and fewer articles in front of the model is less to write
+  from, not more. The cost of holding is one meta post per brief, bounded by dedup and by the
+  age window, which the operator has explicitly accepted.
+
+  **The revisit trigger stands unchanged:** a meta post from an ordinary account reaching a
+  brief a second time.
+
+- [x] **P17. `cluster.py` is blind to the same camelCase names P13 fixed in `validate.py`,
+  and the obvious fix is wrong.** Closed 2026-09-05 on the best measured option. Found
+  2026-08-15 while costing the cross-run dedup work.
   `[VERIFIED]` `processing/cluster.py:46` is `\b[A-Z][a-zà-ÿ']+(?:\s+[A-Z][a-zà-ÿ']+)*` —
   the same enumerated-range pattern `fca4298` removed from `validate.py`:
 
@@ -1449,6 +1462,43 @@ what each turned into, since several changed shape on contact with real data.
   - `[VERIFIED]` `tests/conftest.py` gained `reddit_articles`. **No test had ever loaded the
     r/nba capture**, so the only community feed in the pipeline was covered entirely by
     hand-written titles.
+
+  **Closed 2026-09-05 on the best measured option, which is: adopt the shared scanner in
+  `validate.py` and leave clustering alone.** The operator asked for the best *measured*
+  option, and the measurements are one-sided:
+
+  | Change | Measured |
+  |---|---|
+  | `GROUNDING` in `validate.py` | **identical output** across every fixture text and P13's edge cases |
+  | `CLUSTERING` in `cluster.py` | 25 names gained, **28 lost**; closing three further causes still leaves 9 gained / 16 lost |
+  | a conservative hand-written replacement | 21 gained, **23 lost**, including `Russell Westbrook` |
+  | reusing `validate`'s extractor for clustering | disagrees on **52 of 101** titles |
+
+  `[INFERRED]` Every way of changing clustering's extractor loses more names than it gains, and
+  losing `Russell Westbrook` from a fingerprint is worse than the camelCase blindness it would
+  fix. So the duplication is now half removed rather than all of it, and the remaining half is
+  a deliberate policy difference: grounding asks *"is this string backed by the sources"* and
+  wants a greedy run; clustering asks *"which entity is this"* and a greedy run matches nothing.
+
+  `[VERIFIED]` `_PROPER_NAME = GROUNDING` shipped, suite unchanged at 570 passed.
+
+  `[VERIFIED]` **The adoption nearly hollowed out the test that licensed it, and that is worth
+  recording.** `test_grounding_preset_matches_the_shipped_extractor_exactly` compared
+  `GROUNDING` against `validate._PROPER_NAME`; once `_PROPER_NAME` *became* `GROUNDING` the
+  assertion compared the scanner with itself and would have passed forever. It now compares
+  against `_ProperNames()` directly, and the old class is kept alive precisely to be that
+  independent second opinion. Mutation-checked: making `GROUNDING` break runs on punctuation
+  fails it.
+
+  `[VERIFIED]` The docstring sentence P17 recorded as a false claim is corrected in the same
+  change. It was imprecise rather than false: `76ers` does fail the capital test first, but the
+  all-letters test is what makes that guard non-load-bearing, and `names.py` has carried the
+  exact wording since 2026-08-15.
+
+  `[UNKNOWN]` The camelCase blindness in clustering is **not fixed** and stays recorded: an
+  article whose only names are `DeMar DeRozan` or `LeBron James` still carries no fingerprint.
+  The trigger to revisit is a measured extractor that gains more than it loses, which is a
+  different piece of work from converging the two.
 
 - [x] **P18. The brief's paragraph order is fetch order, because every story is the same
   tier.** Found 2026-08-15 from the operator reading the 08:00 brief — *"a bit weird that
@@ -2914,6 +2964,41 @@ what each turned into, since several changed shape on contact with real data.
   `[VERIFIED]` **A fourth pipeline-wiring mutant survived and is now covered.** Deleting the call
   from `main.py` left all 565 tests green. `tests/test_main_repeat_wiring.py` reaches it with a
   real `SeenStore` on a temporary database. P36 records the first three.
+
+- [ ] **P69. The news filter misses eight classes it nearly has rules for.** Open, found
+  2026-09-05 by the first hand audit of delivered headlines (`docs/reference/METRICS.md`).
+
+  `[VERIFIED]` 15 delivered articles read at random: **7 are news, 8 are not.** 47% against the
+  automatic figure of 73.3%, and the automatic figure is high because it is the filter grading
+  itself.
+
+  `[VERIFIED]` Every miss is a word away from a rule that already exists:
+
+  | Headline | The rule it should have hit | What the rule lists |
+  |---|---|---|
+  | `…Where all 32 teams **rank** after roster cuts` | speculation | `ranking` |
+  | `**Predicting** last-place finisher for each NFL division` | speculation | `prediction` |
+  | `**Best bets** to make or miss the NFL playoffs` | speculation | nothing for betting |
+  | `Knicks Domino Effects: **What if** Jalen Brunson stayed in Dallas?` | speculation | nothing for counterfactuals |
+  | `What happened to Ben Simmons? Complete **career timeline**` | retrospective | `career retrospective` |
+  | `Hey, **remember** Joe Smith? The Clippers certainly do…` | retrospective | `remember when` |
+  | `Wemby **highlights** from today's game` | content-type tag | only a leading `[Highlight]` tag |
+  | `As a lawyer, I just want to tip my hat…` | community opinion | led by a name, so the rule stood down |
+
+  `[INFERRED]` The pattern is one thing, not eight: **every rule matches the exact phrasing of
+  the batch it was written from.** `ranking` was added on 2026-09-03 from headlines that said
+  "Ranking"; six days later the feeds said "rank" instead.
+
+  **Do not widen the lists in one sweep.** `[VERIFIED]` This project has twice paid for
+  narrowing or widening a keyword rule without measuring: P3's Rule 2 produced two live false
+  positives, and "grades" and "preview" were both measured and deliberately left out because a
+  real transaction can carry either word. Each addition needs the same treatment the last batch
+  got: count what it drops across the captured articles, and read every one it removes.
+
+  `[UNKNOWN]` Whether stemming is the answer rather than more words. `rank`/`ranking`/`rankings`
+  and `predict`/`prediction`/`predicting` are one stem each, and a stem list would be shorter
+  than the phrase list is becoming. It would also match `ranked` inside a real transaction
+  headline, which is exactly the class the current rules avoid. Measure both before choosing.
 
 ---
 
