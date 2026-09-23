@@ -93,17 +93,6 @@ class GameData(BaseModel):
         return bool(leads) and all(lead > 0 for lead in leads)
 
     @property
-    def largest_lead_lost(self) -> int:
-        """Biggest lead the *losing* team held at a period boundary, or 0 if it never led.
-
-        The mirror of `largest_deficit_overcome` and the same number seen from the other
-        side, kept separate because a brief phrases them differently — "came back from 16
-        down" is about the winner, "blew a 16-point lead" is about the loser. Which reads
-        better depends on which team the reader cares about, and the formatter decides.
-        """
-        return self.largest_deficit_overcome
-
-    @property
     def biggest_period(self) -> int:
         """Most points either side scored in a single period. 0 when unknown.
 
@@ -279,15 +268,3 @@ class NewsArticle(BaseModel):
             except (TypeError, ValueError):
                 return value  # let pydantic try ISO-8601, then report the error itself
         return value
-
-    @property
-    def dedup_hash(self) -> str:
-        """Cross-source identity, for catching the same story reported by two outlets.
-
-        Uses the normalised title rather than `article_id`, because two outlets covering
-        one event assign different ids. `article_id` identifies a *document*; this
-        identifies a *story*. Exact-match only — near-duplicate detection is a separate,
-        deferred concern (ADR-005).
-        """
-        normalised = " ".join(self.title.lower().split())
-        return hashlib.sha256(normalised.encode("utf-8")).hexdigest()
