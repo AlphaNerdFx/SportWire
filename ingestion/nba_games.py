@@ -55,8 +55,7 @@ class BallDontLieGamesAdapter(GameSourceAdapter):
         )
         response.raise_for_status()
 
-        payload = response.json()
-        return self.parse(payload)
+        return self.parse(response.json())
 
     def parse(self, payload: dict[str, Any]) -> list[GameData]:
         """Convert a balldontlie games response into `GameData`.
