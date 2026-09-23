@@ -84,15 +84,15 @@ cause.
 Typing it `str` would have crashed on live data within the first run. This is the clearest
 example in the codebase of a field shape decided by measurement rather than intuition.
 
-### `NewsArticle.dedup_hash` vs `article_id`
+### `NewsArticle.article_id` identifies a document, not a story
 
-Two identity concepts, deliberately separate. `article_id` identifies a **document** — one
-outlet's copy. `dedup_hash` (normalised title) identifies a **story**, so the same event from
-two outlets could collapse.
+`article_id` is one outlet's copy. Two outlets covering one event have different ids, so
+story identity is decided elsewhere: `processing/dedup.py` compares normalised titles, and
+`drop_repeated_stories` compares the names a title mentions.
 
-`[VERIFIED]` In practice it never fires: outlets write their own headlines, and across 612
-real cross-source pairs the maximum similarity was 0.439. Kept because it is nearly free and
-would catch genuine verbatim republication.
+~~`dedup_hash`, a hash of the normalised title, was a second story identity.~~ Removed
+2026-09-23. `[VERIFIED]` `grep -rn dedup_hash` found no caller in code or tests, so it never
+ran. A verbatim republication scores 1.0 in the title comparison and is caught there.
 
 ---
 
