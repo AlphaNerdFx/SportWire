@@ -21,3 +21,6 @@ logs/
 # C3 exposure ADR-009 avoids, and this grows with every run. Promote a specific batch into
 # tests/fixtures/ when a task cites it.
 evidence/
+# Knowledge graph built by the graphify tool. Regenerated on demand, and its cache holds
+# document text, so it is local output rather than repository content.
+graphify-out/
