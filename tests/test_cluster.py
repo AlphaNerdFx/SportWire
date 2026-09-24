@@ -37,7 +37,9 @@ from processing.cluster import (
     group_related,
     limit_per_source,
     order_by_relatedness,
+    story_names,
 )
+from processing.validate import ordinary_words
 
 ArticleFactory = Callable[..., NewsArticle]
 
@@ -594,4 +596,279 @@ def test_a_team_and_its_nickname_are_one_subject(
 
     assert len(groups) == 1, (
         f"the Wolves are the Timberwolves: {[[a.title for a in g] for g in groups]}"
+    )
+
+
+# --- one scanner: real failures from P17/P68, fixed by names.py's shared scanner -----------
+
+
+def test_the_cooks_pair_groups_once_49ers_is_visible(
+    make_article: Callable[..., NewsArticle],
+) -> None:
+    """Real pair, `evidence/2026-09-23T03-01-14-nfl.json`. `49ers` starts with a digit, so
+    `is_name_word` refuses it on purpose (P13) and the scanner alone never sees it. Before
+    `team_mentions`, the second headline named no team at all and the pair shared only `Cooks`.
+    """
+    groups = group_related(
+        [
+            make_article(
+                "Source: Niners signing veteran receiver Cooks to practice squad",
+                summary=(
+                    "The Niners are signing free agent wideout Brandin Cooks to their "
+                    "practice squad, a source told ESPN on Tuesday."
+                ),
+                source="ESPN",
+                league="NFL",
+            ),
+            make_article(
+                "49ers reportedly signing veteran WR Brandin Cooks to practice squad",
+                summary=(
+                    "Cooks spent last season with the Saints and the Bills and combined for "
+                    "279 yards over 15 regular-season games."
+                ),
+                source="Yahoo Sports",
+                league="NFL",
+            ),
+        ]
+        + _filler(make_article, 30)
+    )
+
+    merged = [g for g in groups if len(g) > 1]
+    assert len(merged) == 1 and len(merged[0]) == 2, (
+        f"Niners and 49ers must be one team: {[[a.title for a in g] for g in groups]}"
+    )
+
+
+def test_the_dart_pair_groups_once_the_possessive_is_stripped(
+    make_article: Callable[..., NewsArticle],
+) -> None:
+    """Real pair, same batch. Two mechanisms cover this one, and both had to be checked
+    separately rather than assumed: `CLUSTERING`'s `possessive_ends_run` keeps "Jaxson Dart"
+    from welding onto "Giants'" in the first place, and `team_mentions` separately recognises
+    "Giants" as a team regardless of how the run ended. Either alone is enough here, which
+    `test_clustering_now_also_ends_a_name_at_a_possessive` in `test_names.py` isolates for the
+    scanner half; this test is the end-to-end confirmation the task asked for, not a unit test
+    of one mechanism, and its mutation check below turns off both at once for that reason.
+    """
+    groups = group_related(
+        [
+            make_article(
+                "Another post-Eli Manning nightmare for Giants and their fans as Jaxson Dart "
+                "feared done for season",
+                summary=(
+                    "New York turns to veteran Jameis Winston after an ESPN report revealed "
+                    "the promising second-year quarterback could miss the remainder of the "
+                    "season with a knee injury"
+                ),
+                source="ESPN",
+                league="NFL",
+            ),
+            make_article(
+                "Giants' Jaxson Dart could miss rest of season with knee injury, per report",
+                summary=(
+                    "Dart grabbed his knee in pain after being hit by two Rams defenders, "
+                    "and the Giants QB did not receive good news following his MRI"
+                ),
+                source="CBS Sports",
+                league="NFL",
+            ),
+        ]
+        + _filler(make_article, 30)
+    )
+
+    merged = [g for g in groups if len(g) > 1]
+    assert len(merged) == 1 and len(merged[0]) == 2, (
+        f"the Dart pair must group: {[[a.title for a in g] for g in groups]}"
+    )
+
+
+def test_headline_initial_words_are_not_names_when_the_batch_writes_them_lower_case(
+    make_article: Callable[..., NewsArticle],
+) -> None:
+    """Real headlines: 'Another', 'Three' and 'Seven' open them only because English
+    capitalises the first word of a sentence, not because they name anything.
+
+    `[VERIFIED]` 2026-09-24, a live NFL batch: `story_names` returned each of these as its own
+    one-word "name" before this fix. The evidence that they are ordinary words, not names, has
+    to come from the batch itself — each filler article below is real, and uses the same word
+    in lower case in its own summary.
+    """
+    another = make_article(
+        "Another post-Eli Manning nightmare for Giants and their fans as Jaxson Dart feared "
+        "done for season",
+        source="ESPN",
+        league="NFL",
+    )
+    three = make_article(
+        "Three mock trades the Steelers could make to deal disgruntled CB Joey Porter Jr.",
+        summary=(
+            "Pittsburgh will have options if they decide to deal Porter before the Nov. 10 "
+            "deadline"
+        ),
+        source="CBS Sports",
+        league="NFL",
+    )
+    seven = make_article(
+        "Seven things Solak thinks: Bucs will regret the Mayfield contract? Chargers are a "
+        "bottom-10 team?",
+        summary=(
+            "Can Baker Mayfield rebound? Are the Chargers doomed? Get ready for Week 3 with "
+            "seven takes."
+        ),
+        source="ESPN",
+        league="NFL",
+    )
+    filler_another = make_article(
+        "Knicks Domino Effects: What if Jalen Brunson stayed in Dallas",
+        summary="In another life, the birthday boy stays put and dooms the Knicks to future irrelevancy.",
+        source="SB Nation",
+        league="NFL",
+    )
+    filler_three = make_article(
+        "Broncos GM George Paton on the decision to keep 3 QBs",
+        summary=(
+            "One of the bigger questions heading into the roster cut deadline was whether or "
+            "not the Broncos will keep three quarterbacks on their 53-man roster."
+        ),
+        source="SB Nation",
+        league="NFL",
+    )
+
+    batch = [another, three, seven, filler_another, filler_three] + _filler(
+        make_article, 25
+    )
+    ordinary = ordinary_words(batch)
+
+    assert {"another", "three", "seven"} <= ordinary
+
+    assert "Another" not in story_names(another, ordinary=ordinary)
+    assert "Three" not in story_names(three, ordinary=ordinary)
+    assert "Seven" not in story_names(seven, ordinary=ordinary)
+
+
+def test_two_bare_team_names_are_not_enough_to_group(
+    make_article: Callable[..., NewsArticle],
+) -> None:
+    """Real pair, `evidence/2026-09-11T05-30-59-nfl.json`. Two different players' injuries in
+    the same Rams-49ers game share only the two teams that played it. Any article about that
+    game names both teams by construction, so that pair identifies the game, not one story in
+    it.
+    """
+    groups = group_related(
+        [
+            make_article(
+                "Is Matthew Stafford injured? Rams QB removed early against 49ers",
+                summary=(
+                    "Quarterback Matthew Stafford did not finish out the Los Angeles Rams' "
+                    "season opener against the San Francisco 49ers."
+                ),
+                source="Yahoo Sports",
+                league="NFL",
+            ),
+            make_article(
+                "Jake Tonges injury update as 49ers TE injures knee in Week 1 game vs Rams",
+                summary=(
+                    "Jake Tonges was carted to the locker room in the 49ers Week 1 matchup "
+                    "against the Rams in Australia."
+                ),
+                source="Yahoo Sports",
+                league="NFL",
+            ),
+        ]
+        + _filler(make_article, 30)
+    )
+
+    assert all(len(g) == 1 for g in groups), (
+        f"two teams shared only because they played each other are not a shared story: "
+        f"{[[a.title for a in g] for g in groups]}"
+    )
+
+
+def test_nfl_week_roundups_do_not_group_on_the_week_number(
+    make_article: Callable[..., NewsArticle],
+) -> None:
+    """Real pair, `evidence/2026-09-18T14-01-13-nfl.json`. Once the scanner stopped
+    truncating "NFL Week 2", it started welding it whole and adding the bare `Week` too via
+    `_also_short_forms` — two "shared names" out of one structural phrase every football
+    headline carries in season. These two real roundups share nothing else.
+    """
+    groups = group_related(
+        [
+            make_article(
+                "Everything you need to know for NFL Week 2: 15 games on deck, 15 previews "
+                "from our reporters and experts",
+                source="ESPN",
+                league="NFL",
+            ),
+            make_article(
+                "NFL Week 2's most underrated games: Why you should watch these three "
+                "under-the-radar games",
+                source="ESPN",
+                league="NFL",
+            ),
+        ]
+        + _filler(make_article, 30)
+    )
+
+    assert all(len(g) == 1 for g in groups), (
+        f"'NFL' and 'Week' are structural vocabulary, not a shared subject: "
+        f"{[[a.title for a in g] for g in groups]}"
+    )
+
+
+def test_a_name_over_the_ceiling_still_groups_beside_a_rare_one(
+    make_article: Callable[..., NewsArticle],
+) -> None:
+    """`[VERIFIED]` 2026-09-24 (TASKS.md P68 follow-up), from a live 78-article NBA batch.
+
+    Six real headlines carried Kawhi Leonard's Raptors extension. `Leonard` reached a document
+    frequency of 8 there, above that batch's rarity ceiling of 6, so every pair fragmented into
+    its own story: their other shared name, `Raptors`, stayed under the ceiling but could never
+    reach `MIN_SHARED_NAMES` alone. A name over the ceiling must still be able to corroborate a
+    match made with a name that is not, rather than being dropped from matching outright.
+    """
+    kawhi = [
+        make_article(
+            "Kawhi Leonard contract breakdown: What $115 million extension means as Raptors "
+            "try to compete in loaded East",
+            source="ESPN",
+            league="NBA",
+        ),
+        make_article(
+            "After months in limbo, Kawhi Leonard gets $115 million contract extension from "
+            "Raptors",
+            source="Yahoo Sports",
+            league="NBA",
+        ),
+        make_article(
+            "Kawhi Leonard to reportedly sign 2-year, $115 million extension with Raptors",
+            source="CBS Sports",
+            league="NBA",
+        ),
+        make_article(
+            "Kawhi Leonard's future with Raptors comes into focus with whopping $115 million "
+            "contract",
+            source="ESPN",
+            league="NBA",
+        ),
+        make_article(
+            "Raptors, Leonard agree to 2-year, $115M extension",
+            source="r/nba",
+            league="NBA",
+        ),
+        make_article(
+            "Toronto bets big on Kawhi Leonard's health with reported two-year, $115 million "
+            "extension",
+            source="SB Nation",
+            league="NBA",
+        ),
+    ]
+    batch = kawhi + _filler(make_article, 44)
+
+    groups = group_related(batch)
+    largest = max(len(g) for g in groups)
+
+    assert largest >= 5, (
+        f"the Kawhi Leonard extension must not fragment into singletons: "
+        f"{[[a.title[:40] for a in g] for g in groups]}"
     )
