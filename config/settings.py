@@ -59,12 +59,12 @@ DEFAULT_OPENROUTER_MODEL = "google/gemma-4-31b-it:free"
 # about 3.9 an hour, so 30 minutes would usually deliver nothing at all and the brief becomes
 # silence or noise.
 #
-# **Narrowed from `(2, 4, 8, 12, 24, 48)` to `(8, 12, 24)` 2026-09-24.** `[INFERRED]` 2 and 4
-# hours were never below the floor the measurement set, and 48 is dropped because nothing below
-# scaled with it: the per-outlet cap and the repeat window were both fixed numbers that only
-# happened to be right at 8 hours (see `scaled_source_caps` and `repeat_window_hours_for`,
-# below). Restoring a wider set is a matter of re-deriving those two alongside `brief_size_for`,
-# not of editing this tuple alone.
+# **Narrowed from `(2, 4, 8, 12, 24, 48)` to `(8, 12, 24)` 2026-09-24, the operator's choice.**
+# `[VERIFIED]` The three were then checked against the pipeline (TASKS.md P42): news supply,
+# freshness and message length fit all three, but the per-outlet cap and the repeat window
+# were fixed numbers that only held at 8 hours, so both now scale (`scaled_source_caps` and
+# `repeat_window_hours_for`, below). Widening the set again means re-deriving those two
+# alongside `brief_size_for`, not editing this tuple alone.
 POLL_INTERVAL_CHOICES: tuple[int, ...] = (8, 12, 24)
 
 # What a brief looks like at the reference interval. These are today's shipped values, so an
