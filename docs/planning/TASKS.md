@@ -3078,6 +3078,14 @@ what each turned into, since several changed shape on contact with real data.
     shared full person name plus one more name match regardless of rarity; the subagent tried
     the first half alone and it broke three correct groups, so both halves have to move
     together and be measured on the same 37-merge review.
+  - `[INFERRED]` 2026-09-25 replay, independent of the subagent's measurement: 20 real runs
+    since 09-17 (40 briefs) rebuilt from `fetched_articles` minus `seen_articles` at each
+    run's start, grouped by the code at `08d6c98` and at `cb798c1` on identical input, top 12
+    leads compared. Same-story duplicate leads by hand count: **about 28 before, about 16
+    after**. Worse in one place: Doc Rivers to NBC went from 2 leads to 3 on 09-22. Unchanged:
+    Karl-Anthony Towns (5 leads, 09-24) and most of Kawhi Leonard (6 leads to 5, 09-23).
+    `[VERIFIED]` First live run on the new code (09-24 19:30 local): no duplicate leads in
+    either brief, but 6 and 4 stories only, one run is not a rate.
   - `[VERIFIED]` Also open: `drop_repeated_stories` calls `story_names` without the batch, so
     the headline-opener fix ("Did Todd Monken") does not reach repeat suppression yet.
 
