@@ -423,7 +423,11 @@ rule as binding on new text and on any passage being edited anyway.
 
 ## 10. Configuration and Secrets
 
-`[UNKNOWN]` No configuration exists in the clean repo yet. Target shape:
+~~`[UNKNOWN]` No configuration exists in the clean repo yet. Target shape:~~ `[VERIFIED]`
+**Built, 2026-09-24:** all three exist as described, and `.env.example` is the current list of
+keys, each with its reason. It supersedes the placeholder block below, which is kept as it was
+first written: `DATABASE_URL` was never read by anything and became `DATABASE_PATH`, the dedup
+window is 168 hours (PRD D2), and `POLL_INTERVAL_HOURS` accepts only 8, 12 or 24 (PRD D6).
 
 - `.env` — **never committed.** Must be listed in `.gitignore` before any secret is written.
 - `.env.example` — committed, contains keys with empty or placeholder values.
