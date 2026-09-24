@@ -16,7 +16,7 @@ Written 2026-09-24. Everything below was checked by a command run in this sessio
 | Branch | `main` |
 | Last commit | `61c2995eeddf45dc47fcc822532d9b1163f7ed14` |
 | Subject | `docs: bring SESSION.md to 2026-09-24: scope, intervals, cron, P70 decision, next prompt` |
-| Unpushed | **33 commits**, `2b6d954` to `61c2995`. Not pushed: the operator's approval to push covered one earlier push only |
+| Unpushed | ~~33 commits~~ **0**: pushed 2026-09-25 on the operator's instruction, CI run `36030219430` green. Issues #1 and #8 updated the same day |
 | Working tree | clean |
 | Stashes | 0 |
 | Worktrees | main only. The four subagent worktrees were removed after checking each was clean and every commit subject was on `main` |
@@ -113,10 +113,9 @@ harness-backgrounded commands and Sonnet subagents, whose logs lived in session 
 **Recommendation: (a).** The wrong merges fold a story under another rather than duplicating
 it, and the old code duplicated the day's biggest stories every day.
 
-**2. Push the 33 commits?** Recommendation: yes, after reading OPEN DECISIONS 1.
+~~**2. Push the 33 commits?**~~ Done 2026-09-25.
 
-**3. Update GitHub issues #1 and #8** to match the new scope and gate status? Public writing, so
-waiting on approval. Recommendation: yes; #8's text still says v1.0.0 is NBA only.
+~~**3. Update GitHub issues #1 and #8**~~ Done 2026-09-25: #8's body corrected and commented, #1 has a gate status table.
 
 **4. City aliases for the validator** (Los Angeles for the Clippers, and so on), P72's largest
 open false-alarm class. Needs data in `processing/names.py` and a measurement first.
