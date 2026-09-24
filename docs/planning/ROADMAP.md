@@ -186,7 +186,7 @@ work is a small module plus documentation rather than a new architecture.
 plausible prose. It needs its own investigation, and `TASKS.md` L10 already holds the phone
 port as deferred pending a concrete definition.
 
-### → `v0.5.0` — NFL **(current, mostly built 2026-08-26)**
+### `v0.5.0`: NFL **(done 2026-09-24; shipped through the v0.5.x releases)**
 
 Promoted from after the line to before it on 2026-08-17, see the note under `v1.0.0`.
 `[VERIFIED]` `TASKS.md` records the L1 trigger as already fired, so this is held back by
@@ -197,14 +197,15 @@ every article and stored beside it, one brief assembled per league with its own 
 its own evidence file, and a run producing two messages with neither sport appearing in the
 other's. `ADR-015` records the shape and what it cost.
 
-Two things are left before this milestone closes:
+~~Two things are left before this milestone closes:~~ **Neither blocks it any more, 2026-09-24:**
 
-- **A per-league schedule.** Both briefs still come from one run on one interval. This needs
-  the bounded interval choice in `TASKS.md` P42, which is `v1.0.0` work, so the two are
-  coupled and the ordering is not obvious yet.
-- **A community football feed.** `[VERIFIED]` r/nfl works alone and returns 429 when r/nba
-  was fetched shortly before it, so only one Reddit feed can be fetched per run. P46 holds
-  the measurements and the fix.
+- ~~**A per-league schedule.**~~ Both briefs come from one run on one interval, and that
+  interval is now a choice of 8, 12 or 24 hours (`TASKS.md` P42). A separate schedule per
+  league is not planned; nothing measured asks for one.
+- ~~**A community football feed.**~~ **Moved past `v1.0.0` on the operator's decision.**
+  `[VERIFIED]` r/nfl works alone and returns 429 when r/nba was fetched shortly before it, so
+  only one Reddit feed can be fetched per run. P46 holds the measurements and the fix, which is
+  authenticating to Reddit.
 
 `[VERIFIED]` Adding football also cost two validator bugs, both of which predated it and
 were merely hidden by basketball writing: P47, where an ordinary word at the end of a name
@@ -213,10 +214,16 @@ then refuted the team. `[INFERRED]` That is the honest cost of a second league, 
 worth expecting again for the third: a new sport is a new writing style meeting rules that
 were tuned on one.
 
-### `v0.6.0` — MLB and NHL
+### ~~`v0.6.0`: MLB and NHL~~, **moved past v1.0.0, 2026-09-24, as `v1.1.0` and `v1.2.0`**
 
-The remaining two of the four major American leagues. Grouped into one milestone because the
-work is the same shape twice and the second one should cost much less than the first.
+> **Decided by the operator on 2026-09-24**, taking the recommendation that `v1.0.0` ship on
+> NBA and NFL. `[VERIFIED]` The research below had not started, each league brings its own
+> data source, team lists and validator surprises, and the `v1.0.0` conditions still had to be
+> proven on the two leagues that exist. The text below is kept because it still describes the
+> work, now split into one milestone per league.
+
+The remaining two of the four major American leagues. ~~Grouped into one milestone because the
+work is the same shape twice and the second one should cost much less than the first.~~
 
 `[UNKNOWN]` The data sources. Nothing has been researched for either league, and ADR-003 is the
 precedent for how much that research matters: the NBA answer took two reversals and a
@@ -289,26 +296,37 @@ Adopting this needs an ADR amending ADR-002, written when the work starts rather
 `[UNKNOWN]` Whether OpenClaw is stable enough to depend on. It appeared in late 2025 and moves
 quickly, so pin a version and record which one was tested.
 
-### `v1.0.0` — the line
+### → `v1.0.0`: the line **(current, 2026-09-24)**
 
 ~~**A trustworthy single-user NBA brief.**~~ **Widened 2026-08-17 at the operator's request:**
 *"4 major-american sport integration before v1.0.0"* and *"Integration with Windows task
 scheduling or other before v1.0.0"*. Recorded as a move rather than a quiet rewrite, per §5.
 
-**A trustworthy single-user brief across the four major American leagues.** Specifically, all
-of:
+~~**A trustworthy single-user brief across the four major American leagues.**~~ **Narrowed
+again 2026-09-24 on the operator's decision:** MLB and NHL move to `v1.1.0` and `v1.2.0`, and
+the NFL community feed (P46) moves past the line. Recorded as a move, per §5.
 
-1. Briefs for NBA, NFL, MLB and NHL arrive on schedule, unattended, from a scheduler this
-   repository documents, with the operator's choice of scheduler honoured (`v0.4.0`).
-   The operator also picks the **interval** from a bounded set, and the brief's length scales
-   with it (PRD D6, R7 and R8, decided 2026-08-26). `[VERIFIED]` Scaling the output limit alone
+**A trustworthy single-user brief for the NBA and the NFL, that runs from a fresh clone.**
+Specifically, all of:
+
+1. Briefs for ~~NBA, NFL, MLB and NHL~~ **NBA and NFL** arrive on schedule, unattended, from a
+   scheduler this repository documents, with the operator's choice of scheduler honoured
+   (`v0.4.0`). The operator also picks the **interval** from ~~a bounded set~~ **8, 12 or 24
+   hours** (decided 2026-09-24), and the brief's length, the per-outlet cap and the
+   repeat-suppression window all scale with it (PRD D6, R7 and R8; `TASKS.md` P42). `[VERIFIED]` Scaling the output limit alone
    is not enough: `DEFAULT_MAX_ARTICLES = 12` already binds on 8 of 22 logged runs at 8 hours,
    so a 2-day interval would discard roughly 175 of 187 articles unless the story cap scales
    too.
 2. The summarisation pass rate is a **measured** number, published in the release notes.
 3. No known false-accusation bug in `processing/validate.py`. `[VERIFIED]` Six were fixed
    between 2026-08-15 and 2026-08-17, so this condition is doing real work.
-4. `make check` green, and the README sufficient to run it.
+4. `make check` green, and the README sufficient to run it **from a fresh clone**: a new
+   clone installed by following the README alone passes `make check` and produces a brief
+   with `--dry-run`, run from a directory other than the repository. `[VERIFIED]` 2026-09-24
+   baseline: a clone of `08d6c98` did both, from `/tmp`, with an empty `.env`.
+5. **The PRD §6 gate**: 14 accumulated unattended days, zero duplicate stories delivered, no
+   crashes (issue #1), and the operator able to explain the implementation (issue #2, H13).
+   Added here 2026-09-24 so the two documents name one gate rather than two.
 
 ~~`[INFERRED]` This is deliberately narrower than `CLAUDE.md` §1, which names NBA **and** NFL.
 The reasoning is goal ranking: §1 ranks *ship a working system* first, and a measured, reliable
@@ -321,7 +339,7 @@ operator has decided anyway, which is his call. What it means in practice is tha
 now has to hold across four leagues rather than one, so the honest risk is that `v1.0.0`
 arrives much later rather than that it arrives worse. `[INFERRED]` The way to keep it from
 arriving worse is that each league ships as its own milestone with its own measurement, which
-is why `v0.5.0` and `v0.6.0` are separate rather than one "add three leagues" step.
+is why `v0.5.0` and `v0.6.0` are separate rather than one "add three leagues" step. (Both later leagues moved past the line on 2026-09-24, as `v1.1.0` and `v1.2.0`.)
 
 `[INFERRED]` OpenClaw at `v0.7.0` sits before the line but is not one of its conditions.
 Delivery already works through Telegram, so a second channel is a widening of the product
@@ -334,6 +352,10 @@ stability is unknown. If it slips, the line should not slip with it.
   Scheduler are the two supported options and both work today. `[VERIFIED]` The choice between
   them is real rather than cosmetic: cron inside WSL does not run while the machine sleeps,
   observed 2026-08-26 as an eight-hour gap in `/var/log/syslog` and a missing 08:00 brief.
+- **`v1.1.0`: MLB**, then **`v1.2.0`: NHL**, one league per milestone with its own
+  measurement. The research and costs are described under the struck `v0.6.0` above.
+  Renumbered 2026-09-24: multi-user routing, previously `v1.1.0`, is now `v1.4.0`.
+- **After `v1.0.0`: the NFL community feed** (`TASKS.md` P46), needing Reddit authentication.
 - **`v1.3.0` — cloud hosting, cost minimised.** Operator's stated plan for after 1.0.
   `[UNKNOWN]` Everything about it: provider, shape, and what "minimised" means in numbers.
   `[INFERRED]` Two things already point at the shape. ADR-014's poll/brief split means the
@@ -342,7 +364,7 @@ stability is unknown. If it slips, the line should not slip with it.
   sources are reachable. That needs re-measuring from a cloud IP before anything is chosen,
   not assumed to work because it works from a laptop.
 
-- **`v1.1.0` — multi-user routing (L8).** Only meaningful once `v0.3.0` and `v0.4.0` exist.
+- **`v1.4.0`: multi-user routing (L8).** ~~`v1.1.0`~~, renumbered 2026-09-24. Only meaningful once `v0.3.0` and `v0.4.0` exist.
 - **`v2.0.0`** — reserved for a change that breaks how the operator runs it. Nothing currently
   planned qualifies.
 
