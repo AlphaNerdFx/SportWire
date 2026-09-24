@@ -655,7 +655,10 @@ def test_the_interval_decides_how_many_stories_a_brief_carries(
     drives it, and three mutations deleting a whole step have already passed unnoticed.
 
     Asserted on the observable consequence: the same twenty stories produce a short brief at
-    the two-hour interval and a longer one at two days.
+    the 8-hour interval and a longer one at 24 hours. `[INFERRED]` This also exercises the
+    scaled per-outlet cap: at 8h it still binds (4/4/4/3 of 5 each = 15, capped again to 12 by
+    `brief_size_for`), and at 24h it does not (7/7/7/5 each covers every one of the 5 per
+    source, so the story count alone decides).
     """
     import main
 
@@ -671,8 +674,35 @@ def test_the_interval_decides_how_many_stories_a_brief_carries(
         main.main(["--channel", "stdout", "--no-summary"])
         return capsys.readouterr().out.count("—")
 
-    assert stories_at("2") < stories_at("48"), (
+    assert stories_at("8") < stories_at("24"), (
         "a longer interval must carry more stories"
+    )
+
+
+def test_the_per_outlet_cap_scales_with_the_interval(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`[VERIFIED]` TASKS.md P42: an unscaled cap of 4 would still show only 4 of ESPN's 6
+    stories at 24h, even though `brief_size_for` allows up to 21 and nothing else is short of
+    room. Six stories from one outlet isolates the per-source cap from the overall story cap,
+    which is what a wiring mutation dropping `scaled_source_caps` from `main.assemble_brief`
+    would otherwise hide behind.
+    """
+    import main
+
+    titles = _DISTINCT_TITLES[:6]
+    fetched = [_fresh(title, source="ESPN") for title in titles]
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "cap.db"))
+    monkeypatch.setenv("EVIDENCE_PATH", str(tmp_path / "evidence"))
+    monkeypatch.setenv("POLL_INTERVAL_HOURS", "24")
+    monkeypatch.setattr(main, "fetch_news", lambda feeds: (fetched, []))
+
+    assert main.main(["--channel", "stdout", "--no-summary"]) == 0
+    printed = capsys.readouterr().out
+
+    shown = sum(1 for title in titles if title in printed)
+    assert shown == 6, (
+        f"a 24h interval scales ESPN's cap to 7, so all 6 of these should show; got {shown}"
     )
 
 
