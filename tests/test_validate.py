@@ -2111,3 +2111,149 @@ def test_splitting_at_a_team_keeps_the_player_indexed(
     result = validate_summary("Jeshaun Smith was suspended.", articles)
 
     assert not result.is_safe, "a blend on that surname should still be refused"
+
+
+# --- rejection audit, 2026-09-24: an ellipsis does not end a name -----------------------------
+
+
+def test_an_ellipsis_ends_a_name_the_way_a_comma_does(
+    make_article: ArticleFactory,
+) -> None:
+    """`[VERIFIED]` a real headline refused both `Kawhi Leonard` and `Detroit Pistons`.
+
+    `[Charnia] "Going back to Toronto, this is a complete legacy play for Kawhi…
+    Detroit, Minnesota, and other teams wanted to trade for him and extend him."` has a single
+    ellipsis character (U+2026, not three periods) between "Kawhi" and "Detroit". Without a
+    break there, the two scan as one source name, `{kawhi, detroit}`, which then disagreed
+    with both real names sharing one of those words and refused them.
+    """
+    articles = [
+        make_article(
+            "[Charnia] “Going back to Toronto, this is a complete legacy play for "
+            "Kawhi… Detroit, Minnesota, and other teams wanted to trade for him and "
+            "extend him.”"
+        )
+    ]
+
+    result = validate_summary("Kawhi Leonard is drawing trade interest.", articles)
+
+    assert result.is_safe, f"wrongly flagged: {result.invented_names}"
+
+
+def test_an_ellipsis_does_not_launder_a_name_the_sources_never_wrote(
+    make_article: ArticleFactory,
+) -> None:
+    """The safety half: the ellipsis break must not turn off grounding generally.
+
+    Same batch as above, so the ellipsis is genuinely in play, but the name asked about here
+    is absent from it altogether.
+    """
+    articles = [
+        make_article(
+            "[Charnia] “Going back to Toronto, this is a complete legacy play for "
+            "Kawhi… Detroit, Minnesota, and other teams wanted to trade for him and "
+            "extend him.”"
+        )
+    ]
+
+    result = validate_summary("Draymond Green was also mentioned.", articles)
+
+    assert not result.is_safe, "an absent name should still be refused"
+
+
+# --- rejection audit, 2026-09-24: a position on the summary's own candidate -------------------
+
+
+def test_a_position_on_the_summarys_own_candidate_does_not_invent_a_person(
+    make_article: ArticleFactory,
+) -> None:
+    """`[VERIFIED]` a real batch refused `QB Darnold` while naming `Sam Darnold` five times.
+
+    The summariser wrote the position the way a headline would, "QB Darnold", but the sources
+    only ever write the first name out, "Sam Darnold". `{qb, darnold}` is the same length as
+    `{sam, darnold}` and disagrees about the other word, so the equal-length rule (P20) read a
+    position tag as a rival first name.
+
+    The word "quarterback" is spelled out here rather than written "QB", so the source cannot
+    also ground the abbreviation by literal accident; only the stripping this test names can.
+    """
+    articles = [
+        make_article(
+            "Seahawks' Darnold gets 'really good news' about hip, expected to miss Week 2",
+            summary=(
+                "Sam Darnold has received really good news regarding his hip injury, but "
+                "the Seahawks quarterback is expected to miss next week's game."
+            ),
+            league="NFL",
+        )
+    ]
+
+    result = validate_summary("QB Darnold is expected to miss Week 2.", articles)
+
+    assert result.is_safe, f"wrongly flagged: {result.invented_names}"
+
+
+def test_a_position_does_not_excuse_a_surname_the_sources_never_wrote(
+    make_article: ArticleFactory,
+) -> None:
+    """The safety half: stripping the position must not launder the surname after it.
+
+    Same batch as above, so a position tag is genuinely being stripped, but the surname this
+    asks about belongs to nobody in it.
+    """
+    articles = [
+        make_article(
+            "Seahawks' Darnold gets 'really good news' about hip, expected to miss Week 2",
+            summary=(
+                "Sam Darnold has received really good news regarding his hip injury, but "
+                "the Seahawks quarterback is expected to miss next week's game."
+            ),
+            league="NFL",
+        )
+    ]
+
+    result = validate_summary("QB Wentz is expected to miss Week 2.", articles)
+
+    assert not result.is_safe, "a fabricated surname should still be refused"
+
+
+# --- rejection audit, 2026-09-24: a hyphenated modifier still names the word before it --------
+
+
+def test_a_hyphenated_modifier_does_not_refute_the_name_it_modifies(
+    make_article: ArticleFactory,
+) -> None:
+    """`[VERIFIED]` a real batch refused `Vince Carter's` over "the Vince Carter-like dunk".
+
+    A hyphen is a legal character inside a name (`Karl-Anthony`), so "Carter-like" scans as one
+    word distinct from "Carter". Indexed as `{vince, carter-like}`, it disagreed with the real
+    `Vince Carter` about the second word and refused him, even though the batch is about him.
+    """
+    articles = [
+        make_article("MJ with the Vince Carter-like dunk in 1987, and one more like it")
+    ]
+
+    result = validate_summary(
+        "Vince Carter's dunk is being compared to MJ's.", articles
+    )
+
+    assert result.is_safe, f"wrongly flagged: {result.invented_names}"
+
+
+def test_a_hyphenated_modifier_does_not_launder_a_different_surname(
+    make_article: ArticleFactory,
+) -> None:
+    """The safety half: matching the word before a hyphen must not widen into a near-match.
+
+    Same batch as above, so a hyphenated modifier is genuinely in play, but the surname this
+    asks about belongs to nobody in it, hyphenated or not.
+    """
+    articles = [
+        make_article("MJ with the Vince Carter-like dunk in 1987, and one more like it")
+    ]
+
+    result = validate_summary(
+        "Vince Staples's dunk is being compared to MJ's.", articles
+    )
+
+    assert not result.is_safe, "a fabricated surname should still be refused"
