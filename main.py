@@ -184,7 +184,7 @@ class Brief(NamedTuple):
 
     `[INFERRED]` The three lists are not the same thing and the difference matters.
     `messages` is what gets sent. `fresh_articles` and `fresh_games` are everything that
-    survived dedup and must be marked as seen, whether or not it was shown (P65: past the
+    survived dedup and must be marked as seen, whether or not it was shown (P58: past the
     cap, an article is consumed, not held over). `shown_articles` is the smaller list, only
     the articles in the groups actually printed, and it exists for P68: recording a story's
     names as delivered when the reader never saw it is what made `drop_repeated_stories`
