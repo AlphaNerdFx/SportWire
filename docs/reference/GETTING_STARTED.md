@@ -2,7 +2,12 @@
 
 > Moved out of the GitHub wiki on 2026-09-03 so it lives with the code it describes.
 
-Runs on Linux, macOS, or Windows via WSL2. Python 3.10 or newer.
+Runs on Linux, macOS, or Windows via WSL2. Python 3.10 or newer, with its `venv` module (on
+Ubuntu: `sudo apt install python3-venv`). Commands below use `.venv/bin/python`, because a
+stock Ubuntu has `python3` but no `python`.
+
+`[VERIFIED]` 2026-09-24 these steps were followed on a fresh clone of `08d6c98` with an empty
+`.env`: install and `make check` passed, and a dry run from `/tmp` printed a brief per league.
 
 ## 1. Get the code and dependencies
 
@@ -15,7 +20,10 @@ make install
 `make install` creates `.venv` and installs five packages. No Docker, no database server,
 nothing global.
 
-## 2. Get two free credentials
+## 2. Get two free credentials (optional for a dry run)
+
+Neither is needed to see a brief: with an empty `.env`, `make dry-run` fetches the news
+feeds and prints the result. balldontlie adds NBA scores; Telegram is needed only to send.
 
 **balldontlie** — sign up at [balldontlie.io](https://www.balldontlie.io/) for a free API
 key. Games only; the news feeds need no key.
@@ -30,7 +38,7 @@ prompts, and keep the token. Then find your chat id: send your new bot any messa
 cp .env.example .env
 ```
 
-Fill in three values:
+Fill in the values you have:
 
 ```
 BALL_DONT_LIE_API_KEY=...
@@ -38,7 +46,23 @@ TELEGRAM_BOT_TOKEN=...
 TELEGRAM_CHAT_ID=...
 ```
 
-`.env` is gitignored. Nothing else is required — every other setting has a working default.
+`.env` is gitignored. Nothing else is required; every other setting has a working default.
+
+**How often a brief goes out:** `POLL_INTERVAL_HOURS` is 8, 12 or 24 (default 8). Anything
+else is refused with a message saying so. A longer interval gives a longer brief with more
+stories, rather than the same brief with more news discarded.
+
+## 3b. Install the local summariser (optional)
+
+The news section is a short written summary by default, from local Ollama models. Without
+Ollama the brief falls back to a headline list, so this step is optional:
+
+```bash
+sudo apt install zstd            # Ollama's installer needs it on a clean Ubuntu
+curl -fsSL https://ollama.com/install.sh | sh
+ollama pull llama3.2:3b          # writes most briefs
+ollama pull mistral:7b           # loaded only when the first model's draft fails the checks
+```
 
 ## 4. See it work without sending anything
 
@@ -55,7 +79,8 @@ nothing is recorded, so you can run it as often as you like.
 make run
 ```
 
-Three messages arrive, with one notification. Run it again immediately and **nothing is
+One brief per league arrives (NBA and NFL), each as one to three messages: scores, notable
+games and news, with the empty sections left out. Only the first message makes a sound. Run it again immediately and **nothing is
 sent** — everything has been delivered already. That is deduplication working, not a bug.
 
 To see a full brief with games during the offseason, use a past in-season date:
@@ -95,5 +120,10 @@ omitted and you get news only.
 **Nothing sent at all** — everything currently in the feeds has already been delivered. Check
 the log: `after dedup: 0 games, 0 articles`. To start over, delete `sportwire.db`.
 
-**The brief seems short** — it caps at 12 articles, ranked by importance, and says
-`+ N more, ranked lower` at the end. Change `DEFAULT_MAX_ARTICLES` in `delivery/brief.py`.
+**The brief seems short**: at 8 hours it carries 12 stories, ranked by importance, and says
+`+ N more, ranked lower` at the end. ~~Change `DEFAULT_MAX_ARTICLES` in `delivery/brief.py`.~~
+That constant no longer decides it (corrected 2026-09-24); set `POLL_INTERVAL_HOURS` to 12 or
+24 for 15 or 21 stories.
+
+**Every summary attempt fails with a model error**: the model named in `OLLAMA_FIRST_MODEL`
+or `OLLAMA_MODEL` is not pulled. Run `ollama list` and pull the missing one.
