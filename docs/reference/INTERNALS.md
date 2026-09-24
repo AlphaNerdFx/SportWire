@@ -264,6 +264,26 @@ the module because otherwise a future reader would assume it was measured and va
 
 ---
 
+## `processing/cluster.py`
+
+### `story_names` uses `names.py`'s scanner, not its own
+
+Changed 2026-09-24 (P70). `cluster.py` used to find names with a private pattern, a second
+definition of "a name" beside `processing/names.py`. It now uses `names.CLUSTERING`, strips
+possessives ("Giants' Jaxson Dart" gives "Jaxson Dart"), reads digit-led team names ("49ers",
+aliased to "Niners"), drops a headline's opening word when the batch also writes it in lower
+case ("Another", "Three"), and ignores a name equal to the article's own byline.
+
+### Two shared names, at least one of them rare, and not two bare team names
+
+`group_related` joins an article to a group when they share two names, at least one of which
+appears in few enough articles to identify a story, and not only two team nicknames. `[VERIFIED]`
+2026-09-24 hand review: 23 of 37 new merges correct, 5 borderline, 9 wrong. `[VERIFIED]` Known
+gap: the day's most-covered story can still split, because all its names are common (on a
+reconstruction of the 09-23 NBA run, 8 separate Kawhi Leonard extension groups). TASKS.md P70.
+
+---
+
 ## `processing/priority.py`
 
 ### It sorts and never filters
@@ -370,9 +390,11 @@ The model prefixes its notes with "Here are the summaries:" despite being told n
 line is not a fact, and counting it would inflate the number the reduce step is asked to
 satisfy.
 
-### Why the whole module is disabled by default
+### ~~Why the whole module is disabled by default~~
 
-See ADR-012. Every model tested fabricates, and the substitutions are systematic: a less
+~~Disabled by default~~ corrected 2026-09-24: summarising has been on by default since
+2026-08-10, with every draft checked by `processing/validate.py` and a headline list as the
+fallback (ADR-012, ADR-016). The reasoning below is why the check exists. See ADR-012. Every model tested fabricates, and the substitutions are systematic: a less
 famous name is replaced by a more famous one from the same organisation, because the training
 prior beats the prompt context. The more newsworthy the subject, the more likely it is
 corrupted.
@@ -381,9 +403,13 @@ corrupted.
 
 ## `storage/db.py`
 
-### Stores identifiers only, never content
+### ~~Stores identifiers only, never content~~
 
-**Why.** The store answers one question: *have I sent this?* Storing titles would make it a
+Corrected 2026-09-24: true of `seen_articles` and `seen_games`, but `fetched_articles`
+(ADR-014) now stores whole articles so a brief can cover everything polled since the last one,
+and `delivered_story_names` stores the names each shown story mentioned (P68, P71).
+
+**Why, for the seen tables.** The store answers one question: *have I sent this?* Storing titles would make it a
 second source of truth about articles, and two sources of truth diverge. That is precisely how
 the prototype ended up with four `NewsArticle` definitions.
 
@@ -392,9 +418,13 @@ the prototype ended up with four `NewsArticle` definitions.
 **Why not plain `INSERT`.** Re-running after a partial failure must not raise. Idempotent
 writes mean the recovery path is "run it again", which requires no special handling anywhere.
 
-### Rows are kept forever
+### ~~Rows are kept forever~~
 
-**Why no purge.** `[VERIFIED]` ESPN lists items up to ~4 days old. A window shorter than the
+Corrected 2026-09-24: every run now purges delivered, polled and story-name rows older than the
+forget window (at least `DEDUP_WINDOW_HOURS`, 168; issue #10). The reasoning below is why the
+window is a week and not the poll interval.
+
+**Why the window is long.** `[VERIFIED]` ESPN lists items up to ~4 days old. A window shorter than the
 feed's reach makes an already-sent story look new again on every cycle — an 8-hour window
 would leave 3 of 17 items re-delivered indefinitely. `DEDUP_WINDOW_HOURS=168` records the
 intent; nothing reads it yet because at tens of rows a purge solves nothing.
@@ -459,6 +489,9 @@ never exceeds the limit — an off-by-one that would only appear at exactly the 
 
 ### The cap prints `+ N more, ranked lower`
 
+At 8 hours the cap is 12 stories; at 12 and 24 hours it is 15 and 21, and each outlet's share
+scales with it (P42).
+
 **Why say so.** Showing 12 of 53 silently would look like the other 41 never existed. The
 dropped articles are still recorded as delivered — they were ranked lowest, not missed, and
 will not reappear next run.
@@ -515,7 +548,13 @@ if delivered == 0:
     return 1
 store.record_games(fresh_games)
 store.record_articles(fresh_articles)
+store.record_story_names(shown_articles)
 ```
+
+`record_articles` gets everything that survived dedup, shown or not, because past the cap
+an article is consumed, not held over (P58). `record_story_names` gets only the articles in
+the groups actually shown (P71, 2026-09-24): repeat suppression may only treat as delivered
+what a reader saw. `[VERIFIED]` Before, 76% of the remembered stories had never been shown.
 
 **Why this order is not negotiable.** Reverse it and a failed send marks items delivered
 forever; the next run skips them. They are lost, permanently, and nothing errors.
