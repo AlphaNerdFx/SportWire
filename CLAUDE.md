@@ -508,3 +508,51 @@ column worked. Do not repeat this.
 4. Before your first code change, run the forensic commands in §7 against the current repo
    and report what you actually find. State discrepancies against these documents out loud.
 5. Ask the human before creating any file.
+
+## 13. Subagent delegation policy
+
+You have access to subagents. Use them autonomously when they provide a
+meaningful advantage.
+
+Delegate work to subagents when:
+- The task contains independent workstreams that can run in parallel.
+- A problem requires investigating multiple unrelated parts of the codebase.
+- A task benefits from isolated context or independent analysis.
+- A specialized review, debugging pass, testing pass, or research task can
+  be performed independently.
+- Delegation will reduce context usage or allow multiple investigations
+  simultaneously.
+
+Do NOT delegate when:
+- The task is simple or can be solved directly with a few tool calls.
+- The work is tightly sequential and requires maintaining shared context.
+- Delegation would add more overhead than useful work.
+
+When delegating:
+- Prefer multiple parallel subagents for genuinely independent work.
+- Use Claude Sonnet for subagents.
+- Give each subagent a specific, self-contained objective.
+- Have subagents return concise findings, relevant files, and concrete
+  recommendations.
+- Synthesize their results yourself before making final changes.
+- Do not ask me for permission to spawn subagents when delegation is
+  clearly useful; make the decision autonomously.
+- Run at most two or three at once. `[VERIFIED]` 2026-09-24: four Sonnet subagents in
+  parallel exhausted the usage limit and three died mid-task (C6).
+- A subagent that changes code works in its own git worktree and follows §8 and §9 there. The
+  lead reviews each diff and brings the commits onto `main` one at a time, running
+  `make check` after each. No subagent commits to `main` directly.
+- §12 point 5 still applies: spawning needs no permission, creating a new file still does.
+
+## 14. Output style
+
+Set by the operator on 2026-09-24.
+
+- **Work silently.** No narration between tool calls, no progress commentary, no restating
+  the plan while carrying it out.
+- **Give the full reasoning once, at the end**: what was done and why, the evidence behind each
+  claim (§0 tags and the commands), what was noticed but not done, and what needs a decision.
+- Silence does not skip decisions. When §6 says stop and ask, stop and ask, briefly.
+- `[INFERRED]` This moves §6's "explain as you go" into the closing report rather than
+  removing it: goal 2 (§1) still outranks shipping, so the end-of-task reasoning carries the
+  teaching that would otherwise have been spread through the work.
