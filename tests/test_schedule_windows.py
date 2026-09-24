@@ -119,7 +119,7 @@ def test_an_explicit_interval_beats_the_configured_one(
     """Asking for a cadence on the command line must not be silently overridden by config."""
     monkeypatch.setenv("POLL_INTERVAL_HOURS", "24")
 
-    assert resolve_interval(4) == 4
+    assert resolve_interval(8) == 8
 
 
 def test_incomplete_configuration_still_yields_a_command(
