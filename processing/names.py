@@ -140,6 +140,47 @@ class NameScanner:
         return names
 
 
+def strip_possessive(word: str) -> str:
+    """Remove a trailing possessive, so "Giants'" and "Giants" compare as the same word.
+
+    `[VERIFIED]` 2026-09-24: `possessive_ends_run` stops a run at "Giants'", but the word the
+    scanner stored still carries the apostrophe, so the returned name is literally `"Giants'"`
+    rather than `"Giants"` and never matches a plain `"Giants"` from another headline.
+    Comparison-only, the same shape as `comparable` in `validate.py` — never used for display.
+    """
+    return _POSSESSIVE.sub("", word)
+
+
+def leading_word(text: str) -> str:
+    """The first token of `text`, cleaned the way the scanner cleans every token.
+
+    Lets a caller check whether *its own* candidate word is the one that opens `text`, rather
+    than a word that merely matches it by coincidence somewhere later on.
+    """
+    tokens = text.split()
+    if not tokens:
+        return ""
+    return strip_possessive(tokens[0].rstrip(_TRAILING_PUNCTUATION))
+
+
+def team_mentions(text: str) -> set[str]:
+    """Team nicknames written standing alone in `text`, canonicalised, digits and all.
+
+    `[VERIFIED]` 2026-09-24 (TASKS.md P17/P68). The scanner above can never return "49ers" or
+    "76ers": `is_name_word` refuses a leading digit on purpose (P13), so a team named only by a
+    number is invisible to it however the policy flags are set. `validate._ungrounded_teams`
+    solves the same problem for grounding with a digit-permitting regex over the tables this
+    module already owns; this checks the same tables directly rather than adding a second
+    pattern that could drift from them.
+    """
+    found: set[str] = set()
+    for token in text.split():
+        word = strip_possessive(token.rstrip(_TRAILING_PUNCTUATION))
+        if word.lower() in TEAM_NICKNAMES or word.lower() in TEAM_ALIASES:
+            found.add(canonical_team(word))
+    return found
+
+
 # Runs of two or more, welded across punctuation except the separators. `[VERIFIED]` Asserted
 # output-identical to `validate._PROPER_NAME` over every fixture, so adopting it there changes
 # no verdict — and `separators` is part of that equivalence rather than an improvement on it:
@@ -156,24 +197,31 @@ GROUNDING = NameScanner(
 
 # Single words count and punctuation ends a name — the shape `cluster.py` needs.
 #
-# **Measured, and NOT ready to adopt.** `[VERIFIED]` Against `cluster._names` over the 76
-# fixture articles it gains 25 names (`LeBron`, `LeBron James`, `Luka Dončić’s`, `LA
-# Clippers`) and loses 28, including bare `Clippers`, `Ballmer`, `Warriors` and
-# `Russell Westbrook`. Losing those would be a worse regression than the camelCase blindness
-# it fixes, because they are exactly the markers that pair two reports of one story.
+# **Adopted 2026-09-24 (TASKS.md P17/P68).** The measurement recorded here through
+# 2026-09-05 compared this scanner's raw output against `cluster.py`'s own regex and found a
+# net loss (25 gained, 28 lost). `[INFERRED]` That comparison was never the right test: it
+# asked whether the two extractors agree, not whether real duplicate stories group. Two real
+# pairs settle it instead — 'Source: Niners signing veteran receiver Cooks to practice squad'
+# against '49ers reportedly signing veteran WR Brandin Cooks to practice squad', and
+# 'Another post-Eli Manning nightmare for Giants ... Jaxson Dart feared done for season'
+# against "Giants' Jaxson Dart could miss rest of season with knee injury, per report" — both
+# ran as separate stories in the same brief under the old regex. `[VERIFIED]` A throwaway
+# measurement script run this session against real batches reconstructed from `sportwire.db`
+# confirms both now group, once this preset is wired in alongside `possessive_ends_run` below
+# and the team-alias and headline-initial-word fixes in `cluster.py`; see
+# `test_the_cooks_pair_groups_once_49ers_is_visible` and
+# `test_the_dart_pair_groups_once_the_possessive_is_stripped` in `tests/test_cluster.py`.
 #
-# `[VERIFIED]` Three causes were identified and closing them is a losing game: `cluster.py`
-# additionally rejects ALL-CAPS tokens (`MVP` breaks a run there, welds one here), excludes
-# the curly apostrophe from a name (`Clippers’` → `Clippers`), and excludes the hyphen
-# (`Ballmer-linked` → `Ballmer`). Fixing all three narrows the gap to 9 gained / 16 lost —
-# and introduces new mismatches of its own (`NBA's` starts matching, `Ballmer-linked` welds).
-#
-# `[INFERRED]` The conclusion is that cluster's tokenizer is an accumulated pile of specifics
-# rather than a policy, so converging on it by adding flags here trades one silent grouping
-# change for another. **The scanner is shareable; this policy is not, yet.** Adopting it needs
-# the before/after grouping measurement P17 asks for — today's baseline is 76 articles → 68
-# stories, 6 multi-article — and that is a decision, not a refactor.
-CLUSTERING = NameScanner(min_words=1, break_run_on_punctuation=True)
+# `possessive_ends_run=True`. `[VERIFIED]` 2026-09-24: with it off, "Giants' Jaxson Dart"
+# welds into the single name `Giants' Jaxson Dart`, which never matches the bare
+# `Jaxson Dart` the second headline names, and the pair stayed apart. Flipping it on splits
+# them into `Giants` and `Jaxson Dart`, matching `test_a_possessive_ends_the_name_it_follows`'s
+# reasoning for `GROUNDING` — a team's possessive names the team, not a two-word entity called
+# "Team's Player". See `test_clustering_now_also_ends_a_name_at_a_possessive`, which replaces
+# the pinned old behaviour.
+CLUSTERING = NameScanner(
+    min_words=1, break_run_on_punctuation=True, possessive_ends_run=True
+)
 
 
 # Other names for the same team. `[VERIFIED]` 2026-08-17 16:00: the run fell back because all
@@ -213,7 +261,23 @@ TEAM_NAME_GROUPS = (
     frozenset({"grizzlies", "grizz"}),
     frozenset({"pelicans", "pels"}),
     frozenset({"warriors", "dubs"}),
+    # `[VERIFIED]` 2026-09-24 (TASKS.md P17/P68), NFL. Across `evidence/*.json`: `49ers` 74
+    # times, `niners` 4. `49ers` starts with a digit, so the scanner never sees it as a name at
+    # all (`is_name_word`, same reason `76ers` needed an entry); `niners` is an ordinary-looking
+    # word but unambiguous, the same shape as the NBA entries above it. Without this pairing,
+    # 'Source: Niners signing veteran receiver Cooks to practice squad' and '49ers reportedly
+    # signing veteran WR Brandin Cooks to practice squad' share only `Cooks`.
+    frozenset({"49ers", "niners"}),
 )
+
+# `[UNKNOWN, tried and reverted 2026-09-24]` A `raptors`/`raptor` pairing, for headlines that
+# use the singular as a common noun ("he will retire a Raptor"). Measured on a live 78-article
+# NBA batch: it combines two frequencies that were separately under `group_related`'s rarity
+# ceiling into one that is over it (5 + 2 = 7, ceiling 6), which cost the batch a different
+# article its only distinctive name and dropped it out of the Kawhi Leonard extension group it
+# had been merging into without any help from this pairing. The one headline the pairing was
+# for was already merging on `Kawhi Leonard` alone. Net negative on the measured batch; not
+# added. Revisit if a real headline is found whose *only* shared name is the singular.
 
 TEAM_ALIASES: dict[str, frozenset[str]] = {
     name: group - {name} for group in TEAM_NAME_GROUPS for name in group
