@@ -83,7 +83,7 @@ $trigger = New-ScheduledTaskTrigger -Once -At 12am `
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable `
     -DontStopIfGoingOnBatteries -AllowStartIfOnBatteries
 Register-ScheduledTask -TaskName "{task_name}" -Action $action -Trigger $trigger `
-    -Settings $settings -Description "SportWire NBA brief every {interval_hours} hours"
+    -Settings $settings -Description "SportWire NBA and NFL briefs every {interval_hours} hours"
 
 # Project (Windows form, for reference): {windows_path}
 
