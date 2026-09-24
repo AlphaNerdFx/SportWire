@@ -182,15 +182,20 @@ def build_story_groups(
 class Brief(NamedTuple):
     """One league's assembled brief, plus what must be recorded once it is delivered.
 
-    `[INFERRED]` The two article lists are not the same thing and the difference matters:
-    `messages` is what gets sent, while `fresh_articles` and `fresh_games` are what must be
-    marked as seen, and only after a send succeeds. Returning them together keeps that
-    ordering rule in the caller, where the delivery result is known.
+    `[INFERRED]` The three lists are not the same thing and the difference matters.
+    `messages` is what gets sent. `fresh_articles` and `fresh_games` are everything that
+    survived dedup and must be marked as seen, whether or not it was shown (P65: past the
+    cap, an article is consumed, not held over). `shown_articles` is the smaller list, only
+    the articles in the groups actually printed, and it exists for P68: recording a story's
+    names as delivered when the reader never saw it is what made `drop_repeated_stories`
+    suppress stories nobody had read. Returning them together keeps the "only after a send
+    succeeds" ordering rule in the caller, where the delivery result is known.
     """
 
     messages: list[str]
     fresh_articles: list[NewsArticle]
     fresh_games: list[GameData]
+    shown_articles: list[NewsArticle]
 
 
 def assemble_brief(
@@ -307,11 +312,18 @@ def assemble_brief(
     # Sized by the period this brief actually covers, not by the configured interval.
     # `[VERIFIED]` 2026-08-27: the machine slept through both scheduled runs, so the next
     # brief spanned sixteen hours and was still sized for eight, twelve stories. Everything
-    # past the cap is recorded as delivered whether or not it was shown, so the extra stories
-    # are not held over, they are gone. `brief_size_for` already bounds the growth, so a very
-    # long gap cannot produce an unreadable brief.
+    # past the cap is recorded as delivered (`record_articles`, below) whether or not it was
+    # shown, so the extra stories are not held over, they are gone. `brief_size_for` already
+    # bounds the growth, so a very long gap cannot produce an unreadable brief. The story-name
+    # memory that suppresses repeats is scoped separately, to `shown_articles` (P68).
     max_stories, summary_chars = brief_size_for(interval_hours)
     to_summarise = [group[0] for group in story_groups[:max_stories]]
+    # Every member of every shown group, not just the lead. A group is one story
+    # (`build_story_groups`), so this is exactly what the reader saw and the only thing
+    # `record_story_names` may treat as delivered (P68).
+    shown_articles = [
+        article for group in story_groups[:max_stories] for article in group
+    ]
 
     if story_groups and not no_summary:
         # Hosted when a key is configured, local otherwise. `[VERIFIED]` local 7B
@@ -449,7 +461,10 @@ def assemble_brief(
         label=league,
     )
     return Brief(
-        messages=messages, fresh_articles=fresh_articles, fresh_games=fresh_games
+        messages=messages,
+        fresh_articles=fresh_articles,
+        fresh_games=fresh_games,
+        shown_articles=shown_articles,
     )
 
 
@@ -625,6 +640,7 @@ def main(argv: list[str] | None = None) -> int:
         messages: list[str] = []
         fresh_articles: list[NewsArticle] = []
         fresh_games: list[GameData] = []
+        shown_articles: list[NewsArticle] = []
 
         for league in leagues:
             brief = assemble_brief(
@@ -649,6 +665,7 @@ def main(argv: list[str] | None = None) -> int:
             messages.extend(brief.messages)
             fresh_articles.extend(brief.fresh_articles)
             fresh_games.extend(brief.fresh_games)
+            shown_articles.extend(brief.shown_articles)
 
         if not messages:
             logger.info("nothing new to report")
@@ -693,7 +710,11 @@ def main(argv: list[str] | None = None) -> int:
         # them already delivered.
         store.record_games(fresh_games)
         store.record_articles(fresh_articles)
-        store.record_story_names(fresh_articles)
+        # `shown_articles`, not `fresh_articles` (P68). `[VERIFIED]` 2026-09-24: recording
+        # every article that survived dedup, cap included, put 1,463 names into
+        # `delivered_story_names` of which only 354 (24%) were ever sent to a reader, so
+        # `drop_repeated_stories` was dropping articles as repeats of stories nobody saw.
+        store.record_story_names(shown_articles)
         logger.info("delivered %d/%d messages", delivered, len(messages))
 
     return 0
