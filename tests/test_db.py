@@ -22,6 +22,7 @@ import pytest
 
 from config.settings import brief_size_for
 from models.schemas import GameData, NewsArticle
+from processing.cluster import story_names
 from storage.db import SeenStore
 
 GameFactory = Callable[..., GameData]
@@ -1441,3 +1442,64 @@ def test_the_story_memory_is_purged(
 
     assert removed > 0
     assert store.story_names_since(24) == []
+
+
+def _retelling(article: NewsArticle, suffix: str) -> NewsArticle:
+    """A fresh article naming the same story, with no name the original lacked.
+
+    Reuses every name `story_names` finds in `article`'s own title, so this retelling's name
+    set can never exceed it — `drop_repeated_stories` only drops when nothing is new.
+    """
+    names = " and ".join(sorted(story_names(article)))
+    return _fresh(f"{names} {suffix}", source=article.source, league=article.league)
+
+
+def test_only_shown_stories_feed_repeat_suppression(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    no_upstream_games: None,
+) -> None:
+    """`[VERIFIED]` TASKS.md P68 regression, 2026-09-24: `record_story_names` was called with
+    every article that survived dedup, not only the `max_stories` groups actually printed.
+    Measured over stored data, 1,463 names were recorded as delivered and only 354 (24%) were
+    ever shown, so `drop_repeated_stories` suppressed retellings of stories nobody had read.
+
+    Fifteen distinct single-article stories at the default 8-hour interval (`max_stories`
+    12, unscaled per-outlet caps 4/4/4/3 for the four cycled sources) means three are fetched
+    and marked seen but never printed. Drives the real `main` twice so the fix is proven at
+    the wiring level, not against a stub of `record_story_names` itself.
+    """
+    import main
+
+    path = tmp_path / "shown.db"
+    fetched = _distinct_batch(15)
+    monkeypatch.setenv("DATABASE_PATH", str(path))
+    monkeypatch.setenv("EVIDENCE_PATH", str(tmp_path / "evidence"))
+    monkeypatch.setattr(main, "fetch_news", lambda feeds: (fetched, []))
+
+    capsys.readouterr()
+    assert main.main(["--channel", "stdout", "--no-summary"]) == 0
+    first_run = capsys.readouterr().out
+
+    shown = [article for article in fetched if article.title in first_run]
+    unshown = [article for article in fetched if article.title not in first_run]
+    assert len(shown) == 12, "the cap must bind: 12 of 15 shown, or this proves nothing"
+    assert len(unshown) == 3
+
+    retell_shown = _retelling(shown[0], "provide a fresh update")
+    retell_unshown = _retelling(unshown[0], "provide a fresh update")
+    monkeypatch.setattr(
+        main, "fetch_news", lambda feeds: ([retell_shown, retell_unshown], [])
+    )
+
+    capsys.readouterr()
+    assert main.main(["--channel", "stdout", "--no-summary"]) == 0
+    second_run = capsys.readouterr().out
+
+    assert retell_unshown.title in second_run, (
+        "an unshown story was never delivered, so a follow-up must not be suppressed"
+    )
+    assert retell_shown.title not in second_run, (
+        "a shown story naming nobody new must still be suppressed as a repeat"
+    )
