@@ -12,6 +12,17 @@ tag is cut. See `CLAUDE.md` §9.
 
 ## Unreleased
 
+- A brief is now due every 8, 12 or 24 hours, your choice, and nothing else is accepted. A
+  longer interval gives a longer brief: the story count, each outlet's share and how long a
+  delivered story is remembered all grow with it, so a 24-hour NFL brief can carry 21 stories
+  instead of stopping at 12 (P42).
+- A follow-up to a story you were never shown is no longer dropped as a repeat. Only the
+  stories actually in a brief count as delivered; before, three in four of the stories the
+  repeat check remembered had never reached you (P71).
+- The README and getting-started guide now work from a fresh clone on a stock Ubuntu: the
+  right Python path, both Ollama models, and keys marked optional for a dry run (P73).
+- v1.0.0 covers the NBA and the NFL. Baseball and hockey move to v1.1.0 and v1.2.0, and the
+  football community feed comes after v1.0.0.
 - A player whose name ends in `Jr.` or `Sr.` is no longer accused of being invented when the
   brief writes about something of his. Three briefs in six days lost an attempt to it (P66).
 - The basketball brief no longer carries hockey, baseball or college stories, and the football
