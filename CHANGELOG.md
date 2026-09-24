@@ -19,6 +19,12 @@ tag is cut. See `CLAUDE.md` §9.
 - A follow-up to a story you were never shown is no longer dropped as a repeat. Only the
   stories actually in a brief count as delivered; before, three in four of the stories the
   repeat check remembered had never reached you (P71).
+- Two reports of the same story in one brief now merge more often: the 49ers are recognised
+  as the Niners, "Giants' Jaxson Dart" as Jaxson Dart, and a headline's opening word is no
+  longer taken for a name. The day's biggest story can still appear more than once (P70).
+- Three kinds of real name are no longer refused as invented: one cut by an ellipsis, one
+  written with a position ("QB Darnold") and one inside a hyphenated word ("Carter-like").
+  An audit of every refusal since 09-05 found about three in four were real inventions (P72).
 - The README and getting-started guide now work from a fresh clone on a stock Ubuntu: the
   right Python path, both Ollama models, and keys marked optional for a dry run (P73).
 - v1.0.0 covers the NBA and the NFL. Baseball and hockey move to v1.1.0 and v1.2.0, and the
