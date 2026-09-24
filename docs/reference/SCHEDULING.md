@@ -92,8 +92,8 @@ Survives reboots and runs with no terminal open. Preferred for a Windows host.
 **Generate the command instead of editing it by hand:**
 
 ```bash
-python scripts/schedule_windows.py                    # every 8 hours, the default
-python scripts/schedule_windows.py --interval-hours 6
+.venv/bin/python scripts/schedule_windows.py                     # every 8 hours, the default
+.venv/bin/python scripts/schedule_windows.py --interval-hours 12  # or 24; nothing else is accepted
 ```
 
 `[INFERRED]` The path appears twice below in two different forms, and a task with one of them
@@ -182,9 +182,19 @@ every run, forever. Messages are separated by a line containing `---`.
 
 ## Changing the interval
 
-The cron expression or the Task Scheduler trigger is the **only** thing that sets the
-cadence. `POLL_INTERVAL_HOURS` in `.env` is documentation of intent — nothing reads it to
-decide when to run, because nothing is running between invocations to read it.
+The interval is **8, 12 or 24 hours**, set as `POLL_INTERVAL_HOURS` in `.env` (default 8;
+anything else is refused with a message). Decided 2026-09-24, PRD D6 and `TASKS.md` P42.
+
+~~The cron expression or the Task Scheduler trigger is the only thing that sets the cadence.
+`POLL_INTERVAL_HOURS` in `.env` is documentation of intent; nothing reads it.~~ Corrected
+2026-09-24: `[VERIFIED]` `main.py --if-due` reads it to decide whether a brief is due, and the
+brief's story count, per-outlet cap and repeat window are derived from it. So:
+
+- **With the cron entry above** (every 30 minutes, `--if-due`), changing `POLL_INTERVAL_HOURS`
+  is the whole change. The cron line stays as it is.
+- **With Task Scheduler**, the trigger also has to match: re-run
+  `.venv/bin/python scripts/schedule_windows.py --interval-hours 12` (or 24), which reads the
+  same set of choices, and register the new task.
 
 `[VERIFIED]` The summary window follows automatically: each run reports whatever survived
 deduplication, which is everything new since the previous run. Change the schedule and the
