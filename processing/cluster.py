@@ -25,12 +25,19 @@ the clusters.
 from __future__ import annotations
 
 import logging
-import re
 from collections import Counter
 
 from models.schemas import NewsArticle
-from processing.names import canonical_team
-from processing.validate import comparable
+from processing.names import (
+    CLUSTERING,
+    TEAM_ALIASES,
+    TEAM_NICKNAMES,
+    canonical_team,
+    leading_word,
+    strip_possessive,
+    team_mentions,
+)
+from processing.validate import comparable, ordinary_words
 
 logger = logging.getLogger(__name__)
 
@@ -67,11 +74,16 @@ MIN_SHARED_NAMES = 2
 # now measured. See `test_a_small_batch_still_groups_a_widely_covered_story`.
 MIN_RARITY_CEILING = 5
 
-# Capitalised words and sequences of them: people, teams, companies.
-_NAME = re.compile(r"\b[A-Z][a-zà-ÿ']+(?:\s+[A-Z][a-zà-ÿ']+)*")
-
 # Capitalised because they start a sentence or are common vocabulary, not because they name
 # anything. Left in, they would attach to every article.
+#
+# `[VERIFIED]` 2026-09-24 (TASKS.md P17/P68): `nfl` and `week` are additions, not omissions
+# noticed by chance. `nba` was already here for the same reason and NFL never got its own
+# entry. Once the scanner stopped truncating "NFL Week 2" into nothing, it started welding it
+# whole and then, via `_also_short_forms`, adding the bare `Week` too — two "shared names" out
+# of one structural phrase every football headline carries. That merged 'Everything you need
+# to know for NFL Week 2: 15 games on deck...' with "NFL Week 2's most underrated games..." on
+# a live NFL batch, two different roundups sharing nothing but the week number.
 _NOT_NAMES = frozenset(
     {
         "the",
@@ -90,6 +102,8 @@ _NOT_NAMES = frozenset(
         "when",
         "who",
         "nba",
+        "nfl",
+        "week",
         "breaking",
         "sources",
         "report",
@@ -118,7 +132,9 @@ _NOT_NAMES = frozenset(
 )
 
 
-def story_names(article: NewsArticle) -> set[str]:
+def story_names(
+    article: NewsArticle, ordinary: frozenset[str] = frozenset()
+) -> set[str]:
     """Distinctive-looking proper nouns in a title: what identifies the story it tells.
 
     **Public since 2026-09-04, and imported by `processing/dedup.py`** to decide whether an
@@ -127,21 +143,83 @@ def story_names(article: NewsArticle) -> set[str]:
     to disagree about one thing; `canonical_team` was made public and moved for the same reason
     after clustering and the validator disagreed about the Wolves.
 
+    **Uses `names.CLUSTERING`, not a private regex, since 2026-09-24 (TASKS.md P17/P68).** A
+    second name-shaped-word scanner living here was the last piece of the duplication P17
+    found; `processing/names.py` now holds the one definition and this module only supplies
+    the clustering policy on top of it.
+
+    `ordinary` is `validate.ordinary_words` over the batch this article was fetched with, and
+    it is optional: `processing/dedup.py` calls this on one article at a time with no batch to
+    hand, and every word still goes through `_NOT_NAMES` either way. When it is supplied (from
+    `group_related`, which has the whole batch), a capitalised word that opens the headline and
+    that the batch itself also writes in lower case is treated as a sentence-opener rather than
+    a name — see `_opens_the_headline`.
+
     Only the title. `[INFERRED]` Descriptions name far more entities in passing — a match on
     something mentioned once mid-paragraph is usually coincidence, not a shared subject.
+
+    **Found while measuring this session, not asked for, fixed because leaving it meant baking
+    a real bug into the snapshot tests.** `[VERIFIED]` Stripping the possessive (below) turned
+    "Bobby Marks' Way-Too-Early NBA offseason preview" into the clean name `Bobby Marks`, which
+    then exactly matched a *different* Bobby Marks column in the same fixture ("Free agency
+    fact vs. fiction: Bobby Marks examines...") about a different topic a year apart. Both
+    pieces carry `dc:creator = Bobby Marks`, so the shared "name" was the byline, not a subject,
+    and the merge would have silently dropped one column from the brief. A name equal to this
+    article's own author is excluded before it can pair with anything.
     """
     found: set[str] = set()
+    opener = leading_word(article.title)
+    byline = article.author.lower() if article.author else None
 
-    for match in _NAME.findall(article.title):
-        words = [w for w in match.split() if w.lower() not in _NOT_NAMES]
+    for index, match in enumerate(CLUSTERING.findall(article.title)):
+        words = [strip_possessive(word) for word in match.split()]
+        if (
+            index == 0
+            and words
+            and words[0] == opener
+            and _opens_the_headline(words[0], ordinary)
+        ):
+            words = words[1:]
+        words = [word for word in words if word.lower() not in _NOT_NAMES]
         if not words:
             continue
         name = " ".join(words)
-        # Two characters is an initial or an abbreviation, not an identifier.
-        if len(name) > 3:
+        # Two characters is an initial or an abbreviation, not an identifier. A name equal to
+        # the article's own byline identifies the writer, not the story.
+        if len(name) > 3 and name.lower() != byline:
             found.add(name)
 
+    # `[VERIFIED]` 2026-09-24: the scanner alone can never return "49ers" — a leading digit
+    # fails `is_name_word` on purpose (P13) — so a team named only by a number needs this
+    # second pass regardless of where in the title it sits.
+    found |= team_mentions(article.title)
+
     return _also_short_forms(found)
+
+
+def _opens_the_headline(word: str, ordinary: frozenset[str]) -> bool:
+    """Whether `word` is capitalised only because it opens the headline, not because it names anything.
+
+    `[VERIFIED]` 2026-09-24, from real briefs: 'Another post-Eli Manning nightmare for
+    Giants...', 'Three mock trades the Steelers could make...', 'Resetting expectations for
+    these six NFL teams...', 'Seven things Solak thinks...' and 'Did the 49ers find balance...'
+    all open on an ordinary word that is capitalised purely by English sentence-initial
+    convention. Left in, "Did" welds onto whatever real name follows it (`CLUSTERING` has no
+    minimum word count), so "Did Todd Monken ..." never matches a plain "Todd Monken" the next
+    headline uses.
+
+    `[INFERRED]` `ordinary_words` is what `validate.py` already uses for exactly this
+    judgement — a word the batch itself also writes in lower case is vocabulary, not a name —
+    reused rather than a second hand-written list of headline openers (P61 already declined
+    that path once: a fixed list changed 0 of 85 groups on the corpus measured then). Team
+    nicknames are exempted regardless of `ordinary`, because a source in this batch writing
+    "Giants" as a common noun is vanishingly rare and `ordinary_words` cannot tell the two
+    uses apart.
+    """
+    lower = word.lower()
+    if lower in TEAM_NICKNAMES or lower in TEAM_ALIASES:
+        return False
+    return lower in ordinary
 
 
 def _also_short_forms(names: set[str]) -> set[str]:
@@ -272,7 +350,11 @@ def group_related(
     if len(articles) < 2:
         return [[article] for article in articles]
 
-    names_by_index = [story_names(article) for article in articles]
+    # `[INFERRED]` The whole batch, not the two articles being compared: a headline-opening
+    # word is only ordinary vocabulary if *this run's* sources also write it in lower case
+    # somewhere, which `story_names` cannot know on its own. See `_opens_the_headline`.
+    ordinary = ordinary_words(articles)
+    names_by_index = [story_names(article, ordinary=ordinary) for article in articles]
 
     # How many articles each name appears in — the document frequency.
     frequency: Counter[str] = Counter()
@@ -306,21 +388,49 @@ def group_related(
             min_shared_names,
         )
 
-    distinctive = [
-        {name for name in names if frequency[name] <= ceiling}
-        for names in names_by_index
-    ]
+    # `[VERIFIED]` 2026-09-24 (TASKS.md P68 follow-up): a name above the ceiling used to be
+    # dropped from matching entirely, and that is too blunt once a real story is covered by
+    # more outlets than the ceiling allows. A live batch of 78 NBA articles carried the Kawhi
+    # Leonard extension in 8 of them — `Leonard` at document frequency 8, `Kawhi Leonard` at 7,
+    # both above that batch's ceiling of 6 — and every pair of those 8 articles fragmented into
+    # its own singleton story, because their only other shared word, `Raptors`, never reached
+    # `min_shared_names` alone.
+    #
+    # The fix is not to raise the ceiling: `dubs` sat at the same frequency (6) in the same
+    # batch and named six unrelated Warriors stories, which is exactly the false merge the
+    # ceiling exists to prevent (see `test_a_name_appearing_everywhere_does_not_group`). What
+    # tells the two apart is not frequency, it is whether the common name keeps showing up
+    # *beside* a name that is genuinely rare. So a name over the ceiling can still count toward
+    # `min_shared_names`, but only alongside at least one name that is at or under it — a common
+    # name can corroborate a match, never carry one alone.
+    distinctive_names = {name for name, count in frequency.items() if count <= ceiling}
+
+    # `[VERIFIED]` 2026-09-24, measured the same session: two bare team names are not enough
+    # either, ceiling or no ceiling. A live NFL batch merged 'Is Matthew Stafford injured? Rams
+    # QB removed early against 49ers' with 'Jake Tonges injury update as 49ers TE injures knee
+    # in Week 1 game vs Rams' — two different players' injuries in the same game, sharing only
+    # the two teams that played it. Any two articles about that game share both team names by
+    # construction; that identifies the game, not one story within it. A player's name, a team's
+    # own alias pair (`Wolves`/`Timberwolves`) or anything else the scanner finds still counts —
+    # only a match built from bare team nicknames alone is refused.
+    team_names = TEAM_NICKNAMES | frozenset(TEAM_ALIASES)
 
     groups: list[list[NewsArticle]] = []
     group_names: list[set[str]] = []
 
     for index, article in enumerate(articles):
-        marks = distinctive[index]
+        marks = names_by_index[index]
         joined = None
 
         if marks:
             for position, existing in enumerate(group_names):
-                if len(marks & existing) >= min_shared_names:
+                shared = marks & existing
+                qualifies = any(name.lower() not in team_names for name in shared)
+                if (
+                    len(shared) >= min_shared_names
+                    and shared & distinctive_names
+                    and qualifies
+                ):
                     joined = position
                     break
 
