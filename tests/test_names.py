@@ -1,10 +1,10 @@
 """Behaviour tests for the shared name scanner.
 
-`processing/names.py` is not wired into anything yet (`TASKS.md` P17). It exists so the two
-extractors this pipeline already has can be compared, and the load-bearing test in this file
-is `test_grounding_preset_matches_the_shipped_extractor_exactly`: while that passes, adopting
-the scanner in `validate.py` is a no-op rather than a rewrite, and no validation verdict can
-move without a test noticing.
+`processing/names.py` is wired into both callers now (`TASKS.md` P17/P68): `validate.py` uses
+`GROUNDING`, `cluster.py` uses `CLUSTERING`. The load-bearing test in this file is
+`test_grounding_preset_matches_the_shipped_extractor_exactly`: while that passes, adopting the
+scanner in `validate.py` is a no-op rather than a rewrite, and no validation verdict can move
+without a test noticing.
 
 Every name below is real — taken from the committed fixtures, from `logs/sportwire.log`, or
 from the two live bugs recorded in `TASKS.md` P13. `CLAUDE.md` §8: assert on behaviour with
@@ -15,7 +15,17 @@ from __future__ import annotations
 
 import pytest
 
-from processing.names import CLUSTERING, GROUNDING, NameScanner, is_name_word
+from processing.names import (
+    CLUSTERING,
+    GROUNDING,
+    TEAM_ALIASES,
+    NameScanner,
+    canonical_team,
+    is_name_word,
+    leading_word,
+    strip_possessive,
+    team_mentions,
+)
 from processing.validate import _ProperNames
 
 # --- the scanner asks Python what a capital is ------------------------------------------
@@ -224,14 +234,69 @@ def test_a_possessive_ends_the_name_it_follows() -> None:
     assert GROUNDING.findall("Panthers' Canales backs Young, defers on deal") == []
 
 
-def test_clustering_still_welds_across_a_possessive() -> None:
-    """The flag is off for clustering, and that is deliberate rather than an oversight.
+def test_clustering_now_also_ends_a_name_at_a_possessive() -> None:
+    """`[VERIFIED]` 2026-09-24 (TASKS.md P17/P68), reversing the flag this pinned before.
 
-    `[INFERRED]` Changing how stories group is a separate question with its own evidence, and
-    nothing has shown clustering needs this. Pinned so the default is a decision rather than
-    something that drifts the next time the scanner is touched.
+    Real pair: 'Another post-Eli Manning nightmare for Giants ... Jaxson Dart feared done for
+    season' against "Giants' Jaxson Dart could miss rest of season with knee injury, per
+    report". With the flag off, "Giants' Jaxson Dart" welds into one name that matches nothing;
+    the bare team and the bare player, split apart, are what let the two headlines meet.
     """
     assert CLUSTERING.findall("Panthers' Canales backs Young") == [
-        "Panthers' Canales",
+        "Panthers'",
+        "Canales",
         "Young",
     ]
+    assert CLUSTERING.findall(
+        "Giants' Jaxson Dart could miss rest of season with knee injury"
+    ) == ["Giants'", "Jaxson Dart"]
+
+
+# --- comparison-time cleanup: possessives, and the word that opens a text -----------------
+
+
+def test_strip_possessive_removes_a_trailing_possessive_only() -> None:
+    """`[VERIFIED]` 2026-09-24. The scanner ends a run at a possessive but keeps the apostrophe
+    on the word itself, so "Giants'" needs this before it can compare equal to plain "Giants"."""
+    assert strip_possessive("Giants'") == "Giants"
+    assert strip_possessive("Leonard's") == "Leonard"
+    assert strip_possessive("Marks") == "Marks", (
+        "a plain trailing s is not a possessive"
+    )
+
+
+def test_leading_word_is_the_first_token_cleaned() -> None:
+    """The word a caller compares its own candidate against, not just `text.split()[0]`."""
+    assert leading_word("Giants' Jaxson Dart could miss rest of season") == "Giants"
+    assert leading_word("Report: Kawhi Leonard signs") == "Report"
+    assert leading_word("") == ""
+
+
+# --- team_mentions: the teams the scanner can never see on its own -------------------------
+
+
+def test_team_mentions_finds_a_digit_led_nickname() -> None:
+    """`[VERIFIED]` 2026-09-24 (TASKS.md P17/P68). `is_name_word` refuses "49ers" on purpose
+    (a leading digit fails the all-letters test), so `CLUSTERING` never returns it as a name.
+    Real pair: 'Source: Niners signing veteran receiver Cooks to practice squad' against '49ers
+    reportedly signing veteran WR Brandin Cooks to practice squad' — without this, the second
+    headline names no team at all and the two share only `Cooks`.
+    """
+    assert CLUSTERING.findall("49ers reportedly signing veteran WR Brandin Cooks") == [
+        "WR Brandin Cooks"
+    ], "the scanner alone still cannot see 49ers"
+    assert team_mentions("49ers reportedly signing veteran WR Brandin Cooks") == {
+        "49ers"
+    }
+
+
+def test_49ers_and_niners_are_the_same_team() -> None:
+    """`[VERIFIED]` 2026-09-24. Across `evidence/*.json`: `49ers` 74 times, `niners` 4."""
+    assert "49ers" in TEAM_ALIASES["niners"]
+    assert canonical_team("Niners") == canonical_team("49ers")
+
+
+def test_team_mentions_ignores_words_that_are_not_teams() -> None:
+    """The scan is cheap because it only has to check two tables, not guess."""
+    assert team_mentions("Bradley Beal signed with the Clippers") == {"Clippers"}
+    assert team_mentions("Kawhi Leonard had a hidden sponsorship") == set()
