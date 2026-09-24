@@ -61,6 +61,24 @@ made inside a single clause, where there is no second entity to contradict:
 So the delivered-error estimate carries two constants, both from that audit: flags are right
 about **two thirds** of the time, and there are at least **0.75 unflagged errors per brief**.
 
+### Calibration of the rejections, 2026-09-24
+
+`[VERIFIED]` Every rejection logged since 2026-09-05 was checked against the batch it was made
+on (95 distinct name or figure and batch pairs, all with their evidence file on disk):
+
+| Verdict | What it means | Count |
+|---|---|---|
+| Genuine | the entity appears nowhere in that batch, in any form | about 70 of 95, and every figure |
+| False alarm, fixed | an ellipsis, a position tag ("QB Darnold") or a hyphen ("Carter-like") refuted a real name | 8 occurrences, 3 causes (P72) |
+| False alarm, open | a city standing for a team, a title or unrelated capitalised word beside a name, a spelling variant, a truncated source | about 12 (P72) |
+| Did not reproduce | present in the batch in full; the live vocabulary sample is not stored | 4 |
+
+`[INFERRED]` So roughly three in four rejections are real inventions, mostly famous names from
+the model's memory, and the fallbacks to headlines are mainly the check doing its job. The
+audit also shows the check's blind spot, the one METRICS already names: the 2026-09-23 NFL
+brief passed clean while turning "Giants eyeing draft" into "set to re-enter the draft" and a
+writer's list of mock trades into "the Steelers are exploring trade options".
+
 ---
 
 ## Metric 2 — Retrieval relevance
