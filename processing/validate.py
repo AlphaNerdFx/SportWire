@@ -434,7 +434,14 @@ _PROPER_NAME = GROUNDING
 # phantom name can never be grounded in any source, so a single one fails the whole summary
 # and costs the brief its prose — exactly what the 2026-08-08 comment above warned about,
 # recurring through the case it did not cover.
-_SENTENCE_BREAK = re.compile(r"(?<=[.!?])[\"'”’»）)\]]*\s+")
+#
+# The ellipsis (U+2026, one character) is a break too, and was missing. `[VERIFIED]`
+# 2026-09-24: a title reads `"...legacy play for Kawhi… Detroit, Minnesota, and other
+# teams wanted..."` (TASKS.md rejection audit). Without an ellipsis break, `Kawhi` and
+# `Detroit` scan as one source name `{kawhi, detroit}`, which then refuted both the real
+# `Kawhi Leonard` and `Detroit Pistons` in the same batch. `...` (three periods) was already
+# covered by the existing `.`; only the single glyph was missing.
+_SENTENCE_BREAK = re.compile(r"(?<=[.!?…])[\"'”’»）)\]]*\s+")
 
 # Money and counts. `[VERIFIED]` mistral:7b invented "$3.3M" for a contract whose value the
 # source never stated.
@@ -772,6 +779,19 @@ def _grounded(
     if _written_as_an_abbreviation(folded, source_lower):
         return True
 
+    # A position abbreviation glued to a surname is the summariser's own construction, not a
+    # claim about a different person. `[VERIFIED]` 2026-09-24: a summary naming `QB Darnold`
+    # was rejected because the sources only ever write `Sam Darnold`, and `{qb, darnold}`
+    # disagrees with `{sam, darnold}` under the equal-length rule (TASKS.md rejection audit).
+    # Stripping the position and re-checking what remains is the same move `_index_source_
+    # names` already makes for a source headline (P52, P67); this makes a summary's own
+    # candidate get the same treatment.
+    parts = name.split()
+    if len(parts) >= 2 and parts[0].isupper() and parts[0] in POSITION_ABBREVIATIONS:
+        return _grounded(
+            " ".join(parts[1:]), source, source_lower, source_names, ordinary
+        )
+
     words = _name_words(name)
     if not words:
         return False
@@ -1060,11 +1080,21 @@ def _effectively_the_same_name(mine: frozenset[str], other: frozenset[str]) -> b
     case the guard blocked is already acquitted by the `mine <= other` subset test one line
     above. Caught by a surviving mutant, not by review, which is the P6 pattern again.
     **Restore it** if `_contradicted` ever stops filtering `eligible` by length.
+
+    A hyphenated modifier built on a word is also the same word. `[VERIFIED]` 2026-09-24:
+    a source wrote "the Vince Carter-like dunk", scanned as the entity `{vince, carter-like}`
+    because a hyphen is a legal character inside a name (`Karl-Anthony`). That refused a
+    summary's real `Vince Carter`, since `carter` and `carter-like` share no exact word and
+    score 0.71 on `SequenceMatcher`, under the 0.90 typo threshold (TASKS.md rejection audit).
+    Splitting on the first hyphen and comparing the piece before it is exact, not a guess, so
+    it does not touch the ratio the typo/parody split above was measured against.
     """
     return all(
         word in other
+        or word.split("-", 1)[0] in other
         or any(
-            SequenceMatcher(None, word, alternative).ratio() >= _SAME_NAME_RATIO
+            alternative.split("-", 1)[0] == word
+            or SequenceMatcher(None, word, alternative).ratio() >= _SAME_NAME_RATIO
             for alternative in other
         )
         for word in mine
