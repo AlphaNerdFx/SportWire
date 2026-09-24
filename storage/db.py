@@ -174,6 +174,8 @@ class SeenStore:
 
         Called beside `record_articles` and for the same reason: only after a send succeeds,
         so a failed delivery cannot make tomorrow's brief think the story was already told.
+        But with a smaller list: `main.py` passes only the articles in the groups actually
+        shown, while `record_articles` gets everything that survived dedup (TASKS.md P71).
 
         `INSERT OR IGNORE` on the same key pair, so re-running after a partial failure is safe.
         """
