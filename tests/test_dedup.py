@@ -195,6 +195,45 @@ def test_a_retold_story_naming_nobody_new_is_dropped(
     assert drop_repeated_stories(again, delivered) == []
 
 
+def test_a_retold_story_is_caught_even_when_the_team_is_possessive(
+    make_article: ArticleFactory,
+) -> None:
+    """`[VERIFIED]` 2026-09-24 (TASKS.md P17/P68), real pair from
+    `evidence/2026-09-23T03-01-14-nfl.json`. Before `story_names` adopted `names.py`'s scanner,
+    "Giants' Jaxson Dart" welded into one name that matched nothing the first headline names,
+    so `drop_repeated_stories` (which reuses `story_names` unchanged) saw no shared name at all
+    and let the retelling through. This module was not edited; the fix in `cluster.py` is what
+    this test is really checking, through the one caller here that cannot supply a batch for
+    `ordinary_words`.
+    """
+    delivered = [
+        story_names(
+            make_article(
+                "Another post-Eli Manning nightmare for Giants and their fans as Jaxson Dart "
+                "feared done for season",
+                summary=(
+                    "New York turns to veteran Jameis Winston after an ESPN report revealed "
+                    "the promising second-year quarterback could miss the remainder of the "
+                    "season with a knee injury"
+                ),
+                league="NFL",
+            )
+        )
+    ]
+    again = [
+        make_article(
+            "Giants' Jaxson Dart could miss rest of season with knee injury, per report",
+            summary=(
+                "Dart grabbed his knee in pain after being hit by two Rams defenders, and the "
+                "Giants QB did not receive good news following his MRI"
+            ),
+            league="NFL",
+        )
+    ]
+
+    assert drop_repeated_stories(again, delivered) == []
+
+
 def test_a_retold_story_naming_someone_new_is_kept(
     make_article: ArticleFactory,
 ) -> None:
