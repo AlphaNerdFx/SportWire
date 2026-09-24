@@ -29,7 +29,13 @@ from collections.abc import Iterable
 from datetime import date, datetime, timezone
 from typing import NamedTuple
 
-from config.settings import Settings, SettingsError, brief_size_for
+from config.settings import (
+    Settings,
+    SettingsError,
+    brief_size_for,
+    repeat_window_hours_for,
+    scaled_source_caps,
+)
 from delivery.base import DeliveryChannel
 from delivery.brief import build_messages
 from delivery.stdout import StdoutChannel
@@ -37,9 +43,14 @@ from delivery.telegram import TelegramChannel
 from ingestion.nba_games import BallDontLieGamesAdapter
 from ingestion.rss_news import DEFAULT_LEAGUE, FEED_LEAGUES, FEEDS, RssNewsAdapter
 from models.schemas import GameData, NewsArticle, SeriesContext
-from processing.cluster import group_related, limit_per_source, order_by_relatedness
+from processing.cluster import (
+    DEFAULT_SOURCE_LIMIT,
+    SOURCE_LIMITS,
+    group_related,
+    limit_per_source,
+    order_by_relatedness,
+)
 from processing.dedup import (
-    REPEAT_WINDOW_HOURS,
     deduplicate_articles,
     deduplicate_games,
     drop_repeated_stories,
@@ -134,7 +145,12 @@ def forget_window(dedup_window_hours: int) -> int:
     return max(dedup_window_hours, MAX_ARTICLE_AGE_HOURS)
 
 
-def build_story_groups(articles: list[NewsArticle]) -> list[list[NewsArticle]]:
+def build_story_groups(
+    articles: list[NewsArticle],
+    *,
+    limits: dict[str, int] | None = None,
+    default_limit: int = DEFAULT_SOURCE_LIMIT,
+) -> list[list[NewsArticle]]:
     """Turn ranked articles into the ordered list of stories the brief shows.
 
     Three steps whose **order matters**, which is the reason they live in one named function
@@ -148,6 +164,9 @@ def build_story_groups(articles: list[NewsArticle]) -> list[list[NewsArticle]]:
        items a day regardless of how much news there is, and title-pattern filtering could not
        separate its reporting from its chatter. A story it shares with an outlet is
        unaffected: those merged in step 1, and the outlet leads them.
+       `limits`/`default_limit` default to `processing/cluster.py`'s own unscaled values, and
+       the caller passes `config.settings.scaled_source_caps`'s result instead (TASKS.md P42),
+       so a longer interval does not still cap every outlet at its 8-hour share.
     3. **Order** by relatedness, after the cap. `[VERIFIED]` The cap keeps the highest-ranked
        stories, so reordering first would change which ones those are.
 
@@ -155,7 +174,9 @@ def build_story_groups(articles: list[NewsArticle]) -> list[list[NewsArticle]]:
     entirely left all 341 tests green, because nothing could reach these lines without the
     network. That is the third pipeline-wiring mutant to survive in one day.
     """
-    return order_by_relatedness(limit_per_source(group_related(articles)))
+    grouped = group_related(articles)
+    capped = limit_per_source(grouped, limits=limits, default_limit=default_limit)
+    return order_by_relatedness(capped)
 
 
 class Brief(NamedTuple):
@@ -198,6 +219,12 @@ def assemble_brief(
     """
     if vocabulary is None:
         vocabulary = articles
+
+    # The one interval the story cap, the per-outlet caps and the repeat window all scale
+    # from, so a brief that covers 16 hours because a run was missed cannot have its size,
+    # its caps and its memory disagree about how long that was (TASKS.md P42).
+    interval_hours = round(covering_hours)
+
     fresh_games = deduplicate_games(games, store.seen_game_hashes())
     fresh_articles = deduplicate_articles(articles, store.seen_article_ids())
 
@@ -206,16 +233,22 @@ def assemble_brief(
     # into four consecutive briefs. The league is passed so one sport cannot suppress the
     # other, and an article naming someone new survives, which is what keeps a real
     # development like the Gillian Zucker revelation in the brief.
+    #
+    # `[INFERRED]` TASKS.md P42: a fixed 24h window stops suppressing anything once the
+    # previous brief was delivered further back than that, which is routine at a 24h
+    # interval. Scaling it with `repeat_window_hours_for` keeps the previous brief inside the
+    # window; at 8h it returns 24, so this is unchanged from before.
+    repeat_window_hours = repeat_window_hours_for(interval_hours)
     before_repeats = len(fresh_articles)
     fresh_articles = drop_repeated_stories(
         fresh_articles,
-        store.story_names_since(REPEAT_WINDOW_HOURS, league=league),
+        store.story_names_since(repeat_window_hours, league=league),
     )
     if before_repeats != len(fresh_articles):
         logger.info(
             "dropped %d article(s) retelling a story delivered in the last %dh",
             before_repeats - len(fresh_articles),
-            REPEAT_WINDOW_HOURS,
+            repeat_window_hours,
         )
 
     logger.info(
@@ -234,7 +267,15 @@ def assemble_brief(
     # the pipeline already has, at no extra cost.
     fresh_articles = sort_by_priority(fresh_articles, fresh_games)
 
-    story_groups = build_story_groups(fresh_articles)
+    # Per-outlet cap, scaled by the same interval as the repeat window above (TASKS.md P42):
+    # NFL has only 3 feeds, so the unscaled cap alone could never fill the story count
+    # `brief_size_for` allows at 12h or 24h.
+    default_cap, source_caps = scaled_source_caps(
+        interval_hours, DEFAULT_SOURCE_LIMIT, SOURCE_LIMITS
+    )
+    story_groups = build_story_groups(
+        fresh_articles, limits=source_caps, default_limit=default_cap
+    )
 
     # On by default since 2026-08-10. It was off while validation passed 0/3; what
     # changed is the input, not the model — filtering retrospectives and capping per
@@ -269,7 +310,7 @@ def assemble_brief(
     # past the cap is recorded as delivered whether or not it was shown, so the extra stories
     # are not held over, they are gone. `brief_size_for` already bounds the growth, so a very
     # long gap cannot produce an unreadable brief.
-    max_stories, summary_chars = brief_size_for(round(covering_hours))
+    max_stories, summary_chars = brief_size_for(interval_hours)
     to_summarise = [group[0] for group in story_groups[:max_stories]]
 
     if story_groups and not no_summary:
@@ -527,7 +568,9 @@ def main(argv: list[str] | None = None) -> int:
                 logger.info(
                     "dropped %d polled articles older than %dh", dropped, forget_after
                 )
-            # And the story memory, which only ever needs `REPEAT_WINDOW_HOURS`.
+            # And the story memory, which only ever needs `repeat_window_hours_for`'s result.
+            # `[INFERRED]` That is at most 48h (a 24h interval doubled); `forget_after` is
+            # floored at `MAX_ARTICLE_AGE_HOURS` (168h), so it is always the wider window.
             forgotten = store.purge_story_names_before(forget_after)
             if forgotten:
                 logger.info(
