@@ -1,6 +1,6 @@
 # SESSION.md — Current Working State
 
-**Last updated:** 2026-09-04
+**Last updated:** 2026-09-24
 **Repository:** https://github.com/AlphaNerdFx/SportWire (public)
 **Next session should begin with:** §10.
 
@@ -24,10 +24,10 @@
 | Field | Value |
 |---|---|
 | **Name** | SportWire, an NBA and NFL news brief delivered to Telegram |
-| **Stage** | **Working and running unattended.** Cron delivers every 8 hours, one brief per league since 2026-08-26. |
-| **Version** | `[VERIFIED]` **v0.4.0** is the latest tag. `git tag` |
+| **Stage** | **Working and running unattended.** A brief is due every 8, 12 or 24 hours (default 8), one per league since 2026-08-26. v1.0.0 is NBA and NFL (decided 2026-09-24). |
+| **Version** | `[VERIFIED]` 2026-09-24: **v0.5.12** is the latest tag. `git tag --sort=-v:refname` |
 | **Repo** | Public, MIT, CI green. `[VERIFIED]` 7 issues open, `gh issue list` |
-| **Wiki** | `[VERIFIED]` 6 pages. Its links are checked by `make check`; it had drifted for 4 days before that existed |
+| **Wiki** | Retired into `docs/` on 2026-09-03; one signpost page remains |
 | **Tests** | `[VERIFIED]` **466 passed, 1 xfailed** (2026-08-26 `make check`, exit 0). See §8 |
 | **Runtime** | `[VERIFIED]` WSL2 Ubuntu, Python 3.10.12, `.venv` (68 MB, 21 packages) |
 | **Sources** | Basketball: ESPN, CBS Sports, Yahoo Sports, r/nba. Football: ESPN, CBS Sports, Yahoo Sports. Games: balldontlie, basketball only |
@@ -47,9 +47,9 @@
 | `ingestion/rss_news.py` | One adapter, **seven feeds across two leagues**. Reads **both** RSS 2.0 and Atom. |
 | `ingestion/nba_games.py` | balldontlie games, per-period scores, team ids as a side channel. |
 | `processing/newsworthy.py` | **The only module that removes articles.** Age, content tags, retrospective phrases, rankings and guesses, and since 2026-09-03 a story about another sport (P35). |
-| `processing/dedup.py` | Pass 1 exact id across runs; pass 2 near-identical titles within a run. **Neither holds a story identity across runs, which is P68.** |
+| `processing/dedup.py` | Exact id across runs; near-identical titles within a run; and since P68 a retelling of a story shown in the last 24 hours (48 at a 24-hour interval) is dropped unless it names someone new. |
 | `processing/priority.py` | Sorts high/medium/low, with tonight's teams as a within-tier tiebreaker. |
-| `processing/cluster.py` | Groups articles covering one story; caps stories per source. |
+| `processing/cluster.py` | Groups articles covering one story, using `names.py`'s scanner since 2026-09-24 (P70, partly fixed); caps stories per source, scaled with the interval (P42). |
 | `processing/highlights.py` | Comeback, overtime, closest finish, wire-to-wire, biggest quarter, second-half takeover. |
 | `processing/summarize.py` | `Summarizer` ABC + Ollama, map-reduce chunking, validated retry. |
 | `processing/validate.py` | Checks every name and figure against sources. **Fails closed.** Ends a scanned source name at a team or a position (P67). |
@@ -63,10 +63,12 @@
 
 ## 3. How it is operated
 
-`[VERIFIED]` Cron, every 8 hours, surviving terminal closes and running unattended for days:
+~~Cron, every 8 hours~~ `[VERIFIED]` 2026-09-24, `crontab -l`: cron wakes the program every 30
+minutes and `--if-due` sends only when `POLL_INTERVAL_HOURS` (8, 12 or 24) has passed since the
+last brief, so a sleeping PC delays a brief instead of losing it (P58):
 
 ```cron
-0 */8 * * * cd "/mnt/c/DSC/.../SportWire" && ./.venv/bin/python main.py >> ".../logs/sportwire.log" 2>&1
+*/30 * * * * cd "/mnt/c/DSC/.../SportWire" && ./.venv/bin/python main.py --if-due >> ".../logs/sportwire.log" 2>&1
 ```
 
 Logs live in `logs/` (gitignored) rather than `/tmp`, which WSL clears on restart.
@@ -78,7 +80,7 @@ make check     # ruff + pytest + documentation links, exactly what CI runs
 ```
 
 `[Likely]` The one fragility: WSL cron stops if the WSL instance shuts down. If briefs stop
-with no error, check `service cron status` first. `docs/SCHEDULING.md` §Option B has a
+with no error, check `service cron status` first. `docs/reference/SCHEDULING.md` §Option B has a
 Windows Task Scheduler command that survives reboots.
 
 ---
@@ -385,6 +387,13 @@ classes of bug. Neither replaces the other.
 13. ~~Does the 14-day gate need consecutive days?~~ **No, changed 2026-09-04.** They
     accumulate. A shut-down PC used to reset the count, and the PC being off says nothing
     about whether the software runs unattended. Issue #1 and the PRD both say so now.
+14. ~~How far should v1.0.0 reach?~~ **NBA and NFL, running from a fresh clone** (operator,
+    2026-09-24). MLB is v1.1.0, NHL v1.2.0, the NFL community feed (P46) after v1.0.0.
+15. ~~Which intervals?~~ **8, 12 or 24 hours** (operator, 2026-09-24), checked analytically
+    in PRD D6; the per-outlet cap and the repeat window now scale with it (P42).
+16. **Should P70's grouping change stay?** `[VERIFIED]` It merged 23 correct, 5 borderline and
+    9 wrong new groups out of 37, and it does not yet fix the day's biggest story. It is on
+    `main` and running; `git revert` of its five commits restores the old grouping.
 
 ---
 
@@ -393,58 +402,36 @@ classes of bug. Neither replaces the other.
 Paste verbatim:
 
 ```
-Read CLAUDE.md, then docs/process/OPERATING_RULES.md, docs/sessions/SESSION.md and
-docs/planning/TASKS.md before doing anything. The documents moved into docs/ on
-2026-09-03 and docs/README.md is the index.
+Read CLAUDE.md, then docs/process/OPERATING_RULES.md, docs/sessions/SESSION.md,
+docs/sessions/HANDOVER.md and docs/planning/TASKS.md before doing anything.
 
 Note especially:
-- OPERATING_RULES.md §0: you write the code, tests and documentation. Never set me
-  code to write, not as a task or a remedy. Explain as you go.
-- OPERATING_RULES.md §2: [VERIFIED] tags from previous sessions are [Likely], not
-  [Certain]. Re-test any external service before building on it.
 - CLAUDE.md §0: tag every factual claim. [UNKNOWN] is an acceptable answer.
-- CLAUDE.md §9: 256 characters maximum per commit message and as far under it as the
-  message allows, one commit per file, and CHANGELOG.md gets an entry per release.
+- CLAUDE.md §9: 256 characters maximum per commit message, one commit per file.
+- CLAUDE.md §13: delegate independent work to Sonnet subagents, at most two or three
+  at once, each in its own worktree; you review and bring commits onto main.
+- CLAUDE.md §14: work silently and give the full reasoning once, at the end.
+- OPERATING_RULES.md §2: [VERIFIED] tags from earlier sessions are [Likely].
 
 First, tell me the current state without changing anything:
 
-  make check                        # expect 556 passed, 1 xfailed
-  python scripts/soak_report.py     # per-league prose rate, and the gate count
-  git log --oneline -12
+  make check                                   # expect 609 passed, 1 xfailed
+  .venv/bin/python scripts/soak_report.py      # per-league prose rate, the gate count
+  git log --oneline -15
   tail -40 logs/sportwire.log
 
 Then read the last delivered brief of each league against its own sources:
 
-  python scripts/soak_report.py --audit
+  .venv/bin/python scripts/soak_report.py --audit
 
-That last step is not optional and it is where this project's bugs actually come
-from. Eleven were found by reading output and none by a test. Two more were found
-that way this week: the basketball brief was delivering hockey, and the same story
-was being redelivered on every run.
+Where the work is, in order (v1.0.0 = NBA and NFL, from a fresh clone):
 
-Where the work is, in order:
-
-- P68 is open, it is the biggest one, and it needs a decision before code. The same
-  story is delivered again as new articles about it arrive: four consecutive briefs
-  carried the Clippers ruling. It blocks issue #1, whose gate wants zero duplicate
-  stories as well as 14 accumulated days. The hard part is that a genuine follow-up
-  must still get through, and I said so myself about the Gillian Zucker revelation.
-  Options are written out in TASKS.md P68. Do not pick one silently.
-- P54 is open and waiting on nothing but time: the soak needs to reach 14 days.
-- P44 is the only untried answer to P5's recall problem, which was measured on
-  2026-09-04 and is worse than its precision problem.
-
-Two things this project keeps relearning, so do them by default:
-
-**Mutation-test everything you write.** Put the bug back, assert the mutation
-actually applied, and confirm the suite notices. Write the test after the change is
-checked, never beside it. If a test survives its own mechanism being switched off,
-rewrite it rather than adding a second one next to it.
-
-**Measure a validator or filter change before shipping it.** Every one this week
-carried a number: the other-sport rule drops 13 of 397 captured articles, the
-position split changes 0 of 49 recorded verdicts and loses 0 of 500 blends, the
-suffix fix changes 0 of 44. A change without a number beside it is a guess.
-
-Do not add features unless I ask.
+- P70, the zero-duplicates clause of the gate. The day's biggest story still splits
+  into several groups, because all its names are common. TASKS.md P70 has the next
+  step and the measurement to repeat.
+- P72's open false alarms, if measurement says they matter.
+- The week-long duplicate audit, repeated on briefs delivered after 2026-09-24.
+- Issue #2 (H13): the operator's explanation check, last attempted 2026-08-05. His
+  practice drills and their saved grades are in the SportWire Inside Out artifact.
+- Before tagging v1.0.0: repeat P73's fresh-clone check.
 ```
