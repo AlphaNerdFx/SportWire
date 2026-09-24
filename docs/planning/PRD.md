@@ -58,14 +58,14 @@ phone via Telegram.
 
 | ID | Requirement | Status |
 |---|---|---|
-| R1 | Brief delivered automatically on a schedule, without manual invocation | **Not built** — `TASKS.md` M8 |
-| R2 | ~~News section is a written summary rather than a list of headlines~~ | **Built, then disabled — ADR-012.** Every local model tested fabricated players and figures on live data. Ships behind `--summary`; the headline list remains the default. **Dropped from v1.0.0 scope.** |
-| R3 | Configuration read from one module rather than `os.getenv` in `main.py` | **Not built** — M2 |
-| R4 | Structured logging of what was fetched, dropped and sent | Partial — `main.py` logs; not configurable |
-| R5 | A second news source, proving the adapter boundary holds | **Not built** — M5/M6 |
-| R6 | NFL coverage | `[UNKNOWN]` — **decision needed, see §7 D3** |
-| R7 | The operator picks the delivery interval from a bounded set of choices | **Not built** — decided 2026-08-26, see §7 D6 |
-| R8 | The summary's length scales with the interval, so a longer gap yields a longer brief | **Not built** — decided 2026-08-26, see §7 D6 |
+| R1 | Brief delivered automatically on a schedule, without manual invocation | ~~Not built~~ **Built.** `[VERIFIED]` 2026-09-24: cron every 30 minutes with `--if-due`, or Windows Task Scheduler; 23 accumulated days delivered (`scripts/soak_report.py`) |
+| R2 | News section is a written summary rather than a list of headlines | ~~Built, then disabled, ADR-012; dropped from v1.0.0 scope.~~ **On by default since 2026-08-10**, validated against the sources, falling back to headlines when no draft passes (ADR-012, ADR-016). `[VERIFIED]` Prose in 72% of NBA and 83% of NFL briefs by 2026-09-23. `--no-summary` turns it off |
+| R3 | Configuration read from one module rather than `os.getenv` in `main.py` | ~~Not built~~ **Built**: `config/settings.py` |
+| R4 | Structured logging of what was fetched, dropped and sent | ~~Partial~~ **Built**: dated log lines for every stage, level set by `LOG_LEVEL` or `--log-level` |
+| R5 | A second news source, proving the adapter boundary holds | ~~Not built~~ **Built**: 7 feeds through one adapter class |
+| R6 | NFL coverage | ~~Decision needed~~ **Built, and in v1.0.0 scope** (§7 D3, `v0.5.0`). The NFL community feed is after v1.0.0 (`TASKS.md` P46) |
+| R7 | The operator picks the delivery interval from ~~a bounded set of choices~~ **8, 12 or 24 hours** | **Built** 2026-09-24 (§7 D6, `TASKS.md` P42) |
+| R8 | The summary's length scales with the interval, so a longer gap yields a longer brief | **Built**: story count, summary length, per-outlet cap and repeat window all scale (§7 D6) |
 
 ### Non-functional
 
@@ -86,9 +86,13 @@ phone via Telegram.
    ~~consecutive~~ **Changed 2026-09-04 at the operator's instruction.** A shut-down PC reset
    the count, and the PC being off says nothing about whether the software runs unattended.
    Days on which the machine never ran do not count for the gate and do not count against it;
-   a run that executed and failed does.
-2. Zero duplicate stories delivered across those 14 days. `[VERIFIED]` **Currently unmet:**
-   the same story is redelivered as new articles about it arrive (`TASKS.md` P68).
+   a run that executed and failed does. `[VERIFIED]` 2026-09-23: **23 of 14**, met.
+2. Zero duplicate stories delivered across those 14 days. ~~`[VERIFIED]` Currently unmet: the
+   same story is redelivered as new articles about it arrive (`TASKS.md` P68).~~ P68 fixed that
+   across briefs on 2026-09-04. `[VERIFIED]` **Still unmet, for a different reason, 2026-09-24:**
+   one brief can carry the same story several times (six Kawhi Leonard extension articles on
+   09-23), because grouping failed to merge them (`TASKS.md` P70), and repeat suppression
+   judged against stories that were never shown (P71).
 3. No run crashes; source failures degrade visibly in the log instead.
 4. The operator reads the brief instead of opening a sports app. **This is the real test** —
    an unread brief is a failed product regardless of uptime.
@@ -147,6 +151,21 @@ approach a timeout.
 `[INFERRED]` Deriving all three from the interval keeps D1 true: the run still defines the
 window, and nothing gains a second source of truth about how much news a brief covers.
 
+**Decided 2026-09-24: the choice is 8, 12 or 24 hours**, not the 2-hour-to-2-day band above.
+The operator picked the three; they were then checked against the pipeline before building.
+
+| Check | Finding | Verdict |
+|---|---|---|
+| News supply | `[VERIFIED]` 8.63 articles an hour arrived over the last 7 days across both leagues (`SeenStore.arrivals_per_hour`), and a brief at 8 hours groups a median 37.5 stories (minimum 10) from the log | Enough to fill 12, 15 or 21 stories |
+| Story count and length | `brief_size_for`: 12 stories / 1024 characters at 8h, 15 / 1280 at 12h, 21 / 1792 at 24h | Unchanged at 8h |
+| Per-outlet cap | `[VERIFIED]` A fixed cap of 4 per outlet limits NFL, with 3 feeds, to 12 stories at any interval, and NBA to 15 | **Did not hold.** The cap now scales by the same ratio: 4, 5, 7 (r/nba 3, 4, 5) |
+| Repeat window | `[INFERRED]` A fixed 24-hour memory misses the previous brief at a 24-hour interval, which arrives 24 to 24.5 hours earlier | **Did not hold.** Now `max(24, 2 x interval)`: 24, 24, 48 |
+| Message length | 1792 characters is under Telegram's 4096; headline fallbacks are split on blank lines | Holds |
+| Model time | `[VERIFIED]` Summarising 12 or 13 stories took a median 28 s, 90th percentile 214 s, maximum 420 s since 09-08. `[INFERRED]` 21 stories means 5 note chunks instead of 3 | Holds, well inside a 30-minute cron gap; re-measure once a 24h brief runs |
+
+`[UNKNOWN]` In-season NBA volume. The rate above includes the NFL season but not the NBA's,
+which starts in October.
+
 ### D2 — Deduplication window → **168 hours (7 days)**
 `[VERIFIED]` 2026-08-06, live measurement of ESPN's feed (17 items, oldest **99.1 hours** old):
 
@@ -161,12 +180,13 @@ duplicates **worse**: forget an item still sitting in the feed and it looks new 
 cycle. An 8-hour window at three runs a day would re-deliver a stale article roughly a dozen
 times. 168h measures zero duplicates while still bounding database growth.
 
-`[UNKNOWN]` Purging is **not yet implemented** — `storage/db.py` currently keeps every row.
-At present scale (tens of rows) a purge is unnecessary; see `TASKS.md`. The setting records
-the decision ahead of the need.
+~~`[UNKNOWN]` Purging is not yet implemented.~~ **Implemented** (issue #10, closed 2026-08-25):
+every run purges delivered, polled and story-name rows older than the window.
 
-### D3 — Sport scope → **NBA only for v1.0.0**
-Expand to the four major US leagues (NFL, MLB, NHL) *after* 1.0. `[INFERRED]` The adapter
+### D3: Sport scope → ~~**NBA only for v1.0.0**~~ **NBA and NFL for v1.0.0** (2026-09-24)
+~~Expand to the four major US leagues (NFL, MLB, NHL) *after* 1.0.~~ NFL was built on 2026-08-26
+(`v0.5.0`). On 2026-08-17 the operator widened v1.0.0 to all four leagues; on 2026-09-24 he
+narrowed it back to NBA and NFL, with MLB as `v1.1.0` and NHL as `v1.2.0` (`ROADMAP.md`). `[INFERRED]` The adapter
 boundary makes each additional sport additive rather than invasive, but each still needs a
 source, fixtures and tests. Ships v1.0.0 in days rather than weeks.
 
@@ -197,8 +217,8 @@ operator's words, they are self-explanatory — they already have their own mess
 | **v0.2** | ~~R2 (summarizer)~~ disabled per ADR-012; R3 (settings module) | — |
 | **v0.3** | R1 (scheduling), R4 (logging) | D1 answered |
 | **v0.4** | R5 (second source, proves M6) | — |
-| **v1.0.0** | All of the above + §6 criteria met | D1–D4 answered; H13 passed |
-| **post-1.0** | NFL (if D3 says so), RAG query interface, non-technical setup (L13), semantic dedup if ADR-005 fires | Triggers in `TASKS.md` |
+| **v1.0.0** | All of the above + §6 criteria met, for NBA and NFL, running from a fresh clone | D1 to D6 answered; H13 passed; `ROADMAP.md` conditions |
+| **post-1.0** | ~~NFL (if D3 says so)~~ MLB (`v1.1.0`), NHL (`v1.2.0`), the NFL community feed (P46), RAG query interface, non-technical setup (L13), semantic dedup if ADR-005 fires | Triggers in `TASKS.md` |
 
 ## 9. Known limitations carried into v1.0.0
 
