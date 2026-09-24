@@ -35,8 +35,12 @@ from config.settings import (
     Settings,
     SettingsError,
     brief_size_for,
+    repeat_window_hours_for,
+    scaled_source_caps,
 )
 from delivery.brief import DEFAULT_MAX_ARTICLES
+from ingestion.rss_news import FEED_LEAGUES
+from processing.cluster import DEFAULT_SOURCE_LIMIT, SOURCE_LIMITS
 from processing.summarize import DEFAULT_SUMMARY_CHARS
 
 # Every variable `from_env` reads. Cleared before each test so a value in the operator's real
@@ -317,31 +321,35 @@ def test_the_reference_interval_produces_todays_brief_unchanged() -> None:
 def test_both_the_story_cap_and_the_length_scale_together() -> None:
     """`[VERIFIED]` TASKS.md P42: the 12-story cap binds on 8 of 22 logged runs at 8 hours.
 
-    Raising only the character limit would leave a 2-day brief discarding roughly 175 of 187
-    articles and still writing twelve stories, so a longer interval would lose more news
-    rather than deliver more.
+    Raising only the character limit would leave a 24-hour brief discarding most of what it
+    fetched and still writing twelve stories, so a longer interval would lose more news rather
+    than deliver more.
     """
-    short_stories, short_chars = brief_size_for(2)
-    long_stories, long_chars = brief_size_for(48)
+    short_stories, short_chars = brief_size_for(8)
+    long_stories, long_chars = brief_size_for(24)
 
     assert long_stories > short_stories
     assert long_chars > short_chars
 
 
 def test_the_brief_grows_more_slowly_than_the_interval() -> None:
-    """`[INFERRED]` Linear scaling makes a 2-day brief six times an 8-hour one, which nobody
+    """`[INFERRED]` Linear scaling makes a 24-hour brief three times an 8-hour one, which nobody
     finishes, and costs proportionally more model time: the 2026-08-26 00:00 run took 10m36s
     for 12 stories in 3 chunks, and a chunk is added every 5 stories.
     """
     eight_hour, _ = brief_size_for(8)
-    two_day, _ = brief_size_for(48)
+    twenty_four_hour, _ = brief_size_for(24)
 
-    assert two_day < eight_hour * 6, "growth must be sublinear"
+    assert twenty_four_hour < eight_hour * 3, "growth must be sublinear"
 
 
 def test_the_story_count_is_capped_however_long_the_interval() -> None:
-    """Past a point a brief stops being read, which is why the cap exists at all."""
-    assert brief_size_for(48)[0] <= MAX_STORIES_CEILING
+    """Past a point a brief stops being read, which is why the cap exists at all.
+
+    100 is not an offered choice; `brief_size_for` accepts any interval internally (P42), and
+    the ceiling has to hold for values the settings validation would refuse too.
+    """
+    assert brief_size_for(100)[0] <= MAX_STORIES_CEILING
     assert brief_size_for(2000)[0] <= MAX_STORIES_CEILING
 
 
@@ -356,12 +364,13 @@ def test_even_the_shortest_interval_yields_a_brief() -> None:
 
 
 def test_the_choices_stay_inside_the_measured_band() -> None:
-    """`[VERIFIED]` The bounds are the operator's and the measurement agrees: at roughly 3.9
-    new articles an hour, 30 minutes usually delivers nothing, and 2 days is already past the
-    point where the cap discards most of the batch.
+    """`[VERIFIED]` TASKS.md P42, narrowed 2026-09-24 to `(8, 12, 24)`. 2 and 4 hours sat inside
+    the arrival-rate band but nothing else was proven to scale that far down; 48 is dropped
+    because the per-outlet cap and the repeat window were both fixed numbers that only
+    happened to be right at 8 hours, and re-deriving them for 48 was never done.
     """
-    assert min(POLL_INTERVAL_CHOICES) == 2
-    assert max(POLL_INTERVAL_CHOICES) == 48
+    assert min(POLL_INTERVAL_CHOICES) == 8
+    assert max(POLL_INTERVAL_CHOICES) == 24
     assert list(POLL_INTERVAL_CHOICES) == sorted(POLL_INTERVAL_CHOICES)
 
 
@@ -377,15 +386,16 @@ def test_every_offered_interval_is_accepted(
     assert settings.poll_interval_hours == interval
 
 
-@pytest.mark.parametrize("interval", ["1", "5", "36", "168"])
+@pytest.mark.parametrize("interval", ["1", "2", "4", "5", "36", "48", "168"])
 def test_an_interval_outside_the_set_is_refused(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, interval: str
 ) -> None:
     """`[INFERRED]` Refusing is the point, not the set existing.
 
     Most integers are wrong here in ways the operator cannot see from outside: 1 delivers
-    mostly empty briefs, 168 delivers one enormous one a week, and neither fails loudly. A
-    silent default would hide the mistake for weeks.
+    mostly empty briefs, 168 delivers one enormous one a week, and neither fails loudly. 2, 4
+    and 48 are included because they were offered before 2026-09-24 (TASKS.md P42) and must
+    now be refused like any other value outside the set.
     """
     monkeypatch.setenv("POLL_INTERVAL_HOURS", interval)
 
@@ -415,6 +425,74 @@ def test_an_unset_interval_still_defaults(
     settings = Settings.from_env(env_file=tmp_path / "absent.env")
 
     assert settings.poll_interval_hours == DEFAULT_POLL_INTERVAL_HOURS
+
+
+# --- scaling the two numbers that used to be fixed (TASKS.md P42) --------------------------
+
+
+def test_the_source_caps_are_unchanged_at_eight_hours() -> None:
+    """The property that makes scaling safe to ship: 8 hours must reproduce today's caps
+    exactly, since `processing/cluster.py` still ships `DEFAULT_SOURCE_LIMIT = 4` and
+    `SOURCE_LIMITS = {"r/nba": 3}` as its own unscaled defaults.
+    """
+    default_cap, overrides = scaled_source_caps(8, DEFAULT_SOURCE_LIMIT, SOURCE_LIMITS)
+
+    assert default_cap == DEFAULT_SOURCE_LIMIT
+    assert overrides == SOURCE_LIMITS
+
+
+def test_the_source_caps_match_the_measured_ratio() -> None:
+    """`[VERIFIED]` TASKS.md P42: `round(base * sqrt(interval / 8))` gives 4/5/7 for the
+    default cap and 3/4/5 for r/nba, at 8/12/24 hours.
+    """
+    assert scaled_source_caps(8, 4, {"r/nba": 3}) == (4, {"r/nba": 3})
+    assert scaled_source_caps(12, 4, {"r/nba": 3}) == (5, {"r/nba": 4})
+    assert scaled_source_caps(24, 4, {"r/nba": 3}) == (7, {"r/nba": 5})
+
+
+@pytest.mark.parametrize("interval", POLL_INTERVAL_CHOICES)
+def test_the_scaled_caps_cover_every_leagues_story_count(interval: int) -> None:
+    """The analytic check TASKS.md P42 asks for: capacity must never fall short of demand.
+
+    `[INFERRED]` NFL has only 3 feeds and no override, so the unscaled cap alone could never
+    reach the 15 or 21 stories `brief_size_for` allows at 12h or 24h. Summing the scaled cap
+    over every feed in a league is the most stories that league's brief can ever show, and it
+    has to be at least what `brief_size_for` asks for, at every offered interval.
+    """
+    max_stories, _ = brief_size_for(interval)
+    default_cap, overrides = scaled_source_caps(
+        interval, DEFAULT_SOURCE_LIMIT, SOURCE_LIMITS
+    )
+    leagues = {league for league in FEED_LEAGUES.values()}
+
+    for league in leagues:
+        feeds = [name for name, lg in FEED_LEAGUES.items() if lg == league]
+        capacity = sum(overrides.get(feed, default_cap) for feed in feeds)
+        assert capacity >= max_stories, (interval, league, capacity, max_stories)
+
+
+def test_the_repeat_window_is_unchanged_at_eight_hours() -> None:
+    """`[VERIFIED]` `processing/dedup.py:REPEAT_WINDOW_HOURS` is 24; `2 * 8 = 16` is below
+    that, so the floor, not the doubling, is what fires at the reference interval.
+    """
+    assert repeat_window_hours_for(8) == 24
+
+
+def test_the_repeat_window_matches_the_measured_values() -> None:
+    """`[VERIFIED]` TASKS.md P42: 24/24/48 at 8/12/24 hours. The floor holds through 12h
+    because `2 * 12 = 24` equals it; only 24h is large enough for the doubling to win.
+    """
+    assert repeat_window_hours_for(12) == 24
+    assert repeat_window_hours_for(24) == 48
+
+
+@pytest.mark.parametrize("interval", POLL_INTERVAL_CHOICES)
+def test_the_repeat_window_absorbs_cron_slack(interval: int) -> None:
+    """`[INFERRED]` A scheduler does not fire the instant a brief becomes due; TASKS.md P42
+    asks for the window to survive the interval plus roughly 30 minutes of that slack, so a
+    late wake-up does not push the previous brief outside the window that is meant to catch it.
+    """
+    assert repeat_window_hours_for(interval) >= interval + 0.5
 
 
 def test_escalation_is_off_when_both_models_are_the_same(clean_env: Path) -> None:
