@@ -57,13 +57,15 @@ DEFAULT_OPENROUTER_MODEL = "google/gemma-4-31b-it:free"
 # **A set rather than a free number**, because most numbers are wrong in ways the operator
 # cannot see. `[VERIFIED]` Measured over 13 scheduled runs at 8 hours, new articles arrived at
 # about 3.9 an hour, so 30 minutes would usually deliver nothing at all and the brief becomes
-# silence or noise. The floor and ceiling are the operator's, and the measurement agrees with
-# both: 2 hours yields roughly 8 articles, 2 days roughly 187.
+# silence or noise.
 #
-# `[UNKNOWN]` Those are offseason rates. `SeenStore.arrivals_per_hour` exists so this can be
-# re-derived from what actually arrived rather than re-guessed, and it should be re-checked
-# once the season starts.
-POLL_INTERVAL_CHOICES: tuple[int, ...] = (2, 4, 8, 12, 24, 48)
+# **Narrowed from `(2, 4, 8, 12, 24, 48)` to `(8, 12, 24)` 2026-09-24.** `[INFERRED]` 2 and 4
+# hours were never below the floor the measurement set, and 48 is dropped because nothing below
+# scaled with it: the per-outlet cap and the repeat window were both fixed numbers that only
+# happened to be right at 8 hours (see `scaled_source_caps` and `repeat_window_hours_for`,
+# below). Restoring a wider set is a matter of re-deriving those two alongside `brief_size_for`,
+# not of editing this tuple alone.
+POLL_INTERVAL_CHOICES: tuple[int, ...] = (8, 12, 24)
 
 # What a brief looks like at the reference interval. These are today's shipped values, so an
 # 8-hour interval produces exactly the brief that ships now and nothing changes by default.
@@ -100,6 +102,49 @@ def brief_size_for(interval_hours: int) -> tuple[int, int]:
     # asked for a length the story count cannot fill.
     chars = round(REFERENCE_SUMMARY_CHARS * stories / REFERENCE_MAX_STORIES)
     return stories, chars
+
+
+def scaled_source_caps(
+    interval_hours: int, base_default: int, base_overrides: dict[str, int]
+) -> tuple[int, dict[str, int]]:
+    """Scale `processing/cluster.py`'s per-outlet caps by `brief_size_for`'s own ratio.
+
+    Takes the unscaled cap (`DEFAULT_SOURCE_LIMIT`) and overrides (`SOURCE_LIMITS`) as
+    arguments rather than importing them, so this module still imports nothing from
+    `processing/` (the pipeline imports settings, never the reverse).
+
+    `[VERIFIED]` TASKS.md P42: NFL has 3 feeds, so a 4-story cap caps an NFL brief at 12
+    stories even though `brief_size_for` allows 15 at 12h and 21 at 24h. Scaling by the same
+    square-root ratio keeps the two from disagreeing about how much a longer interval covers.
+    """
+    scale = math.sqrt(interval_hours / REFERENCE_INTERVAL_HOURS)
+    default_cap = max(1, round(base_default * scale))
+    overrides = {
+        name: max(1, round(cap * scale)) for name, cap in base_overrides.items()
+    }
+    return default_cap, overrides
+
+
+# Floor for `repeat_window_hours_for`, matching `processing/dedup.py:REPEAT_WINDOW_HOURS`, the
+# value measured at the reference interval. Kept as its own constant rather than imported, for
+# the same reason as `scaled_source_caps`: this module does not import `processing/`.
+MIN_REPEAT_WINDOW_HOURS = 24
+
+
+def repeat_window_hours_for(interval_hours: int) -> int:
+    """How long a delivered story stays remembered, so a longer interval cannot un-suppress it.
+
+    `[VERIFIED]` TASKS.md P42: at a fixed 24h window, a brief that actually covers 24 hours
+    delivers its predecessor roughly 24 to 24.5 hours earlier (a scheduler catching up after a
+    sleep adds the slack), which falls outside a window of exactly 24 and stops suppressing the
+    exact repeat the window exists for. Doubling the interval keeps the previous brief inside
+    the window with room to spare.
+
+    `[INFERRED]` The floor matters at 8h and 12h, where `2 * interval_hours` would otherwise be
+    16 or 24 -- both below or at `MIN_REPEAT_WINDOW_HOURS`, so the floor keeps today's 8-hour
+    behaviour byte-for-byte unchanged.
+    """
+    return max(MIN_REPEAT_WINDOW_HOURS, 2 * interval_hours)
 
 
 class SettingsError(RuntimeError):
