@@ -3051,6 +3051,55 @@ what each turned into, since several changed shape on contact with real data.
   `[UNKNOWN]` Whether the audit share moves. Re-run `--sample` on a new seed after the next
   fortnight and compare against the 7-of-15 in `docs/reference/METRICS.md`.
 
+- [ ] **P70. One brief can carry the same story several times.** Found 2026-09-24 by a
+  duplicate audit of a week of evidence batches. **Partly fixed**; this blocks the v1.0.0
+  zero-duplicates clause.
+  `[VERIFIED]` Examples of same-story leads in one brief: six Kawhi Leonard extension articles
+  (NBA, 09-23), five Ausar Thompson extension articles (NBA, 09-19), three Doc Rivers to NBC
+  (NBA, 09-22), and two Brandin Cooks signings (NFL, 09-23, title similarity 0.708, one shared
+  name). Causes: `cluster.py` had its own name pattern (possessives welded "Giants' Jaxson
+  Dart", digit-led "49ers" was never a name, headline openers like "Another" counted as names);
+  and the rarity ceiling marks every name of the day's biggest story as too common to group on.
+  - Fixed in `410b9eb`, `81f35cc` (code), `eb54222`, `f4a8e40`, `cb798c1` (tests):
+    `story_names` now uses `names.CLUSTERING`, strips possessives, reads "49ers" and aliases it
+    to "Niners", drops batch-ordinary headline openers, ignores the article's own byline; a
+    common name may now corroborate a match but not carry it, and two bare team nicknames are
+    not enough. `make check` → **609 passed, 1 xfailed**. Mutations of each mechanism failed
+    their tests.
+  - `[VERIFIED]` Measured on the 120 evidence batches: 1,091 → 1,059 stories, multi-article
+    groups 29 → 53. Hand review of all 37 new merges: **23 correct, 5 borderline, 9 wrong**
+    (one full name counted twice through its own surname, or "Australia" plus one team).
+    The Cooks pair now groups (4 articles, one group, on a reconstruction of the 09-23 run).
+  - `[VERIFIED]` **Still open.** The same reconstruction of the 09-23 NBA run leaves the Kawhi
+    Leonard extension in **8 separate groups**: all its names are common, so none is rare
+    enough to anchor a match. And a group grows by union, so "2026 NFL Week 3 injury panic
+    meter: Jaxson Dart, Caleb Williams..." chained a Jaxson Dart group into a Caleb Williams
+    one. `[INFERRED]` Next step: count a full name and its own surname as one entity and let a
+    shared full person name plus one more name match regardless of rarity; the subagent tried
+    the first half alone and it broke three correct groups, so both halves have to move
+    together and be measured on the same 37-merge review.
+  - `[VERIFIED]` Also open: `drop_repeated_stories` calls `story_names` without the batch, so
+    the headline-opener fix ("Did Todd Monken") does not reach repeat suppression yet.
+
+- [ ] **P72. Audit every rejected name and figure, and fix the false alarms.** 2026-09-24.
+  **Three causes fixed, several open.**
+  `[VERIFIED]` 95 distinct rejected name or figure and batch pairs since 2026-09-05, all with
+  their evidence batch on disk. About 70 are genuine inventions (famous names from the model's
+  memory, wrong first names on real surnames, absent teams); every rejected figure was genuine.
+  Fixed in `d776e8d` (code) and `b8a2a98` (tests): an ellipsis now ends a name, so "Kawhi…
+  Detroit" no longer refutes both; a position tag on the summary's own name ("QB Darnold") is
+  stripped before checking; a hyphenated modifier ("Carter-like") no longer refutes the name it
+  modifies. Re-running the audit: names flagged 74 → 71, every genuine verdict unchanged.
+  Each new test and its paired "still rejected" test failed under its mutation.
+  `make check` → **597 passed, 1 xfailed** at that point.
+  Open, each with its reason: a city standing for a team that is present by nickname (needs
+  city aliases in `names.py`); a title or unrelated capitalised word beside a real name
+  ("Coach Shanahan", "Per Forbes LeBron"), the known P24 weakness; "Under Armour" versus
+  "Under Armor"; "Ole Miss RB", already measured and declined in P52; a truncated source
+  field. Four did not reproduce because the live vocabulary sample is not stored.
+  The full table was kept outside the repository (`/tmp/rejection_audit.md` in the session
+  that made it); the counts above are the record.
+
 - [x] **P71. Repeat suppression judged against stories nobody was shown.** Found 2026-09-24
   during the duplicate audit. **Fixed** in `a2c0b1a`, test `9a1d000`.
   `[VERIFIED]` `main()` passed every article that survived dedup to `record_story_names`, not
@@ -3065,9 +3114,14 @@ what each turned into, since several changed shape on contact with real data.
     `[VERIFIED]` Mutation: passing `fresh_articles` again made it fail (both retellings
     suppressed). `make check` → **591 passed, 1 xfailed**.
 
-- [ ] **P73. A fresh clone must run from the README alone.** Operator requirement for
-  v1.0.0, 2026-09-24 (`ROADMAP.md` condition 4). Open until the final check after this
-  session's changes.
+- [x] **P73. A fresh clone must run from the README alone.** Operator requirement for
+  v1.0.0, 2026-09-24 (`ROADMAP.md` condition 4). **Closed 2026-09-24**, and it stays a check
+  to repeat before tagging v1.0.0.
+  - Proof, final state: a clone of `cb798c1` installed with `make install` and an empty
+    `.env` passed `make check` (**609 passed, 1 xfailed**) and ran `main.py --dry-run` from
+    `/tmp`: 191 articles, both leagues, exit 0. `[VERIFIED]` In that run Ollama answered
+    HTTP 500 while llama3.2:3b took notes; the summariser escalated to mistral:7b and the run
+    still finished, which is lesson 3's failure policy working on a clean machine.
   `[VERIFIED]` Baseline: a clone of `08d6c98` from GitHub, installed with `make install` and
   an empty `.env`, passed `make check` (579 passed) and ran `main.py --dry-run` from `/tmp`:
   196 articles fetched, prose accepted for both leagues, exit 0.
