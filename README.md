@@ -16,21 +16,33 @@ actually taught.
 
 ## Quick start
 
+Needs Python 3.10 or newer with its `venv` module (on Ubuntu, `sudo apt install python3-venv`).
+Use `.venv/bin/python` rather than a bare `python`, which does not exist on a stock Ubuntu.
+
 ```bash
+git clone https://github.com/AlphaNerdFx/SportWire.git && cd SportWire
 make install                # create .venv and install dependencies
-cp .env.example .env        # then fill in your own keys
-make dry-run                # fetch and print a brief, sending nothing
+cp .env.example .env        # keys are optional for a dry run; see below
+make dry-run                # fetch and print a brief, sending and recording nothing
 make run                    # fetch and send
-make check                  # what CI runs: lint + tests
-python scripts/soak_report.py   # how often briefs keep their prose, per league
-python scripts/soak_report.py --audit   # the latest brief beside its sources and doubts
+make check                  # what CI runs: lint, tests, documentation links
+.venv/bin/python scripts/soak_report.py           # how often briefs keep their prose, per league
+.venv/bin/python scripts/soak_report.py --audit   # the latest brief beside its sources and doubts
 ```
 
-Requires a free [balldontlie.io](https://www.balldontlie.io/) API key and a Telegram bot
-token from [@BotFather](https://t.me/botfather). See `.env.example`.
+`[VERIFIED]` 2026-09-24, from a fresh clone of `08d6c98` with an empty `.env`: `make install`
+and `make check` passed, and `main.py --dry-run`, run from `/tmp`, fetched 196 articles and
+printed a brief for each league.
 
-To run it unattended every 8 hours, see [`docs/reference/SCHEDULING.md`](docs/reference/SCHEDULING.md) — cron and
-Windows Task Scheduler are both documented.
+Keys, all free: a [balldontlie.io](https://www.balldontlie.io/) key adds NBA scores (news needs
+no key), and a Telegram bot token and chat id from [@BotFather](https://t.me/botfather) are
+needed only to send. See `.env.example` and
+[`docs/reference/GETTING_STARTED.md`](docs/reference/GETTING_STARTED.md).
+
+A brief is due every 8, 12 or 24 hours (`POLL_INTERVAL_HOURS`, default 8); a longer interval
+gives a longer brief. To run it unattended, see
+[`docs/reference/SCHEDULING.md`](docs/reference/SCHEDULING.md): cron and Windows Task
+Scheduler are both documented.
 
 ### Local summarisation
 
@@ -41,18 +53,21 @@ Windows Task Scheduler are both documented.
 > filename is what eventually exposed it. `make check` now fails on a broken documentation
 > link so the same drift cannot repeat silently.
 
-`[VERIFIED]` **Enabled by default**, using a local Ollama model. Requires Ollama installed and
-a model pulled; without it the run degrades to the headline list rather than failing.
+`[VERIFIED]` **Enabled by default**, using local Ollama models. Requires Ollama installed and
+both default models pulled: `llama3.2:3b` writes most briefs and `mistral:7b` is loaded only
+when the first one's draft fails the checks. Without Ollama the run degrades to the headline
+list rather than failing.
 
 ```bash
 # On a clean Ubuntu, Ollama's install script needs zstd first — it fails without it
 # and the error does not say so.
 sudo apt install zstd
 curl -fsSL https://ollama.com/install.sh | sh
+ollama pull llama3.2:3b
 ollama pull mistral:7b
 
-python main.py --dry-run              # summarised
-python main.py --dry-run --no-summary # headline list only
+.venv/bin/python main.py --dry-run              # summarised
+.venv/bin/python main.py --dry-run --no-summary # headline list only
 ```
 
 **Every summary is checked against its sources before it can be sent.**
@@ -62,12 +77,14 @@ closed. `[VERIFIED]` No invented *name* has ever reached a phone.
 
 Two limits you should know before relying on it:
 
-- `[UNKNOWN]` **The pass rate.** A measured floor over one soak is **2 accepted of 19
-  attempts**, and that count mixes code versions. An earlier "~84%" figure came from a single
-  sitting of 3/5 and is not supported — see `TASKS.md` P4.
+- `[VERIFIED]` **The pass rate**, measured 2026-09-23 with `scripts/soak_report.py` and
+  `scripts/accuracy_report.py`: prose reached 72% of NBA briefs and 83% of NFL briefs; since
+  09-08, 52.9% of individual drafts were rejected. ~~2 accepted of 19 attempts~~ was an early,
+  mixed-version floor (`TASKS.md` P4).
 - `[VERIFIED]` **The validator grounds entities, not claims.** A sentence built entirely from
-  real names can still assert a false relationship between them and pass. One has reached a
-  phone. See `TASKS.md` P5; this is open.
+  real names can still assert a false relationship between them and pass. `[VERIFIED]` On
+  2026-09-23 a brief said the Steelers were "exploring trade options" for Joey Porter Jr.; the
+  source was a writer's list of mock trades. See `TASKS.md` P5; this is open.
 
 `[INFERRED]` The headline list is never wrong; a generated paragraph can be. If that trade is
 not one you want, run with `--no-summary`.
