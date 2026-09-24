@@ -2676,9 +2676,25 @@ what each turned into, since several changed shape on contact with real data.
 
 ---
 
-- [ ] **P42. Interval becomes a bounded choice, and the brief's size scales with it.**
-  Open, specified by the operator 2026-08-26. ~~**Not started.**~~ **Mostly built; what is
-  left is the operator-facing choice at v1.0.0.** 8 hours stays the standard until then.
+- [x] **P42. Interval becomes a bounded choice, and the brief's size scales with it.**
+  ~~Open, specified by the operator 2026-08-26. Mostly built; what is left is the
+  operator-facing choice at v1.0.0.~~ **Closed 2026-09-24.** The operator chose **8, 12 or 24
+  hours**; the three were checked against the pipeline (PRD D6 has the table) and two fixed
+  numbers were found not to hold beyond 8 hours, so both now scale.
+  - `[VERIFIED]` Values, from the real config: 12 / 15 / 21 stories, 1024 / 1280 / 1792
+    characters, per-outlet cap 4 / 5 / 7 (r/nba 3 / 4 / 5), repeat window 24 / 24 / 48 hours.
+    Per-league capacity covers the story count at every choice (NFL exactly, 12 / 15 / 21).
+  - Commits `2b6d954` (settings), `ce0eb57` (main wiring), `7182d51`, `aafc08c`, `185ec88`
+    (tests), `06b247a` (comment).
+  - Proof: `make check` → **590 passed, 1 xfailed**, exit 0. `[VERIFIED]` Mutations: ignoring
+    the interval in `scaled_source_caps` failed the ratio test and the 12h and 24h capacity
+    tests; a fixed 24h window failed the window tests; dropping the scaling call in
+    `assemble_brief` failed `test_the_per_outlet_cap_scales_with_the_interval` (4 shown, 6
+    wanted). The pre-existing `test_the_interval_decides_how_many_stories_a_brief_carries`
+    survived that last mutation, which is why the narrower test was added.
+  - `[UNKNOWN]` In-season NBA volume; re-measure `SeenStore.arrivals_per_hour` in October.
+
+  The history below is kept as it was written.
 
   `[VERIFIED]` 2026-08-27, what exists now: `POLL_INTERVAL_CHOICES` is `(2, 4, 8, 12, 24, 48)`
   and `_interval_choice` refuses anything else by name; `brief_size_for` scales both the story
@@ -3035,11 +3051,39 @@ what each turned into, since several changed shape on contact with real data.
   `[UNKNOWN]` Whether the audit share moves. Re-run `--sample` on a new seed after the next
   fortnight and compare against the 7-of-15 in `docs/reference/METRICS.md`.
 
+- [x] **P71. Repeat suppression judged against stories nobody was shown.** Found 2026-09-24
+  during the duplicate audit. **Fixed** in `a2c0b1a`, test `9a1d000`.
+  `[VERIFIED]` `main()` passed every article that survived dedup to `record_story_names`, not
+  only the ones shown. Of 1,463 articles whose names were in `delivered_story_names`, only 354
+  (24%) had ever been sent to the model, so `drop_repeated_stories` (P68) was dropping
+  follow-ups to stories the reader never saw. Now `assemble_brief` returns `shown_articles`,
+  every member of the groups actually printed, and only those feed the story memory.
+  `record_articles` still receives everything considered: past the cap an article is
+  consumed, not held over (P58), and that is unchanged.
+  - Proof: `tests/test_db.py::test_only_shown_stories_feed_repeat_suppression` drives
+    `main.main` twice with 15 stories at 8 hours (12 shown, 3 not), then retells one of each.
+    `[VERIFIED]` Mutation: passing `fresh_articles` again made it fail (both retellings
+    suppressed). `make check` → **591 passed, 1 xfailed**.
+
+- [ ] **P73. A fresh clone must run from the README alone.** Operator requirement for
+  v1.0.0, 2026-09-24 (`ROADMAP.md` condition 4). Open until the final check after this
+  session's changes.
+  `[VERIFIED]` Baseline: a clone of `08d6c98` from GitHub, installed with `make install` and
+  an empty `.env`, passed `make check` (579 passed) and ran `main.py --dry-run` from `/tmp`:
+  196 articles fetched, prose accepted for both leagues, exit 0.
+  `[VERIFIED]` Gaps found and fixed in the documents the same day: the README used a bare
+  `python` (absent on stock Ubuntu), pulled only `mistral:7b` although `llama3.2:3b` writes
+  most briefs, said both keys were required (a dry run needs none), and quoted a stale pass
+  rate; `GETTING_STARTED.md` said to change `DEFAULT_MAX_ARTICLES`, which no longer decides
+  the brief size; `SCHEDULING.md` said nothing reads `POLL_INTERVAL_HOURS`.
+  `[INFERRED]` This machine has Ollama; a machine without it gets headline briefs, which the
+  documents now say.
+
 ---
 
 ## Where tasks live now
 
-`[VERIFIED]` Seventeen issues, fifteen open (#6 and #14 closed), at
+~~Seventeen issues, fifteen open (#6 and #14 closed)~~ `[VERIFIED]` 2026-09-24: 17 issues, 7 open, at
 https://github.com/AlphaNerdFx/SportWire/issues. **This file owns the plan; GitHub owns the
 queue.** When they disagree, check the issue — it is likelier to be current.
 
@@ -3047,14 +3091,15 @@ Standing items not otherwise listed above:
 
 | # | Item | State |
 |---|---|---|
-| 1 | 14-day observation run | `[VERIFIED]` Running. **The clock resets on every behaviour change**, and 2026-08-12 changed the prompt. |
+| 1 | 14-day observation run | ~~Running; the clock resets on every behaviour change.~~ `[VERIFIED]` 2026-09-23: **23 of 14 accumulated days** (the count no longer resets, 2026-09-04). The zero-duplicates clause is still unmet: P70, P71. |
 | 5 | Capture a live/scheduled game fixture | Blocked until the season starts, **after 2026-09-30**. Every game ever captured reads `Final`. |
 | 11 | Non-technical setup | Deferred (L13). |
-| 15 | Tests for `processing/` | **P1 above. The priority.** |
+| 15 | Tests for `processing/` | ~~P1 above. The priority.~~ Closed 2026-08-25. |
 
 
 - [ ] **P46. Only one Reddit feed can be fetched per run, which blocks r/nfl.** Open, found
-  2026-08-26 while adding the NFL feeds for v0.5.0.
+  2026-08-26 while adding the NFL feeds for v0.5.0. **Deferred past v1.0.0 by the operator,
+  2026-09-24** (`ROADMAP.md`): the NFL brief ships without a community feed.
 
   `[VERIFIED]` r/nfl works fine on its own: `RssNewsAdapter('r/nfl', ...)` returned 25
   articles with `last_error=None` after a quiet period. It fails whenever r/nba was fetched
